@@ -1,0 +1,859 @@
+/* ---------------------------------------------------------------------------
+   Tokens. Everything below reads from these so light/dark stay in lockstep.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --er-row-border: var(--mantine-color-gray-3);
+  --er-row-hover: var(--mantine-color-gray-0);
+  --er-row-active: var(--mantine-color-indigo-0);
+  --er-surface: var(--mantine-color-white);
+  --er-muted: var(--mantine-color-gray-6);
+  --er-diff-add-bg: #e6ffed;
+  --er-diff-add-gutter: #cdffd8;
+  --er-diff-del-bg: #ffeef0;
+  --er-diff-del-gutter: #ffdce0;
+  --er-diff-hunk-bg: var(--mantine-color-gray-1);
+  --er-diff-text: #1b1f24;
+  --er-gutter-text: rgba(27, 31, 36, 0.4);
+}
+
+[data-mantine-color-scheme="dark"] {
+  --er-row-border: var(--mantine-color-dark-4);
+  --er-row-hover: var(--mantine-color-dark-6);
+  --er-row-active: rgba(76, 84, 194, 0.18);
+  --er-surface: var(--mantine-color-dark-7);
+  --er-muted: var(--mantine-color-dark-2);
+  --er-diff-add-bg: rgba(46, 160, 67, 0.16);
+  --er-diff-add-gutter: rgba(46, 160, 67, 0.3);
+  --er-diff-del-bg: rgba(248, 81, 73, 0.14);
+  --er-diff-del-gutter: rgba(248, 81, 73, 0.28);
+  --er-diff-hunk-bg: var(--mantine-color-dark-5);
+  --er-diff-text: var(--mantine-color-dark-0);
+  --er-gutter-text: rgba(200, 205, 215, 0.4);
+}
+
+body {
+  overscroll-behavior-y: none;
+}
+
+/* ---------------------------------------------------------------------------
+   App shell: a fixed top bar and toolbar, then two independently scrolling
+   panes that fill the rest of the viewport.
+   --------------------------------------------------------------------------- */
+
+.er-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.er-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-md);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--er-row-border);
+}
+
+.er-toolbar {
+  flex: none;
+  padding: 10px 16px 0;
+}
+
+.er-split {
+  --er-left-w: clamp(340px, 40%, 720px);
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0 16px 14px;
+}
+
+/*
+ * The clamp repeats SplitView's limits in CSS so a width saved on a big
+ * monitor can't crush the code pane after the window shrinks: the list stays
+ * at least 320px and always leaves 420px (+ the 12px handle) for the diff.
+ */
+.er-split[data-mode="split"] {
+  grid-template-columns: clamp(320px, var(--er-left-w), calc(100% - 432px)) 12px minmax(0, 1fr);
+}
+.er-split[data-mode="list"] {
+  grid-template-columns: minmax(0, 1fr) 0 0;
+}
+.er-split[data-mode="preview"] {
+  grid-template-columns: 0 0 minmax(0, 1fr);
+  padding-top: 12px;
+}
+
+/* Placed explicitly so hiding a pane doesn't reflow the others into it. */
+.er-split-left {
+  grid-column: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.er-split-handle {
+  grid-column: 2;
+}
+.er-split-right {
+  grid-column: 3;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.er-split[data-mode="list"] > .er-split-handle,
+.er-split[data-mode="list"] > .er-split-right,
+.er-split[data-mode="preview"] > .er-split-handle,
+.er-split[data-mode="preview"] > .er-split-left {
+  display: none;
+}
+
+.er-split-handle {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.er-split-handle::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+
+.er-split-handle:hover::after,
+.er-split-handle[data-dragging="true"]::after {
+  background: var(--mantine-color-indigo-5);
+}
+
+/* A bordered, independently scrolling box. */
+.er-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--er-surface);
+  overflow: hidden;
+}
+
+.er-pane-head {
+  flex: none;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--er-row-border);
+}
+
+.er-pane-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  transition: opacity 120ms ease;
+}
+
+/* The diff lags the header by a frame while you flick through with j/k. */
+.er-pane-scroll[data-stale="true"] {
+  opacity: 0.55;
+}
+
+/* ---------------------------------------------------------------------------
+   List rows — two lines: title, then who/when on the left and size/CI on
+   the right.
+   --------------------------------------------------------------------------- */
+
+.er-item {
+  display: grid;
+  /* accent | E/M/H | title and meta | actions */
+  grid-template-columns: 3px 20px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--er-row-border);
+  cursor: pointer;
+  transition: background-color 90ms ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+
+/* History rows have no approve button. */
+.er-item-history {
+  grid-template-columns: 3px 70px minmax(0, 1fr);
+}
+
+.er-item:hover {
+  background: var(--er-row-hover);
+}
+
+.er-item[data-selected="true"] {
+  background: var(--er-row-active);
+  box-shadow: inset 0 0 0 1px var(--mantine-color-indigo-4);
+}
+
+.er-item:focus,
+.er-item:focus-visible {
+  outline: none;
+}
+
+.er-item-accent {
+  align-self: stretch;
+  margin: -8px 0;
+  background: var(--er-accent, transparent);
+}
+
+.er-item[data-selected="true"] .er-item-accent {
+  box-shadow: 0 0 8px var(--er-accent);
+}
+
+.er-item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.er-item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.er-title {
+  min-width: 0;
+  font-weight: 550;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--er-muted);
+}
+
+.er-item-meta-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.er-item-meta-right {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.er-truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.er-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+   Diff rendering
+   --------------------------------------------------------------------------- */
+
+.er-diff {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--er-diff-text);
+  tab-size: 2;
+}
+
+.er-diff-file + .er-diff-file {
+  margin-top: var(--mantine-spacing-md);
+}
+
+.er-diff-filehead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--er-surface);
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm) var(--mantine-radius-sm) 0 0;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.er-diff-body {
+  border: 1px solid var(--er-row-border);
+  border-top: none;
+  border-radius: 0 0 var(--mantine-radius-sm) var(--mantine-radius-sm);
+  overflow-x: auto;
+}
+
+/*
+ * Sizing wrapper. `max-content` is resolved ONCE here rather than on every
+ * line: putting it on each row made Chrome measure thousands of rows and
+ * froze the tab on a 9k-line diff. Lines then fill this width so their
+ * backgrounds span the full scrollable area.
+ */
+.er-diff-lines {
+  min-width: max-content;
+}
+
+.er-diff-line {
+  display: flex;
+  white-space: pre;
+  /* Anchors the per-line comment button without giving it a layout slot. */
+  position: relative;
+}
+
+.er-diff-line > .er-gutter {
+  flex: 0 0 44px;
+  text-align: right;
+  padding: 0 8px;
+  color: var(--er-gutter-text);
+  user-select: none;
+}
+
+.er-diff-line > .er-code {
+  flex: 1 0 auto;
+  padding: 0 10px 0 6px;
+}
+
+.er-diff-line[data-kind="add"] {
+  background: var(--er-diff-add-bg);
+}
+.er-diff-line[data-kind="add"] > .er-gutter {
+  background: var(--er-diff-add-gutter);
+}
+.er-diff-line[data-kind="del"] {
+  background: var(--er-diff-del-bg);
+}
+.er-diff-line[data-kind="del"] > .er-gutter {
+  background: var(--er-diff-del-gutter);
+}
+.er-diff-line[data-kind="meta"] {
+  color: var(--er-muted);
+  font-style: italic;
+}
+
+.er-diff-hunk {
+  background: var(--er-diff-hunk-bg);
+  color: var(--er-muted);
+  padding: 2px 10px;
+  white-space: pre;
+  font-size: 11px;
+}
+
+/* ---------------------------------------------------------------------------
+   Syntax highlighting.
+
+   GitHub's own palette, because these colours have to stay legible on top of
+   the green and red line backgrounds — most editor themes assume a flat
+   background and turn muddy over a tinted one.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --er-hl-keyword: #cf222e;
+  --er-hl-string: #0a3069;
+  --er-hl-comment: #6e7781;
+  --er-hl-constant: #0550ae;
+  --er-hl-function: #8250df;
+  --er-hl-type: #953800;
+  --er-hl-tag: #116329;
+}
+
+[data-mantine-color-scheme="dark"] {
+  --er-hl-keyword: #ff7b72;
+  --er-hl-string: #a5d6ff;
+  --er-hl-comment: #8b949e;
+  --er-hl-constant: #79c0ff;
+  --er-hl-function: #d2a8ff;
+  --er-hl-type: #ffa657;
+  --er-hl-tag: #7ee787;
+}
+
+.er-code .hljs-keyword,
+.er-code .hljs-operator,
+.er-code .hljs-selector-tag,
+.er-code .hljs-literal,
+.er-code .hljs-doctag {
+  color: var(--er-hl-keyword);
+}
+
+.er-code .hljs-string,
+.er-code .hljs-regexp,
+.er-code .hljs-char,
+.er-code .hljs-quote,
+.er-code .hljs-template-variable,
+.er-code .hljs-subst {
+  color: var(--er-hl-string);
+}
+
+.er-code .hljs-comment {
+  color: var(--er-hl-comment);
+  font-style: italic;
+}
+
+.er-code .hljs-number,
+.er-code .hljs-symbol,
+.er-code .hljs-bullet,
+.er-code .hljs-variable,
+.er-code .hljs-variable.constant_,
+.er-code .hljs-meta {
+  color: var(--er-hl-constant);
+}
+
+.er-code .hljs-title,
+.er-code .hljs-title.function_,
+.er-code .hljs-section,
+.er-code .hljs-built_in {
+  color: var(--er-hl-function);
+}
+
+.er-code .hljs-type,
+.er-code .hljs-title.class_,
+.er-code .hljs-attr,
+.er-code .hljs-attribute,
+.er-code .hljs-property,
+.er-code .hljs-params,
+.er-code .hljs-selector-attr,
+.er-code .hljs-selector-class,
+.er-code .hljs-selector-id {
+  color: var(--er-hl-type);
+}
+
+.er-code .hljs-name,
+.er-code .hljs-tag {
+  color: var(--er-hl-tag);
+}
+
+.er-code .hljs-emphasis {
+  font-style: italic;
+}
+
+.er-code .hljs-strong {
+  font-weight: 600;
+}
+
+/*
+ * A diff already says what was added and removed, so hljs's own add/delete
+ * colours would fight the row backgrounds. Let them inherit.
+ */
+.er-code .hljs-addition,
+.er-code .hljs-deletion {
+  color: inherit;
+  background: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Commenting on a line
+   --------------------------------------------------------------------------- */
+
+/*
+ * The + sits on top of the old-number gutter rather than in the flex row:
+ * given a slot of its own it would shift every line sideways on hover. It's
+ * opaque, so it simply covers the number underneath.
+ */
+.er-line-comment {
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 17px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: var(--mantine-color-indigo-6);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 90ms ease;
+}
+
+.er-diff-line:hover > .er-line-comment,
+.er-line-comment:focus-visible {
+  opacity: 1;
+}
+
+/*
+ * Blocks that sit between code lines. `.er-diff-lines` resolves `max-content`
+ * once for the whole file, so anything in here contributes its own width to
+ * that measurement — hence a fixed width rather than a stretchy one. Sticky
+ * keeps it in view when the code is scrolled sideways.
+ */
+.er-diff-inline {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 620px;
+  max-width: 100%;
+  margin: 4px 0 6px 46px;
+}
+
+.er-diff-compose {
+  padding: 8px 10px;
+  border: 1px solid var(--mantine-color-indigo-4);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--er-surface);
+  /* Mantine's controls shouldn't inherit the diff's monospace and 12px. */
+  font-family: var(--mantine-font-family);
+  white-space: normal;
+}
+
+/* An existing discussion, shown under the line it was left on. */
+.er-diff-thread {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 620px;
+  max-width: 100%;
+  margin: 4px 0 6px 46px;
+  padding: 6px 9px;
+  border: 1px solid var(--er-row-border);
+  border-left: 3px solid var(--mantine-color-indigo-5);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--er-surface);
+  font-family: var(--mantine-font-family);
+  white-space: normal;
+}
+
+.er-diff-thread[data-resolved="true"] {
+  border-left-color: var(--mantine-color-teal-6);
+}
+
+.er-diff-thread-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.er-diff-thread-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.er-diff-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.er-diff-comment .er-markdown {
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-width: none;
+}
+
+.er-diff-comment .er-markdown > :first-child {
+  margin-top: 0;
+}
+
+.er-diff-comment .er-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* The +/- proportion bar in the size column. */
+.er-statbar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  align-items: stretch;
+}
+
+.er-statbar > span {
+  border-radius: 1px;
+  min-width: 2px;
+}
+
+.er-kbd-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  padding: 5px 0;
+}
+
+/* Clicking an author filters the queue to them. */
+.er-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  cursor: pointer;
+  border-radius: var(--mantine-radius-sm);
+  padding: 1px 3px;
+  margin: -1px -3px;
+  transition: background-color 90ms ease;
+}
+
+.er-author:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+/* ---------------------------------------------------------------------------
+   Claude reviews
+   --------------------------------------------------------------------------- */
+
+/* The robot breathes while Claude works. */
+.er-robot[data-running="true"] {
+  animation: er-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes er-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .er-robot[data-running="true"] {
+    animation: none;
+  }
+}
+
+/* The Diff / Claude review strip sits flush under the pane header. */
+.er-pane-head:has(+ .er-pane-tabs) {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+.er-pane-tabs {
+  flex: none;
+  padding: 0 8px;
+}
+
+.er-activity {
+  padding: 8px 10px;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--er-diff-hunk-bg);
+  max-height: 360px;
+  overflow: auto;
+}
+
+.er-markdown {
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 900px;
+}
+
+.er-markdown pre {
+  font-size: 12px;
+}
+
+.er-markdown table {
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------------------
+   Approval emoji picker
+   --------------------------------------------------------------------------- */
+
+.er-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.er-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  font-size: 20px;
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--mantine-radius-sm);
+  transition:
+    background-color 90ms ease,
+    transform 90ms ease;
+}
+
+.er-emoji:hover {
+  background: var(--mantine-color-default-hover);
+  transform: scale(1.12);
+}
+
+.er-emoji[data-selected="true"] {
+  background: var(--er-row-active);
+  border-color: var(--mantine-color-indigo-5);
+}
+
+.er-emoji:focus-visible {
+  outline: 2px solid var(--mantine-color-indigo-5);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+   Pane focus (a / d)
+   --------------------------------------------------------------------------- */
+
+/* The pane with the keyboard. */
+.er-pane[data-focused="true"] {
+  border-color: var(--mantine-color-indigo-5);
+}
+
+/* The ring is on the pane; the scroller inside it just holds focus. */
+.er-pane-scroll:focus,
+.er-pane-scroll:focus-visible {
+  outline: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Conversation — comments under the description, as little bubbles
+   --------------------------------------------------------------------------- */
+
+:root {
+  --er-bubble: var(--mantine-color-gray-0);
+  --er-bubble-mine: var(--mantine-color-indigo-0);
+}
+
+[data-mantine-color-scheme="dark"] {
+  --er-bubble: var(--mantine-color-dark-6);
+  --er-bubble-mine: rgba(76, 84, 194, 0.22);
+}
+
+.er-conversation {
+  margin-top: var(--mantine-spacing-lg);
+  padding-top: var(--mantine-spacing-sm);
+  border-top: 1px solid var(--er-row-border);
+  max-width: 900px;
+}
+
+.er-bubble-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* Yours sit on the right, like a chat. */
+.er-bubble-row[data-mine="true"] {
+  flex-direction: row-reverse;
+}
+
+.er-bubble {
+  min-width: 0;
+  max-width: min(85%, 720px);
+  padding: 7px 11px 8px;
+  background: var(--er-bubble);
+  border: 1px solid var(--er-row-border);
+  border-radius: 14px;
+  /* The corner nearest the avatar is the bubble's "tail". */
+  border-top-left-radius: 4px;
+}
+
+.er-bubble[data-mine="true"] {
+  background: var(--er-bubble-mine);
+  border-top-left-radius: 14px;
+  border-top-right-radius: 4px;
+}
+
+.er-bubble .er-markdown {
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: none;
+}
+
+.er-bubble .er-markdown > :first-child {
+  margin-top: 0;
+}
+
+.er-bubble .er-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* "alice approved" — an event, not a message. */
+.er-verdict {
+  display: flex;
+  justify-content: center;
+}
+
+.er-verdict-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--er-muted);
+  background: var(--er-bubble);
+  border: 1px solid var(--er-row-border);
+}
+
+/* Inline comments on one line of code, with their replies. */
+.er-thread-card {
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-md);
+  padding: 8px 10px;
+}
+
+.er-thread-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.er-minimized {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--er-muted);
+}
+
+/*
+ * Quotes the way GitHub draws them — a rule down the left, muted text —
+ * rather than Mantine's large pull-quote, which swamps a comment bubble.
+ * Applies to descriptions too, so both read like GitHub.
+ */
+.er-markdown blockquote {
+  margin: 8px 0;
+  padding: 0 0 0 12px;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--er-muted);
+  background: none;
+  border: none;
+  border-left: 3px solid var(--er-row-border);
+  border-radius: 0;
+}
+
+.er-markdown blockquote > :first-child {
+  margin-top: 0;
+}
+
+.er-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
