@@ -12,18 +12,21 @@ import {
   TextInput,
   Textarea,
 } from "@mantine/core";
-import { IconAlertTriangle, IconShieldLock } from "@tabler/icons-react";
-import {
-  DEFAULT_INSTRUCTIONS,
-  EFFORTS,
-  type AiReviewEffort,
-  type LocalStatus,
-} from "../../shared/aiReview.ts";
+import { IconAlertTriangle, IconShieldLock, IconUsers } from "@tabler/icons-react";
+import { EFFORTS, type AiReviewEffort, type LocalStatus } from "../../shared/aiReview.ts";
 import { useLocalConfig } from "../hooks/useLocalReviews.ts";
 
 const SAVE_LABEL = { idle: "", saving: "Saving…", saved: "Saved", error: "Couldn't save" } as const;
 
-export function ClaudeSettings({ status, opened }: { status: LocalStatus | null; opened: boolean }) {
+export function ClaudeSettings({
+  status,
+  opened,
+  onOpenReviewers,
+}: {
+  status: LocalStatus | null;
+  opened: boolean;
+  onOpenReviewers: () => void;
+}) {
   const { config, update, saving } = useLocalConfig(opened);
 
   if (status && !status.claude.available) {
@@ -49,40 +52,24 @@ export function ClaudeSettings({ status, opened }: { status: LocalStatus | null;
 
   return (
     <Stack gap="md">
-      <div>
-        <Group justify="space-between" align="flex-end" mb={4}>
+      <Group justify="space-between" wrap="nowrap">
+        <div>
           <Text size="sm" fw={600}>
             Review instructions
           </Text>
-          <Group gap="xs">
-            <Text size="xs" c={saving === "error" ? "red" : "dimmed"}>
-              {SAVE_LABEL[saving]}
-            </Text>
-            {config.instructions !== DEFAULT_INSTRUCTIONS && (
-              <Button
-                size="compact-xs"
-                variant="subtle"
-                color="gray"
-                onClick={() => set({ instructions: DEFAULT_INSTRUCTIONS })}
-              >
-                Restore default
-              </Button>
-            )}
-          </Group>
+          <Text size="xs" c="dimmed">
+            Each reviewer has its own. Pick one or more when you start a review.
+          </Text>
+        </div>
+        <Group gap="xs" wrap="nowrap">
+          <Text size="xs" c={saving === "error" ? "red" : "dimmed"}>
+            {SAVE_LABEL[saving]}
+          </Text>
+          <Button size="xs" variant="light" leftSection={<IconUsers size={14} />} onClick={onOpenReviewers}>
+            Edit reviewers
+          </Button>
         </Group>
-        <Text size="xs" c="dimmed" mb={6}>
-          Given to every review, after the pull request's title. Claude also gets the full diff,
-          the commit list and the PR description as files it can read.
-        </Text>
-        <Textarea
-          value={config.instructions}
-          onChange={(e) => set({ instructions: e.currentTarget.value })}
-          autosize
-          minRows={10}
-          maxRows={22}
-          styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)", fontSize: 12 } }}
-        />
-      </div>
+      </Group>
 
       <Group grow align="flex-start">
         <TextInput

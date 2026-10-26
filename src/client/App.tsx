@@ -22,6 +22,7 @@ import {
   IconRefresh,
   IconSettings,
   IconSun,
+  IconUsers,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficulty.ts";
@@ -37,6 +38,8 @@ import { FilterBar, type SortKey } from "./components/FilterBar.tsx";
 import { HistoryFilterBar, type VerdictFilter } from "./components/HistoryFilterBar.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
+import { ReviewerPicker } from "./components/ReviewerPicker.tsx";
+import { ReviewersPage } from "./components/ReviewersPage.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsModal } from "./components/SettingsModal.tsx";
 import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
@@ -44,6 +47,7 @@ import { SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestNow, useReadyCount } from "./hooks/diffStore.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
 import { useReviewed } from "./hooks/useReviewed.ts";
+import { useReviewers } from "./hooks/useReviewers.ts";
 import { useReviews } from "./hooks/useReviews.ts";
 import { useSettings } from "./hooks/useSettings.ts";
 import { useHidden } from "./hooks/useHidden.ts";
@@ -88,6 +92,10 @@ export function App() {
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** The Reviewers page, in place of the lists. */
+  const [page, setPage] = useState<"reviewers" | null>(null);
+  /** The pull request whose reviewers are being chosen. */
+  const [pickFor, setPickFor] = useState<PullRequest | null>(null);
   const [reviewed, setReviewed] = useState<Record<string, ReviewEvent>>({});
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -277,8 +285,8 @@ export function App() {
     notifications.show({
       color: ok ? "teal" : job.status === "failed" ? "red" : "gray",
       title: ok
-        ? `Claude finished reviewing #${job.number}`
-        : `Claude's review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`,
+        ? `${job.reviewerName} finished reviewing #${job.number}`
+        : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`,
       message: (
         <Text
           size="xs"
@@ -302,10 +310,13 @@ export function App() {
     [select],
   );
 
-  const startAiReview = useCallback(
-    (pr: PullRequest) => {
+  const reviewers = useReviewers(ai.supported);
+  const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
+
+  const runAiReview = useCallback(
+    (pr: PullRequest, ids: string[] | undefined) => {
       openAiReview(pr);
-      ai.start(pr).catch((err: unknown) =>
+      ai.start(pr, ids).catch((err: unknown) =>
         notifications.show({
           color: "red",
           title: "Couldn't start the review",
@@ -315,6 +326,21 @@ export function App() {
       );
     },
     [openAiReview, ai.start],
+  );
+
+  /** With no reviewers named: the only one, or a choice of them. */
+  const startAiReview = useCallback(
+    (pr: PullRequest, ids?: string[]) => {
+      if (ids || reviewers.reviewers.length <= 1) {
+        runAiReview(pr, ids ?? reviewers.reviewers.map((r) => r.id).slice(0, 1));
+        return;
+      }
+      openAiReview(pr);
+      setPickFor(pr);
+      // The files may have been edited elsewhere since they were read.
+      void reviewers.refresh().catch(() => {});
+    },
+    [runAiReview, openAiReview, reviewers.reviewers, reviewers.refresh],
   );
 
   openRef.current = (job) => {
@@ -337,11 +363,13 @@ export function App() {
     () => ({
       available: ai.available,
       byPr: ai.byPr,
+      reviewsByPr: ai.reviewsByPr,
+      reviewerIds,
       start: startAiReview,
       cancel: (id) => void ai.cancel(id).catch(() => {}),
       remove: (id) => void ai.remove(id).catch(() => {}),
     }),
-    [ai.available, ai.byPr, startAiReview, ai.cancel, ai.remove],
+    [ai.available, ai.byPr, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove],
   );
 
   const queueAi = useMemo(
@@ -485,6 +513,8 @@ export function App() {
     }
 
     function onKeyDown(e: KeyboardEvent) {
+      // The Reviewers page and the reviewer picker have keys of their own.
+      if (page || pickFor) return;
       const target = e.target as HTMLElement | null;
       const typing =
         target instanceof HTMLInputElement ||
@@ -614,6 +644,8 @@ export function App() {
     shortcutsOpen,
     changesOpen,
     approveOpen,
+    page,
+    pickFor,
     reviewed,
     history,
     refresh,
@@ -639,6 +671,9 @@ export function App() {
       case "help":
         setSettingsOpen(false);
         setShortcutsOpen(true);
+        return;
+      case "reviewers":
+        if (ai.supported) setPage("reviewers");
         return;
     }
   });
@@ -703,7 +738,9 @@ export function App() {
             )}
           </Group>
 
+          {/* The Reviewers page has its own way back; it isn't left by accident. */}
           <Tabs
+            style={page ? { visibility: "hidden" } : undefined}
             value={tab}
             onChange={(v) => setTab((v as Tab) ?? "queue")}
             variant="pills"
@@ -763,6 +800,18 @@ export function App() {
               <IconRefresh size={17} />
             </ActionIcon>
           </Tooltip>
+          {ai.supported && (
+            <Tooltip label="Reviewers">
+              <ActionIcon
+                variant={page === "reviewers" ? "light" : "subtle"}
+                color="gray"
+                onClick={() => setPage((p) => (p === "reviewers" ? p : "reviewers"))}
+                aria-label="Reviewers"
+              >
+                <IconUsers size={17} />
+              </ActionIcon>
+            </Tooltip>
+          )}
           <Tooltip label="Shortcuts (?)">
             <ActionIcon
               variant="subtle"
@@ -796,8 +845,10 @@ export function App() {
         </Group>
       </header>
 
+      {page === "reviewers" && <ReviewersPage store={reviewers} onClose={() => setPage(null)} />}
+
       {/* Focus mode is about the code, so the list's filters step aside too. */}
-      {!expanded && (
+      {!page && !expanded && (
         <div className="er-toolbar">
           {tab === "hidden" ? (
             <Text size="xs" c="dimmed" mb="sm">
@@ -831,50 +882,66 @@ export function App() {
         </div>
       )}
 
-      <SplitView
-        mode={mode}
-        left={
-          // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
-          <div
-            className="er-pane"
-            data-focused={focusedPane === "list"}
-            onFocus={() => setFocusedPane("list")}
-          >
-            <div className="er-pane-scroll" ref={listScrollRef} tabIndex={-1}>
-              {listPane}
+      {!page && (
+        <SplitView
+          mode={mode}
+          left={
+            // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
+            <div
+              className="er-pane"
+              data-focused={focusedPane === "list"}
+              onFocus={() => setFocusedPane("list")}
+            >
+              <div className="er-pane-scroll" ref={listScrollRef} tabIndex={-1}>
+                {listPane}
+              </div>
             </div>
-          </div>
-        }
-        right={
-          <PreviewPane
-            pr={selected}
-            settings={settings}
-            reviewed={selected ? reviewed[selected.id] : undefined}
-            onSubmit={handleSubmit}
-            changesOpen={changesOpen}
-            onChangesOpenChange={setChangesOpen}
-            approveOpen={approveOpen}
-            onApproveOpenChange={setApproveOpen}
-            expanded={expanded}
-            onToggleExpand={() => setExpanded((x) => !x)}
-            narrow={narrow}
-            scrollRef={previewScrollRef}
-            focused={focusedPane === "preview"}
-            onFocusPane={() => setFocusedPane("preview")}
-            ai={aiControls}
-            tab={previewTab}
-            onTabChange={setPreviewTab}
-            viewer={data?.viewer ?? null}
-            hideState={
-              selected && tab !== "reviewed"
-                ? { hidden: isHidden(hidden, selected), toggle: () => toggleHidden(selected) }
-                : undefined
-            }
-          />
-        }
-      />
+          }
+          right={
+            <PreviewPane
+              pr={selected}
+              settings={settings}
+              reviewed={selected ? reviewed[selected.id] : undefined}
+              onSubmit={handleSubmit}
+              changesOpen={changesOpen}
+              onChangesOpenChange={setChangesOpen}
+              approveOpen={approveOpen}
+              onApproveOpenChange={setApproveOpen}
+              expanded={expanded}
+              onToggleExpand={() => setExpanded((x) => !x)}
+              narrow={narrow}
+              scrollRef={previewScrollRef}
+              focused={focusedPane === "preview"}
+              onFocusPane={() => setFocusedPane("preview")}
+              ai={aiControls}
+              tab={previewTab}
+              onTabChange={setPreviewTab}
+              viewer={data?.viewer ?? null}
+              hideState={
+                selected && tab !== "reviewed"
+                  ? { hidden: isHidden(hidden, selected), toggle: () => toggleHidden(selected) }
+                  : undefined
+              }
+            />
+          }
+        />
+      )}
 
+      <ReviewerPicker
+        pr={pickFor}
+        reviewers={reviewers.reviewers}
+        onClose={() => setPickFor(null)}
+        onStart={runAiReview}
+        onManage={() => {
+          setPickFor(null);
+          setPage("reviewers");
+        }}
+      />
       <SettingsModal
+        onOpenReviewers={() => {
+          setSettingsOpen(false);
+          setPage("reviewers");
+        }}
         opened={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         settings={settings}

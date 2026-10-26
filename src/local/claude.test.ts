@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { DEFAULT_AI_CONFIG } from "../shared/aiReview.ts";
 import { applyEvent, buildArgs, buildPrompt, describeToolUse, EMPTY_STREAM } from "./claude.ts";
 import { childEnv } from "./env.ts";
 
@@ -25,7 +24,7 @@ test("model and effort are passed only when set", () => {
 test("the prompt carries the PR and the reviewer's own instructions", () => {
   const prompt = buildPrompt(
     { owner: "metabase", name: "metabase", number: 42, title: "Fix it" },
-    { ...DEFAULT_AI_CONFIG, instructions: "  Only look at SQL.  " },
+    "  Only look at SQL.  ",
   );
   expect(prompt).toContain("#42 in metabase/metabase");
   expect(prompt).toContain('"Fix it"');

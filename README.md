@@ -8,6 +8,7 @@ This is a fast, multi-paned review UI that uses your local github CLI and claude
 
 - Keyboard shortcuts for fast navigation.
 - Worktrees for multitasking.
+- Several Claude reviewers at once — "Security", "Performance", your own — each with its own instructions, kept as Markdown files in `~/.easy-review/reviewers`.
 
 ## How to use
 

@@ -19,6 +19,8 @@ export function localPaths() {
     worktrees: join(root, "worktrees"),
     /** Clones we made ourselves, for repos you don't have locally. */
     repos: join(root, "repos"),
+    /** One Markdown file per reviewer (see reviewers.ts). */
+    reviewers: join(root, "reviewers"),
   };
 }
 

@@ -185,6 +185,7 @@ function buildMenu() {
               { label: "Check for Updates…", click: () => void checkForUpdates({ manual: true }) },
               { type: "separator" },
               { label: "Settings…", accelerator: "Cmd+,", click: command("settings") },
+              { label: "Reviewers…", accelerator: "Cmd+Shift+,", click: command("reviewers") },
               { type: "separator" },
               { role: "services" },
               { type: "separator" },

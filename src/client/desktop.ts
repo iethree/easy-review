@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from "react";
 
-export type DesktopCommand = "settings" | "refresh" | "help";
+export type DesktopCommand = "settings" | "refresh" | "help" | "reviewers";
 
 interface DesktopBridge {
   platform: string;

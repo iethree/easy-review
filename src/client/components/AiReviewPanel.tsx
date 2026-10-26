@@ -76,8 +76,8 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
           <IconRobot size={40} color="var(--mantine-color-gray-5)" />
           <Text fw={600}>{job ? "Review cancelled" : "No Claude review yet"}</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Checks out #{pr.number} into its own worktree and has Claude Code review it with your
-            standing instructions. Claude gets read-only tools, confined to that checkout.
+            Checks out #{pr.number} into its own worktree and has Claude Code review it, once for
+            each reviewer you pick. Claude gets read-only tools, confined to that checkout.
           </Text>
           <Button leftSection={<IconRobot size={16} />} onClick={onStart}>
             Review with Claude

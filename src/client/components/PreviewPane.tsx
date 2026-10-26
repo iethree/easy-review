@@ -21,10 +21,9 @@ import {
   IconEyeOff,
   IconFileDiff,
   IconFileText,
-  IconRobot,
 } from "@tabler/icons-react";
 import { useCallback, useDeferredValue, useMemo, type RefObject } from "react";
-import { isActive, prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
 import { rateDifficulty } from "../../shared/difficulty.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { useDiff } from "../hooks/diffStore.ts";
@@ -33,7 +32,7 @@ import { useDrafts } from "../drafts.ts";
 import { isReviewed, PR_STATE, VERDICT } from "../reviewMeta.ts";
 import { relativeTime } from "../time.ts";
 import { AiReviewButton } from "./AiReviewButton.tsx";
-import { AiReviewPanel } from "./AiReviewPanel.tsx";
+import { ClaudeReviews, StatusIcon } from "./ClaudeReviews.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import type { DiffThreadItem } from "./DiffThread.tsx";
 import { DiffView } from "./DiffView.tsx";
@@ -79,8 +78,13 @@ const NO_THREADS: DiffThreadItem[] = [];
 /** Local Claude reviews; `available` is false when the claude CLI isn't installed. */
 export interface AiControls {
   available: boolean;
+  /** One review per pull request, standing for all its reviewers (see groupByPr). */
   byPr: Map<string, AiReviewSummary>;
-  start: (pr: PullRequest) => void;
+  /** The latest review by each reviewer. */
+  reviewsByPr: Map<string, AiReviewSummary[]>;
+  reviewerIds: ReadonlySet<string>;
+  /** No ids: ask which reviewers (or use the only one). */
+  start: (pr: PullRequest, reviewerIds?: string[]) => void;
   cancel: (id: string) => void;
   remove: (id: string) => void;
 }
@@ -158,7 +162,7 @@ export function PreviewPane(props: Props) {
             Diff
           </Tabs.Tab>
           {ai.available && (
-            <Tabs.Tab value="claude" leftSection={<ClaudeTabIcon job={job} />}>
+            <Tabs.Tab value="claude" leftSection={<StatusIcon job={job} />}>
               Claude review
             </Tabs.Tab>
           )}
@@ -176,10 +180,11 @@ export function PreviewPane(props: Props) {
         >
           <Box p="sm">
             {tab === "claude" ? (
-              <AiReviewPanel
+              <ClaudeReviews
                 pr={deferred}
-                job={ai.byPr.get(prKey(deferred))}
-                onStart={() => ai.start(deferred)}
+                jobs={ai.reviewsByPr.get(prKey(deferred)) ?? []}
+                reviewerIds={ai.reviewerIds}
+                onStart={(ids) => ai.start(deferred, ids)}
                 onCancel={ai.cancel}
                 onRemove={ai.remove}
               />
@@ -193,17 +198,6 @@ export function PreviewPane(props: Props) {
       )}
     </div>
   );
-}
-
-function ClaudeTabIcon({ job }: { job: AiReviewSummary | undefined }) {
-  if (job && isActive(job.status)) return <Loader size={12} color="indigo" />;
-  const color =
-    job?.status === "done"
-      ? "var(--mantine-color-teal-6)"
-      : job?.status === "failed"
-        ? "var(--mantine-color-red-6)"
-        : undefined; // currentColor
-  return <IconRobot size={14} color={color} />;
 }
 
 function Header({

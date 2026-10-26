@@ -17,7 +17,10 @@ export function isActive(status: AiReviewStatus): boolean {
 export type AiReviewEffort = "" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface AiReviewConfig {
-  /** The standing instructions every review is given. */
+  /**
+   * The standing instructions from before there were reviewers. Only read
+   * once, to seed the first reviewer (see src/local/reviewers.ts).
+   */
   instructions: string;
   /** Model alias or id; empty uses the CLI's default. */
   model: string;
@@ -31,9 +34,24 @@ export interface AiReviewConfig {
   clones: string;
 }
 
+/**
+ * A named set of review instructions — "Security", "Performance" — kept as a
+ * Markdown file in ~/.easy-review/reviewers. A pull request can be reviewed
+ * by several at once, each in its own Claude session.
+ */
+export interface Reviewer {
+  /** The file name, without .md. */
+  id: string;
+  name: string;
+  instructions: string;
+}
+
 /** Enough to draw a row's robot icon; polled frequently, so kept small. */
 export interface AiReviewSummary {
   id: string;
+  /** Who reviewed: the reviewer's id, and its name as it was at the time. */
+  reviewerId: string;
+  reviewerName: string;
   owner: string;
   name: string;
   number: number;
@@ -61,6 +79,8 @@ export type CloneSource = "configured" | "detected" | "managed";
 
 export interface AiReviewJob extends AiReviewSummary {
   baseRef: string;
+  /** The reviewer's instructions as they were when this review started. */
+  instructions: string;
   /** The finished review, as Markdown. */
   review: string | null;
   /** What Claude has been doing: "Read src/foo.ts", "Grep “bar”". */

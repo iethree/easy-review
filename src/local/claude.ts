@@ -36,8 +36,8 @@ export interface ReviewTarget {
   title: string;
 }
 
-export function buildPrompt(pr: ReviewTarget, config: AiReviewConfig): string {
-  return `Review pull request #${pr.number} in ${pr.owner}/${pr.name}: "${pr.title}".\n\n${config.instructions.trim()}\n`;
+export function buildPrompt(pr: ReviewTarget, instructions: string): string {
+  return `Review pull request #${pr.number} in ${pr.owner}/${pr.name}: "${pr.title}".\n\n${instructions.trim()}\n`;
 }
 
 export function buildArgs(prompt: string, config: Pick<AiReviewConfig, "model" | "effort">): string[] {
