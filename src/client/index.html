@@ -17,6 +17,11 @@
                 : "light";
           document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
         } catch (e) {}
+        // Inside the desktop app (desktop/preload.cjs), app.css draws the
+        // top bar as the window's title bar.
+        if (window.easyReviewDesktop) {
+          document.documentElement.setAttribute("data-desktop", window.easyReviewDesktop.platform);
+        }
       })();
     </script>
   </head>

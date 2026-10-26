@@ -1,0 +1,65 @@
+# Every push to main is a release: the next version (scripts/version.ts), a
+# tag for it, and a GitHub release with the macOS app for Apple silicon and
+# Intel. The zips and latest-mac.yml are what an installed app checks for
+# updates against; the .dmg files are for people.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One release at a time, in push order, so two pushes can't claim one version.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: electron-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run typecheck
+
+      - run: bun test
+
+      - name: Choose the version
+        id: version
+        run: echo "version=$(bun scripts/version.ts)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the app
+        run: bun scripts/desktop.ts --build --arch all --version "${{ steps.version.outputs.version }}"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "easy-review $VERSION" \
+            --generate-notes \
+            dist/desktop/*.dmg \
+            dist/desktop/*.zip \
+            dist/desktop/*.blockmap \
+            dist/desktop/latest-mac.yml

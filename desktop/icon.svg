@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    The app icon: a checkmark drawn as a git graph, two commits joined by an
+    approval. On Apple's icon grid: an 824px rounded square, centred, with
+    room for its shadow. Rendered to icon.png by `bun scripts/icon.ts`.
+  -->
+  <defs>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="140" y1="120" x2="884" y2="924">
+      <stop offset="0" stop-color="#5B6CFF"/>
+      <stop offset="0.5" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#F0508F"/>
+    </linearGradient>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="300" cy="230" r="560">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="tile-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#1B1035" flood-opacity="0.32"/>
+    </filter>
+    <filter id="mark-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#2A0F5C" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#tile-shadow)">
+    <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+  </g>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#glow)"/>
+  <rect x="102" y="102" width="820" height="820" rx="184" fill="none" stroke="url(#edge)" stroke-width="4"/>
+
+  <g filter="url(#mark-shadow)">
+    <path d="M300 540 L446 686 L730 342" fill="none" stroke="#FFFFFF" stroke-width="68"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Commits: white rings, hollow to the same gradient as the tile. -->
+    <circle cx="300" cy="540" r="62" fill="url(#bg)" stroke="#FFFFFF" stroke-width="44"/>
+    <circle cx="730" cy="342" r="62" fill="url(#bg)" stroke="#FFFFFF" stroke-width="44"/>
+  </g>
+</svg>
