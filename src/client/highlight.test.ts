@@ -31,6 +31,7 @@ test("the tokens of a line put it back together exactly", () => {
   const source = [
     "export function greet(name: string): string {",
     "  // say hello",
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: TypeScript source, as text
     "  return `hi ${name}`;",
     "}",
   ];

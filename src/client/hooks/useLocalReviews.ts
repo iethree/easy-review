@@ -139,6 +139,7 @@ export function useReviewDetail(summary: AiReviewSummary | undefined) {
   const id = summary?.id;
   const version = summary?.updatedAt;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version (updatedAt) is the trigger to refetch
   useEffect(() => {
     if (!id) {
       setDetail(null);

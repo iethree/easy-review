@@ -181,14 +181,14 @@ function keyOf(term: string): string | null {
   return term.slice(0, colon).toLowerCase();
 }
 
-function valueOf(term: string): string {
+function termValue(term: string): string {
   return term.slice(term.indexOf(":") + 1).toLowerCase();
 }
 
 /** First value for `key:`, or null. */
 export function readToken(input: string, key: string): string | null {
   for (const term of splitTerms(input)) {
-    if (keyOf(term) === key) return valueOf(term);
+    if (keyOf(term) === key) return termValue(term);
   }
   return null;
 }
@@ -206,7 +206,7 @@ export function upsertToken(
 ): string {
   const kept = splitTerms(input).filter((term) => {
     if (keyOf(term) !== key) return true;
-    return only ? !only.includes(valueOf(term)) : false;
+    return only ? !only.includes(termValue(term)) : false;
   });
   if (value) kept.push(`${key}:${value}`);
   return joinTerms(kept);
@@ -215,7 +215,7 @@ export function upsertToken(
 export function readLevel(input: string): Difficulty | null {
   for (const term of splitTerms(input)) {
     if (keyOf(term) !== "is") continue;
-    const value = valueOf(term);
+    const value = termValue(term);
     if ((LEVELS as string[]).includes(value)) return value as Difficulty;
   }
   return null;
@@ -236,7 +236,7 @@ export function describeFilters(input: string): FilterChip[] {
   const chips: FilterChip[] = [];
   for (const term of splitTerms(input)) {
     const key = keyOf(term);
-    const value = valueOf(term);
+    const value = termValue(term);
     if (key === "author" || key === "by") {
       chips.push({ term, label: `by ${value}`, color: "grape" });
     } else if (key === "repo" || key === "in") {

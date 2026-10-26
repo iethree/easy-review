@@ -354,6 +354,7 @@ export function App() {
   // Keyed on ids rather than the objects: the list array is rebuilt on every
   // filter keystroke, and that alone shouldn't re-prioritise the fetch queue.
   const neighbours = `${list[index - 1]?.id ?? ""}|${list[index + 1]?.id ?? ""}`;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on ids on purpose, as above
   useEffect(() => {
     if (!selected) return;
     for (const pr of [list[index + 1], list[index - 1]]) if (pr) requestNow(pr);
@@ -371,6 +372,8 @@ export function App() {
   // Keep DOM focus in the focused pane, so the browser's own scrolling keys
   // (Space, Page Up/Down, Home/End) work there. Only steps in when focus has
   // been lost or sits in the other pane — it never pulls focus out of a box.
+  // The extra dependencies are the layout changes that can strand focus.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run on layout changes, not just on reads
   useEffect(() => {
     const el = focusedPane === "list" ? listScrollRef.current : previewScrollRef.current;
     const other = focusedPane === "list" ? previewScrollRef.current : listScrollRef.current;
@@ -379,7 +382,9 @@ export function App() {
     if (el && (lost || (other?.contains(active) ?? false))) el.focus({ preventScroll: true });
   }, [focusedPane, expanded, narrow, approveOpen, changesOpen, settingsOpen, shortcutsOpen]);
 
-  // Keep the selected row visible when moving by keyboard.
+  // Keep the selected row visible when moving by keyboard — and after the
+  // list is swapped (tab) or shown again (expanded).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tab and expanded re-show the list
   useEffect(() => {
     if (!selectedKey) return;
     document
@@ -473,7 +478,7 @@ export function App() {
       // would move one row instead of twelve.
       setSelectedId((prevId) => {
         const found = list.findIndex((pr) => pr.id === prevId);
-        const from = found >= 0 ? found : 0;
+        const from = Math.max(found, 0);
         const next = list[Math.min(Math.max(from + delta, 0), list.length - 1)];
         return next?.id ?? prevId;
       });
@@ -829,6 +834,7 @@ export function App() {
       <SplitView
         mode={mode}
         left={
+          // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
           <div
             className="er-pane"
             data-focused={focusedPane === "list"}

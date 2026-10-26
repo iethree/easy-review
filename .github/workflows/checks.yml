@@ -1,0 +1,38 @@
+# Lint, type checks and tests, on every push to main and every commit pushed
+# to a pull request. macOS, because some tests drive macOS tools (codesign,
+# ditto) — see desktop/updates.test.ts.
+
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes the older run moot.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint --reporter=github
+
+      - run: bun run typecheck
+
+      - run: bun test

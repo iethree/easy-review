@@ -108,6 +108,7 @@ export function PreviewPane(props: Props) {
 
   if (!pr) {
     return (
+      // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
       <div className="er-pane" data-focused={focused} onFocus={onFocusPane}>
         <Center h="100%" p="xl">
           <Stack align="center" gap="xs">
@@ -129,6 +130,7 @@ export function PreviewPane(props: Props) {
   const job = ai.available ? ai.byPr.get(prKey(pr)) : undefined;
 
   return (
+    // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
     <div className="er-pane" data-focused={focused} onFocus={onFocusPane}>
       <Header {...props} pr={pr} job={job} />
       <Tabs

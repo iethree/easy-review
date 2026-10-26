@@ -114,6 +114,7 @@ export function SplitView({ left, right, mode }: Props) {
       <div className="er-split-left" ref={leftRef}>
         {left}
       </div>
+      {/* biome-ignore lint/a11y/useSemanticElements: a draggable handle; an <hr> can't be one */}
       <div
         className="er-split-handle"
         ref={handleRef}

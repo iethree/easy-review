@@ -17,6 +17,8 @@ gh auth login    # if you aren't already signed in
 bun run dev      # http://localhost:5175
 ```
 
+Before you push: `bun run lint`, `bun run typecheck` and `bun test`. CI runs all three on every push to `main` and every pull request (`.github/workflows/checks.yml`).
+
 ## The macOS app
 
 ```bash

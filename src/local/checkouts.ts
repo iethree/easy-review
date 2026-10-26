@@ -52,6 +52,7 @@ export async function cloneOf(worktreePath: string): Promise<string | null> {
 function usedAt(job: AiReviewJob): string {
   return [job.createdAt, job.startedAt, job.finishedAt]
     .filter((at): at is string => at !== null)
+    // biome-ignore lint/complexity/useMathMinMax: ISO timestamps, compared as strings
     .reduce((latest, at) => (at > latest ? at : latest));
 }
 

@@ -12,7 +12,7 @@ async function script(source: string) {
   return { command: process.execPath, args: ["server.ts"], cwd: dir };
 }
 
-const exited = (child: { exitCode: number | null; signalCode: string | null; once: Function }) =>
+const exited = (child: { exitCode: number | null; signalCode: string | null; once: (event: "exit", listener: () => void) => unknown }) =>
   child.exitCode !== null || child.signalCode !== null
     ? Promise.resolve()
     : new Promise<void>((resolve) => child.once("exit", () => resolve()));

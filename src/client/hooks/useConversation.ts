@@ -37,6 +37,7 @@ export function useConversation(pr: PullRequest) {
     };
   }, [pr.id]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: key covers the pull request's fields; attempt forces a refetch
   useEffect(() => {
     const hit = cache.get(key);
     if (hit) {

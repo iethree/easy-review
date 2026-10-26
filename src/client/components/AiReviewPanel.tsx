@@ -203,6 +203,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
               .slice(-60)
               .reverse()
               .map((a, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a timestamp; the index tells them apart
                 <Group key={`${a.at}:${i}`} gap={8} wrap="nowrap">
                   <Text size="xs" c="dimmed" ff="monospace" style={{ flex: "none" }} w={64}>
                     {new Date(a.at).toLocaleTimeString([], {

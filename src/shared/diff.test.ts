@@ -92,7 +92,7 @@ test("handles no-newline markers and empty context lines", () => {
 });
 
 test("truncates enormous diffs", () => {
-  const huge = `diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,1 +1,1 @@\n` + "+x\n".repeat(900_000);
+  const huge = `diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,1 +1,1 @@\n${"+x\n".repeat(900_000)}`;
   const d = parseDiff(huge);
   expect(d.truncated).toBe(true);
 });

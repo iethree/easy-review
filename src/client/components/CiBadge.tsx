@@ -31,6 +31,7 @@ function useCheckNames(pr: PullRequest) {
   const started = useRef(false);
 
   // A new head commit invalidates whatever we fetched.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: headSha is the trigger, not an input
   useEffect(() => {
     started.current = false;
     setState({ loading: false, contexts: null, complete: true });
@@ -142,6 +143,7 @@ export function CiBadge({ pr }: { pr: PullRequest }) {
               const v = VISUALS[ctx.state] ?? VISUALS.NONE;
               const CtxIcon = v.Icon;
               return (
+                // biome-ignore lint/suspicious/noArrayIndexKey: check names can repeat; the index tells them apart
                 <Group key={`${ctx.name}:${i}`} gap={6} wrap="nowrap">
                   <CtxIcon size={13} color={`var(--mantine-color-${v.color}-6)`} stroke={2.2} />
                   {ctx.url ? (

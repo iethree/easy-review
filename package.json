@@ -4,6 +4,7 @@
   "private": true,
   "version": "0.1.0",
   "devDependencies": {
+    "@biomejs/biome": "2.6.3",
     "@types/bun": "latest",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -36,6 +37,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "desktop": "bun scripts/desktop.ts",
-    "desktop:build": "bun scripts/desktop.ts --build"
+    "desktop:build": "bun scripts/desktop.ts --build",
+    "lint": "biome lint --error-on-warnings ."
   }
 }
