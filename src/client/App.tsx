@@ -17,6 +17,7 @@ import {
   IconEyeOff,
   IconHistory,
   IconInbox,
+  IconClipboardText,
   IconKeyboard,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
@@ -41,6 +42,7 @@ import { PreviewPane, type AiControls, type PreviewTab } from "./components/Prev
 import { QueueList } from "./components/QueueList.tsx";
 import { ReviewerPicker } from "./components/ReviewerPicker.tsx";
 import { ReviewersPage } from "./components/ReviewersPage.tsx";
+import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsModal } from "./components/SettingsModal.tsx";
 import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
@@ -130,6 +132,8 @@ export function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** The Reviewers page, in place of the lists. */
   const [page, setPage] = useState<"reviewers" | null>(null);
+  /** The third pane: the review you're putting together. */
+  const [reviewPaneOpen, setReviewPaneOpen] = useState(false);
   /** The pull request whose reviewers are being chosen. */
   const [pickFor, setPickFor] = useState<PullRequest | null>(null);
   const [reviewed, setReviewed] = useState<Record<string, ReviewEvent>>({});
@@ -422,6 +426,7 @@ export function App() {
       start: startAiReview,
       cancel: (id) => void ai.cancel(id).catch(() => {}),
       remove: (id) => void ai.remove(id).catch(() => {}),
+      findingAdded: () => setReviewPaneOpen(true),
     }),
     [ai.available, ai.byPr, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove],
   );
@@ -964,6 +969,18 @@ export function App() {
               />
             </ActionIcon>
           </Tooltip>
+          <Tooltip label={reviewPaneOpen ? "Hide your review" : "Your review: summary, comments, submit"}>
+            <ActionIcon
+              variant={reviewPaneOpen ? "light" : "subtle"}
+              color="gray"
+              onClick={() => setReviewPaneOpen((x) => !x)}
+              aria-label="Your review"
+              aria-pressed={reviewPaneOpen}
+              style={page ? { visibility: "hidden" } : undefined}
+            >
+              <IconClipboardText size={17} />
+            </ActionIcon>
+          </Tooltip>
           {ai.supported && (
             <Tooltip label="Reviewers">
               <ActionIcon
@@ -1012,49 +1029,61 @@ export function App() {
       {page === "reviewers" && <ReviewersPage store={reviewers} onClose={() => setPage(null)} />}
 
       {!page && (
-        <SplitView
-          mode={mode}
-          left={
-            // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
-            <div
-              className="er-pane"
-              data-focused={focusedPane === "list"}
-              onFocus={() => setFocusedPane("list")}
-            >
-              {listFilter}
-              <div className="er-pane-scroll" ref={listScrollRef} tabIndex={-1}>
-                {listPane}
+        <div className="er-workspace">
+          <SplitView
+            mode={mode}
+            left={
+              // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
+              <div
+                className="er-pane"
+                data-focused={focusedPane === "list"}
+                onFocus={() => setFocusedPane("list")}
+              >
+                {listFilter}
+                <div className="er-pane-scroll" ref={listScrollRef} tabIndex={-1}>
+                  {listPane}
+                </div>
               </div>
-            </div>
-          }
-          right={
-            <PreviewPane
+            }
+            right={
+              <PreviewPane
+                pr={selected}
+                settings={settings}
+                reviewed={selected ? reviewed[selected.id] : undefined}
+                onSubmit={handleSubmit}
+                changesOpen={changesOpen}
+                onChangesOpenChange={setChangesOpen}
+                approveOpen={approveOpen}
+                onApproveOpenChange={setApproveOpen}
+                expanded={expanded}
+                onToggleExpand={() => setExpanded((x) => !x)}
+                narrow={narrow}
+                scrollRef={previewScrollRef}
+                focused={focusedPane === "preview"}
+                onFocusPane={() => setFocusedPane("preview")}
+                ai={aiControls}
+                tab={previewTab}
+                onTabChange={setPreviewTab}
+                viewer={viewer}
+                hideState={
+                  selected && (tab === "queue" || tab === "hidden")
+                    ? { hidden: isHidden(hidden, selected), toggle: () => toggleHidden(selected) }
+                    : undefined
+                }
+              />
+            }
+          />
+          {reviewPaneOpen && (
+            <ReviewPane
+              key={selected?.id ?? "none"}
               pr={selected}
-              settings={settings}
+              ownPr={selected !== null && isOwn(selected)}
               reviewed={selected ? reviewed[selected.id] : undefined}
               onSubmit={handleSubmit}
-              changesOpen={changesOpen}
-              onChangesOpenChange={setChangesOpen}
-              approveOpen={approveOpen}
-              onApproveOpenChange={setApproveOpen}
-              expanded={expanded}
-              onToggleExpand={() => setExpanded((x) => !x)}
-              narrow={narrow}
-              scrollRef={previewScrollRef}
-              focused={focusedPane === "preview"}
-              onFocusPane={() => setFocusedPane("preview")}
-              ai={aiControls}
-              tab={previewTab}
-              onTabChange={setPreviewTab}
-              viewer={viewer}
-              hideState={
-                selected && (tab === "queue" || tab === "hidden")
-                  ? { hidden: isHidden(hidden, selected), toggle: () => toggleHidden(selected) }
-                  : undefined
-              }
+              onClose={() => setReviewPaneOpen(false)}
             />
-          }
-        />
+          )}
+        </div>
       )}
 
       <ReviewerPicker

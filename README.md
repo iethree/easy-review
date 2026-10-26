@@ -9,6 +9,7 @@ This is a fast, multi-paned review UI that uses your local github CLI and claude
 - Keyboard shortcuts for fast navigation.
 - My PRs: your own open pull requests and the ones assigned to you, for self-review — Claude reviewers and comments (GitHub doesn't let you approve your own).
 - Worktrees for multitasking.
+- Claude's findings as cards: add the ones you agree with to your review — on their line in the diff where GitHub allows, in the summary otherwise — and submit it from the review pane on the right.
 - Several Claude reviewers at once — "Security", "Performance", your own — each with its own instructions, kept as Markdown files in `~/.easy-review/reviewers`.
 
 ## How to use

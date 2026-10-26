@@ -13,6 +13,7 @@
 
 import { relative } from "node:path";
 import type { AiReviewConfig } from "../shared/aiReview.ts";
+import { FINDINGS_INSTRUCTIONS } from "../shared/findings.ts";
 import { childEnv } from "./env.ts";
 
 export const REVIEW_TOOLS = ["Read", "Grep", "Glob"] as const;
@@ -27,7 +28,9 @@ Context prepared for you, inside the working directory:
 - .easy-review/pr.diff — the complete diff against the merge base (what GitHub shows)
 - .easy-review/commits.txt — the commits in the pull request
 
-Your final message is the review, in GitHub-flavoured Markdown. It is shown to the reviewer as-is, so make it the complete review rather than a summary of what you did.`;
+Your final message is the review, in GitHub-flavoured Markdown. It is shown to the reviewer as-is, so make it the complete review rather than a summary of what you did.
+
+${FINDINGS_INSTRUCTIONS}`;
 
 export interface ReviewTarget {
   owner: string;

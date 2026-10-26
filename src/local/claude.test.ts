@@ -157,3 +157,10 @@ test("several events for one turn don't inflate anything", () => {
   expect(state.activity).toEqual(["Read a.ts", "Read b.ts"]);
   expect("turns" in state).toBe(false);
 });
+
+test("every reviewer, whatever its instructions, is asked for findings the UI can use", () => {
+  const args = buildArgs("x", { model: "", effort: "" });
+  const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
+  expect(system).toContain("easy-review-findings");
+  expect(system).toContain('"severity"');
+});

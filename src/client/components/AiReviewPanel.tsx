@@ -23,11 +23,13 @@ import {
   IconTerminal2,
   IconTrash,
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { useReviewDetail } from "../hooks/useLocalReviews.ts";
 import { relativeTime } from "../time.ts";
+import { splitReview } from "../../shared/findings.ts";
+import { Findings } from "./Findings.tsx";
 import { Markdown } from "./Markdown.tsx";
 
 interface Props {
@@ -36,6 +38,8 @@ interface Props {
   onStart: () => void;
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
+  /** A finding went into your review. */
+  onFindingAdded?: () => void;
 }
 
 const STATUS = {
@@ -64,8 +68,10 @@ function useTick(active: boolean) {
   }, [active]);
 }
 
-export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
+export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded }: Props) {
   const detail = useReviewDetail(job);
+  // The prose, and the findings block the review ends with, apart.
+  const review = useMemo(() => (detail?.review ? splitReview(detail.review) : null), [detail?.review]);
   const running = job !== undefined && isActive(job.status);
   useTick(running);
 
@@ -185,7 +191,19 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
         </Alert>
       )}
 
-      {job.status === "done" && detail?.review && <Markdown>{detail.review}</Markdown>}
+      {job.status === "done" && review && (
+        <>
+          <Markdown>{review.prose}</Markdown>
+          {review.findings.length > 0 && (
+            <Findings
+              pr={pr}
+              review={{ id: job.id, headSha: job.headSha }}
+              findings={review.findings}
+              onAdded={() => onFindingAdded?.()}
+            />
+          )}
+        </>
+      )}
       {job.status === "done" && !detail && (
         <Center py="lg">
           <Loader size="sm" />

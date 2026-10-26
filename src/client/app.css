@@ -1123,3 +1123,60 @@ body {
     opacity: 0.4;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Your review, in the third pane (components/ReviewPane.tsx), and Claude's
+   findings that feed it (components/Findings.tsx).
+   --------------------------------------------------------------------------- */
+
+.er-workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.er-workspace > .er-split {
+  min-width: 0;
+}
+
+.er-review-pane {
+  flex: none;
+  width: 340px;
+  margin: 10px 16px 14px 0;
+}
+
+.er-review-pane-comment {
+  padding: 8px;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.er-review-pane-actions {
+  flex: none;
+  padding: 10px;
+  border-top: 1px solid var(--er-row-border);
+}
+
+.er-finding {
+  padding: 10px 12px;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-md);
+  transition: opacity 150ms ease;
+}
+
+.er-finding[data-added="true"] {
+  opacity: 0.6;
+}
+
+.er-finding-body {
+  margin-top: 6px;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.er-finding-body .er-markdown > :first-child {
+  margin-top: 0;
+}
+
+.er-finding-body .er-markdown > :last-child {
+  margin-bottom: 0;
+}

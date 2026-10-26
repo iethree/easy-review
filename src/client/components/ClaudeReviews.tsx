@@ -15,10 +15,11 @@ interface Props {
   onStart: (reviewerIds?: string[]) => void;
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
+  onFindingAdded: () => void;
 }
 
 /** One tab per reviewer that has looked at this pull request. */
-export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemove }: Props) {
+export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemove, onFindingAdded }: Props) {
   const [chosen, setChosen] = useState<string | null>(null);
 
   if (jobs.length === 0) {
@@ -47,7 +48,15 @@ export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemo
           </Tooltip>
         </Tabs.List>
       </Tabs>
-      <AiReviewPanel key={job.id} pr={pr} job={job} onStart={rerun} onCancel={onCancel} onRemove={onRemove} />
+      <AiReviewPanel
+        key={job.id}
+        pr={pr}
+        job={job}
+        onStart={rerun}
+        onCancel={onCancel}
+        onRemove={onRemove}
+        onFindingAdded={onFindingAdded}
+      />
     </>
   );
 }

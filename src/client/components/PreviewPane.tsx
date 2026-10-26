@@ -87,6 +87,8 @@ export interface AiControls {
   start: (pr: PullRequest, reviewerIds?: string[]) => void;
   cancel: (id: string) => void;
   remove: (id: string) => void;
+  /** One of Claude's findings went into your review. */
+  findingAdded: () => void;
 }
 
 export function PreviewPane(props: Props) {
@@ -187,6 +189,7 @@ export function PreviewPane(props: Props) {
                 onStart={(ids) => ai.start(deferred, ids)}
                 onCancel={ai.cancel}
                 onRemove={ai.remove}
+                onFindingAdded={ai.findingAdded}
               />
             ) : tab === "description" ? (
               <PrDescription pr={deferred} viewer={props.viewer} />
