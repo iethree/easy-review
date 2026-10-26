@@ -857,3 +857,73 @@ body {
 .er-markdown blockquote > :last-child {
   margin-bottom: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   The desktop app (desktop/main.ts). The top bar is the window's title bar:
+   it drags the window, makes room for the traffic lights, and dims while the
+   window is in the background, as macOS toolbars do. The page's chrome stops
+   behaving like a web page — no text selection, no pointing hand — while the
+   code and the conversation stay selectable.
+   --------------------------------------------------------------------------- */
+
+/* :root as well, to outrank the variables Mantine declares on :root. */
+:root[data-desktop] {
+  --mantine-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --er-titlebar-bg: var(--mantine-color-gray-0);
+  --er-tab-active-bg: rgba(0, 0, 0, 0.07);
+}
+
+:root[data-desktop][data-mantine-color-scheme="dark"] {
+  --er-titlebar-bg: var(--mantine-color-dark-8);
+  --er-tab-active-bg: rgba(255, 255, 255, 0.09);
+}
+
+[data-desktop] .er-topbar {
+  -webkit-app-region: drag;
+  min-height: 52px;
+  padding: 8px 12px 8px 16px;
+  background: var(--er-titlebar-bg);
+  user-select: none;
+}
+
+[data-desktop="darwin"] .er-topbar {
+  padding-left: 88px;
+}
+
+[data-desktop="darwin"][data-fullscreen] .er-topbar {
+  padding-left: 16px;
+}
+
+/* The window has a name already, in the menu bar and the Dock. */
+[data-desktop] .er-brand {
+  display: none;
+}
+
+[data-desktop] .er-topbar :is(button, a, input, [role="tab"], [role="progressbar"]) {
+  -webkit-app-region: no-drag;
+}
+
+/* A quiet segmented control rather than a filled web pill. */
+[data-desktop] .er-topbar .mantine-Tabs-tab {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+[data-desktop] .er-topbar .mantine-Tabs-tab[data-active] {
+  background: var(--er-tab-active-bg);
+  color: var(--mantine-color-text);
+}
+
+[data-desktop][data-inactive] .er-topbar > * {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+[data-desktop] :is(.er-toolbar, .er-pane-head, .er-item, .er-diff-filehead, button, [role="tab"]) {
+  user-select: none;
+}
+
+[data-desktop] :is(.er-item, .er-diff-filehead, button, [role="tab"], .mantine-Anchor-root:not([href])) {
+  cursor: default;
+}

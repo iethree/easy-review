@@ -30,6 +30,7 @@ import { leadingEmoji } from "../shared/approval.ts";
 import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
 import type { PullRequest, ReviewEvent, ReviewVerdict } from "../shared/types.ts";
 import { EVENT_LABEL, submitReview } from "./api.ts";
+import { useDesktopCommands } from "./desktop.ts";
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { tally } from "./components/FacetSelect.tsx";
 import { FilterBar, type SortKey } from "./components/FilterBar.tsx";
@@ -619,6 +620,24 @@ export function App() {
     toggleHidden,
   ]);
 
+  // The desktop app's menus: the same actions as ",", Shift+R and "?".
+  useDesktopCommands((name) => {
+    switch (name) {
+      case "settings":
+        setShortcutsOpen(false);
+        setSettingsOpen(true);
+        return;
+      case "refresh":
+        if (tab === "reviewed") history.refresh();
+        else void refresh();
+        return;
+      case "help":
+        setSettingsOpen(false);
+        setShortcutsOpen(true);
+        return;
+    }
+  });
+
   /* ---------------------------------------------------------------------- */
 
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
@@ -669,7 +688,7 @@ export function App() {
     <div className="er-shell">
       <header className="er-topbar">
         <Group gap="lg" wrap="nowrap" style={{ minWidth: 0 }}>
-          <Group gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap" className="er-brand">
             <IconGitPullRequest size={22} color="var(--mantine-color-indigo-5)" />
             <Title order={1}>easy&#8288;-&#8288;review</Title>
             {data && (
