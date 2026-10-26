@@ -16,6 +16,16 @@ contextBridge.exposeInMainWorld("easyReviewDesktop", {
     ipcRenderer.on("command", listener);
     return () => ipcRenderer.removeListener("command", listener);
   },
+  /** Post a macOS notification: { id, title, body }. */
+  notify(notice) {
+    ipcRenderer.send("notify", notice);
+  },
+  /** A notification was clicked; gets its id. Returns an unsubscribe function. */
+  onNotificationClick(callback) {
+    const listener = (_event, id) => callback(id);
+    ipcRenderer.on("notification-click", listener);
+    return () => ipcRenderer.removeListener("notification-click", listener);
+  },
 });
 
 // Window state the stylesheet adapts to: the traffic lights vanish in full

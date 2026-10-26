@@ -28,7 +28,7 @@ bun run desktop          # run it from source
 bun run desktop:build    # package it → dist/desktop/easy-review-<version>-<arch>.dmg and .zip
 ```
 
-The app is an Electron window around the same server: it runs the compiled server binary and shows it in a native title bar, with menus, and with links that open in your browser. Opened from Finder, it reads your login shell's PATH, so `gh` and `claude` are found where your terminal finds them.
+The app is an Electron window around the same server: it runs the compiled server binary and shows it in a native title bar, with menus, and with links that open in your browser. When a Claude review finishes while the app is in the background, macOS tells you; click the notification to open the review. Opened from Finder, it reads your login shell's PATH, so `gh` and `claude` are found where your terminal finds them.
 
 A local build is signed ad hoc, which is enough on the Mac that built it. To sign with a Developer ID, set `CSC_NAME` to a keychain identity, or `CSC_LINK` and `CSC_KEY_PASSWORD` to a .p12 certificate.
 

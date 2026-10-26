@@ -34,7 +34,7 @@ import { leadingEmoji } from "../shared/approval.ts";
 import { matchesQuery, parseQuery, readLevel, setLevel, upsertToken } from "../shared/filter.ts";
 import type { PullRequest, ReviewEvent, ReviewVerdict, Settings } from "../shared/types.ts";
 import { EVENT_LABEL, submitReview } from "./api.ts";
-import { useDesktopCommands } from "./desktop.ts";
+import { notifyDesktop, useDesktopCommands, useNotificationClicks } from "./desktop.ts";
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
@@ -310,15 +310,19 @@ export function App() {
   /* ---------------------------------------------------------------------- */
 
   // Read from the notification's Open button, which outlives this render.
-  const openRef = useRef<(job: AiReviewSummary) => void>(() => {});
+  /** Shows a review's pull request on its Claude tab; false if that PR isn't loaded. */
+  const openRef = useRef<(job: AiReviewSummary) => boolean>(() => false);
 
   const ai = useLocalReviews((job) => {
     const ok = job.status === "done";
+    const title = ok
+      ? `${job.reviewerName} finished reviewing #${job.number}`
+      : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`;
+    // In the background, macOS says so too. Not for a review you cancelled.
+    if (job.status !== "cancelled") notifyDesktop({ id: job.id, title, body: job.title });
     notifications.show({
       color: ok ? "teal" : job.status === "failed" ? "red" : "gray",
-      title: ok
-        ? `${job.reviewerName} finished reviewing #${job.number}`
-        : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`,
+      title,
       message: (
         <Text
           size="xs"
@@ -341,6 +345,17 @@ export function App() {
     },
     [select],
   );
+
+  // Clicking a macOS notification opens the review it was about — once the
+  // reviews have loaded, if the click is what reopened the window.
+  const [openOnLoad, setOpenOnLoad] = useState<string | null>(null);
+  useNotificationClicks(setOpenOnLoad);
+  // Tried again as each list arrives: the review can land before its PR.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the lists are what openRef searches
+  useEffect(() => {
+    const job = openOnLoad ? ai.jobs.find((j) => j.id === openOnLoad) : undefined;
+    if (job && openRef.current(job)) setOpenOnLoad(null);
+  }, [openOnLoad, ai.jobs, data, mine.data, history.pullRequests]);
 
   const reviewers = useReviewers(ai.supported);
   const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
@@ -382,7 +397,7 @@ export function App() {
     const inHistory = history.pullRequests.find((pr) => prKey(pr) === key);
     const inMine = mine.pullRequests.find((pr) => prKey(pr) === key);
     const target = inQueue ?? inHidden ?? inMine ?? inHistory;
-    if (!target) return;
+    if (!target) return false;
     const where: Tab = inQueue ? "queue" : inHidden ? "hidden" : inMine ? "mine" : "reviewed";
     setTab(where);
     ({
@@ -395,6 +410,7 @@ export function App() {
     );
     setPreviewTab("claude");
     setExpanded(narrow);
+    return true;
   };
 
   const aiControls = useMemo<AiControls>(
