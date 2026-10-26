@@ -37,7 +37,7 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   App shell: a fixed top bar and toolbar, then two independently scrolling
+   App shell: a fixed top bar, then two independently scrolling
    panes that fill the rest of the viewport.
    --------------------------------------------------------------------------- */
 
@@ -57,18 +57,13 @@ body {
   border-bottom: 1px solid var(--er-row-border);
 }
 
-.er-toolbar {
-  flex: none;
-  padding: 10px 16px 0;
-}
-
 .er-split {
   --er-left-w: clamp(340px, 40%, 720px);
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
-  padding: 0 16px 14px;
+  padding: 10px 16px 14px;
 }
 
 /*
@@ -152,6 +147,11 @@ body {
   flex: none;
   padding: 10px 12px;
   border-bottom: 1px solid var(--er-row-border);
+}
+
+/* The list's search sits in its own pane, so it is no wider than the list. */
+.er-list-filter {
+  padding: 8px;
 }
 
 .er-pane-scroll {
@@ -920,7 +920,7 @@ body {
   transition: opacity 120ms ease;
 }
 
-[data-desktop] :is(.er-toolbar, .er-pane-head, .er-item, .er-diff-filehead, button, [role="tab"]) {
+[data-desktop] :is(.er-pane-head, .er-item, .er-diff-filehead, button, [role="tab"]) {
   user-select: none;
 }
 

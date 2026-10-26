@@ -29,14 +29,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficulty.ts";
 import { prKey, type AiReviewSummary } from "../shared/aiReview.ts";
 import { leadingEmoji } from "../shared/approval.ts";
-import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
+import { matchesQuery, parseQuery, readLevel, setLevel, upsertToken } from "../shared/filter.ts";
 import type { PullRequest, ReviewEvent, ReviewVerdict, Settings } from "../shared/types.ts";
 import { EVENT_LABEL, submitReview } from "./api.ts";
 import { useDesktopCommands } from "./desktop.ts";
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
-import { tally } from "./components/FacetSelect.tsx";
-import { FilterBar, type SortKey } from "./components/FilterBar.tsx";
-import { HistoryFilterBar, type VerdictFilter } from "./components/HistoryFilterBar.tsx";
+import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
 import { ReviewerPicker } from "./components/ReviewerPicker.tsx";
@@ -59,6 +57,7 @@ import { actionForKey, type Pane } from "./keymap.ts";
 import { isReviewed } from "./reviewMeta.ts";
 
 type Tab = "queue" | "reviewed" | "hidden" | "mine";
+type VerdictFilter = ReviewVerdict | "all";
 
 /** The queue's filter and sort, for any list of open pull requests. */
 function filterAndSort(
@@ -160,21 +159,12 @@ export function App() {
     () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, settings, reviewed),
     [mine.pullRequests, mineQuery, sort, settings, reviewed],
   );
-  const mineAuthors = useMemo(() => tally(mine.pullRequests, (pr) => pr.author), [mine.pullRequests]);
-  const mineRepos = useMemo(() => tally(mine.pullRequests, (pr) => pr.repo), [mine.pullRequests]);
   const mineCounts = useMemo(() => {
     const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
     for (const pr of mine.pullRequests) tally[rateDifficulty(pr, settings).level]++;
     return tally;
   }, [mine.pullRequests, settings]);
 
-  // Pickers list everything in the unfiltered queue, busiest first.
-  const authors = useMemo(() => tally(prs, (pr) => pr.author), [prs]);
-  const repos = useMemo(() => tally(prs, (pr) => pr.repo), [prs]);
-  const historyRepos = useMemo(
-    () => tally(history.pullRequests, (pr) => pr.repo),
-    [history.pullRequests],
-  );
 
   const counts = useMemo(() => {
     const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
@@ -734,6 +724,65 @@ export function App() {
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
   const prefetchPct = allPrs.length === 0 ? 0 : (readyCount / allPrs.length) * 100;
 
+  const difficultySegments = (q: string, set: (next: string) => void, total: number, c: Record<Difficulty, number>) => ({
+    value: readLevel(q) ?? "all",
+    onChange: (v: string) => set(setLevel(q, v === "all" ? null : (v as Difficulty))),
+    data: [
+      { label: `All ${total}`, value: "all" },
+      { label: `Easy ${c.easy}`, value: "easy" },
+      { label: `Med ${c.medium}`, value: "medium" },
+      { label: `Hard ${c.hard}`, value: "hard" },
+    ],
+  });
+
+  const listFilter =
+    tab === "hidden" ? (
+      <ListFilter
+        query=""
+        onQueryChange={() => {}}
+        placeholder=""
+        inputRef={searchRef}
+        note="Hidden pull requests stay out of Needs review until you unhide them — ⇧H, or the eye on a row."
+      />
+    ) : tab === "reviewed" ? (
+      <ListFilter
+        query={historyQuery}
+        onQueryChange={setHistoryQuery}
+        placeholder="Search your reviews"
+        inputRef={searchRef}
+        segments={{
+          value: verdict,
+          onChange: (v) => setVerdict(v as VerdictFilter),
+          data: [
+            { label: `All ${history.pullRequests.length}`, value: "all" },
+            { label: `Approved ${verdictCounts.get("APPROVED") ?? 0}`, value: "APPROVED" },
+            { label: `Changes ${verdictCounts.get("CHANGES_REQUESTED") ?? 0}`, value: "CHANGES_REQUESTED" },
+            { label: `Comment ${verdictCounts.get("COMMENTED") ?? 0}`, value: "COMMENTED" },
+          ],
+        }}
+      />
+    ) : tab === "mine" ? (
+      <ListFilter
+        query={mineQuery}
+        onQueryChange={setMineQuery}
+        placeholder="Search your pull requests"
+        inputRef={searchRef}
+        sort={sort}
+        onSortChange={setSort}
+        segments={difficultySegments(mineQuery, setMineQuery, mine.pullRequests.length, mineCounts)}
+      />
+    ) : (
+      <ListFilter
+        query={query}
+        onQueryChange={setQuery}
+        placeholder="Search title, repo, author, number…"
+        inputRef={searchRef}
+        sort={sort}
+        onSortChange={setSort}
+        segments={difficultySegments(query, setQuery, prs.length, counts)}
+      />
+    );
+
   const listPane = tab === "mine" ? (
     <QueueList
       variant="mine"
@@ -925,53 +974,6 @@ export function App() {
 
       {page === "reviewers" && <ReviewersPage store={reviewers} onClose={() => setPage(null)} />}
 
-      {/* Focus mode is about the code, so the list's filters step aside too. */}
-      {!page && !expanded && (
-        <div className="er-toolbar">
-          {tab === "hidden" ? (
-            <Text size="xs" c="dimmed" mb="sm">
-              Hidden pull requests stay out of Needs review until you unhide them — ⇧H, or the
-              eye on a row.
-            </Text>
-          ) : tab === "mine" ? (
-            <FilterBar
-              query={mineQuery}
-              onQueryChange={setMineQuery}
-              sort={sort}
-              onSortChange={setSort}
-              authors={mineAuthors}
-              repos={mineRepos}
-              counts={mineCounts}
-              total={mine.pullRequests.length}
-              inputRef={searchRef}
-            />
-          ) : tab === "queue" ? (
-            <FilterBar
-              query={query}
-              onQueryChange={setQuery}
-              sort={sort}
-              onSortChange={setSort}
-              authors={authors}
-              repos={repos}
-              counts={counts}
-              total={prs.length}
-              inputRef={searchRef}
-            />
-          ) : (
-            <HistoryFilterBar
-              query={historyQuery}
-              onQueryChange={setHistoryQuery}
-              verdict={verdict}
-              onVerdictChange={setVerdict}
-              counts={verdictCounts}
-              repos={historyRepos}
-              loaded={history.pullRequests.length}
-              inputRef={searchRef}
-            />
-          )}
-        </div>
-      )}
-
       {!page && (
         <SplitView
           mode={mode}
@@ -982,6 +984,7 @@ export function App() {
               data-focused={focusedPane === "list"}
               onFocus={() => setFocusedPane("list")}
             >
+              {listFilter}
               <div className="er-pane-scroll" ref={listScrollRef} tabIndex={-1}>
                 {listPane}
               </div>
