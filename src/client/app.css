@@ -174,8 +174,8 @@ body {
 
 .er-item {
   display: grid;
-  /* accent | E/M/H | title and meta | actions */
-  grid-template-columns: 3px 20px minmax(0, 1fr) auto;
+  /* difficulty stripe | title and meta | actions */
+  grid-template-columns: 4px minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 10px;
   padding: 8px 10px 8px 0;
@@ -1179,4 +1179,15 @@ body {
 
 .er-finding-body .er-markdown > :last-child {
   margin-bottom: 0;
+}
+
+/* A difficulty's colour, as a dot: the legend for the stripes on the rows. */
+.er-level-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--er-level);
 }

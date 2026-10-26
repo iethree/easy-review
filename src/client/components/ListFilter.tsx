@@ -20,7 +20,7 @@ interface Props {
   sort?: SortKey;
   onSortChange?: (next: SortKey) => void;
   /** A segmented control under the box: difficulty, or verdict. */
-  segments?: { value: string; data: { label: string; value: string }[]; onChange: (value: string) => void };
+  segments?: { value: string; data: { label: ReactNode; value: string }[]; onChange: (value: string) => void };
   /** Shown in place of the box, for lists with nothing to search. */
   note?: ReactNode;
 }

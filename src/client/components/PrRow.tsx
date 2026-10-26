@@ -1,4 +1,4 @@
-import { ActionIcon, Avatar, Badge, Group, Tooltip } from "@mantine/core";
+import { ActionIcon, Avatar, Badge, Group, Tooltip, VisuallyHidden } from "@mantine/core";
 import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { memo } from "react";
 import type { AiReviewSummary } from "../../shared/aiReview.ts";
@@ -9,7 +9,6 @@ import { relativeTime } from "../time.ts";
 import { AiReviewButton } from "./AiReviewButton.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
-import { DifficultyBadge } from "./DifficultyBadge.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -30,6 +29,8 @@ interface Props {
   /** In the Hidden tab: brings the PR back. */
   onUnhide?: (pr: PullRequest) => void;
 }
+
+const LEVEL_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard" } as const;
 
 const REVIEWED_LABEL: Record<ReviewEvent, string> = {
   APPROVE: "approved",
@@ -65,9 +66,11 @@ export const PrRow = memo(function PrRow({
       aria-selected={selected}
       tabIndex={-1}
     >
-      <div className="er-item-accent" />
-
-      <DifficultyBadge rating={rating} size="sm" compact />
+      {/* Difficulty is the stripe's colour alone; the tooltip and screen readers say it in words. */}
+      <Tooltip label={`${LEVEL_LABEL[rating.level]} review — ${rating.reason}`} position="right" openDelay={400} multiline w={240}>
+        <div className="er-item-accent" />
+      </Tooltip>
+      <VisuallyHidden>{LEVEL_LABEL[rating.level]} review</VisuallyHidden>
 
       <div className="er-item-main">
         <div className="er-item-title">

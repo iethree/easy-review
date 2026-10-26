@@ -59,6 +59,7 @@ import { invalidateConversation } from "./hooks/useConversation.ts";
 import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
 import { isReviewed } from "./reviewMeta.ts";
+import { DIFFICULTY_COLOR } from "./theme.ts";
 
 type Tab = "queue" | "reviewed" | "hidden" | "mine";
 type VerdictFilter = ReviewVerdict | "all";
@@ -752,9 +753,9 @@ export function App() {
     onChange: (v: string) => set(setLevel(q, v === "all" ? null : (v as Difficulty))),
     data: [
       { label: `All ${total}`, value: "all" },
-      { label: `Easy ${c.easy}`, value: "easy" },
-      { label: `Med ${c.medium}`, value: "medium" },
-      { label: `Hard ${c.hard}`, value: "hard" },
+      { label: <LevelLabel level="easy" text={`Easy ${c.easy}`} />, value: "easy" },
+      { label: <LevelLabel level="medium" text={`Med ${c.medium}`} />, value: "medium" },
+      { label: <LevelLabel level="hard" text={`Hard ${c.hard}`} />, value: "hard" },
     ],
   });
 
@@ -1111,5 +1112,15 @@ export function App() {
       />
       <ShortcutsModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
+  );
+}
+
+/** A difficulty in the filter, with the dot that matches its rows' stripe. */
+function LevelLabel({ level, text }: { level: Difficulty; text: string }) {
+  return (
+    <>
+      <span className="er-level-dot" style={{ "--er-level": `var(--mantine-color-${DIFFICULTY_COLOR[level]}-5)` } as React.CSSProperties} />
+      {text}
+    </>
   );
 }
