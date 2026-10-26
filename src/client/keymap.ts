@@ -20,7 +20,7 @@ export type KeyAction =
   | { type: "toggleFocusMode" }
   | { type: "openGitHub" }
   | { type: "toggleHidden" }
-  | { type: "switchList"; tab: "queue" | "reviewed" | "hidden" }
+  | { type: "switchList"; tab: "queue" | "reviewed" | "hidden" | "mine" }
   | { type: "search" }
   | { type: "settings" }
   | { type: "theme" }
@@ -61,6 +61,7 @@ export const KEYMAP: KeyBinding[] = [
   { keys: ["1"], display: ["1"], description: "Needs review", action: { type: "switchList", tab: "queue" } },
   { keys: ["2"], display: ["2"], description: "Reviewed", action: { type: "switchList", tab: "reviewed" } },
   { keys: ["3"], display: ["3"], description: "Hidden", action: { type: "switchList", tab: "hidden" } },
+  { keys: ["4"], display: ["4"], description: "My PRs — yours, and those assigned to you", action: { type: "switchList", tab: "mine" } },
   { keys: ["/"], display: ["/"], description: "Filter the list", action: { type: "search" } },
   { keys: [","], display: [","], description: "Settings", action: { type: "settings" } },
   { keys: ["t"], display: ["t"], description: "Light / dark", action: { type: "theme" } },

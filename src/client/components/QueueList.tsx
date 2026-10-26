@@ -19,8 +19,11 @@ interface Props {
   onFilterAuthor: (login: string) => void;
   onClearFilter: () => void;
   onRetry: () => void;
-  /** "hidden" lists the PRs you tucked away, each with an unhide button. */
-  variant?: "queue" | "hidden";
+  /**
+   * "hidden" lists the PRs you tucked away, each with an unhide button;
+   * "mine" lists your own.
+   */
+  variant?: "queue" | "hidden" | "mine";
   onUnhide?: (pr: PullRequest) => void;
   /** Present only when local Claude reviews are available. */
   ai?: {
@@ -99,10 +102,14 @@ export function QueueList({
       <Center py="xl" px="md">
         <Stack align="center" gap={6}>
           <IconInbox size={38} color="var(--mantine-color-gray-5)" />
-          <Text fw={600}>{total === 0 ? "Inbox zero." : "Nothing matches that filter."}</Text>
+          <Text fw={600}>
+            {total > 0 ? "Nothing matches that filter." : variant === "mine" ? "Nothing open." : "Inbox zero."}
+          </Text>
           <Text size="sm" c="dimmed" ta="center">
             {total === 0
-              ? "No pull requests are waiting on your review."
+              ? variant === "mine"
+                ? "You have no open pull requests, and none are assigned to you."
+                : "No pull requests are waiting on your review."
               : `${total} request${total === 1 ? " is" : "s are"} hidden by the current filter.`}
           </Text>
           {total > 0 && (
@@ -121,7 +128,13 @@ export function QueueList({
     <>
       <div
         role="listbox"
-        aria-label={variant === "hidden" ? "Hidden pull requests" : "Pull requests waiting on your review"}
+        aria-label={
+          variant === "hidden"
+            ? "Hidden pull requests"
+            : variant === "mine"
+              ? "Your pull requests"
+              : "Pull requests waiting on your review"
+        }
       >
         {rows.map((pr) => (
           <PrRow

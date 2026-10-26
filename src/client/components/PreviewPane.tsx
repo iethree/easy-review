@@ -216,6 +216,7 @@ function Header({
   onTabChange,
   hideState,
   job,
+  viewer,
 }: Props & { pr: PullRequest; job: AiReviewSummary | undefined }) {
   const history = isReviewed(pr) ? pr : null;
   const verdict = history ? VERDICT[history.verdict] : null;
@@ -272,6 +273,7 @@ function Header({
               onChangesOpenChange={onChangesOpenChange}
               approveOpen={approveOpen}
               onApproveOpenChange={onApproveOpenChange}
+              ownPr={viewer !== null && pr.author.toLowerCase() === viewer.toLowerCase()}
             />
           )}
           {ai.available && (

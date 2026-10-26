@@ -22,6 +22,7 @@ import {
   IconRefresh,
   IconSettings,
   IconSun,
+  IconUser,
   IconUsers,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -29,7 +30,7 @@ import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficult
 import { prKey, type AiReviewSummary } from "../shared/aiReview.ts";
 import { leadingEmoji } from "../shared/approval.ts";
 import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
-import type { PullRequest, ReviewEvent, ReviewVerdict } from "../shared/types.ts";
+import type { PullRequest, ReviewEvent, ReviewVerdict, Settings } from "../shared/types.ts";
 import { EVENT_LABEL, submitReview } from "./api.ts";
 import { useDesktopCommands } from "./desktop.ts";
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
@@ -47,6 +48,7 @@ import { SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestNow, useReadyCount } from "./hooks/diffStore.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
 import { useReviewed } from "./hooks/useReviewed.ts";
+import { useMine } from "./hooks/useMine.ts";
 import { useReviewers } from "./hooks/useReviewers.ts";
 import { useReviews } from "./hooks/useReviews.ts";
 import { useSettings } from "./hooks/useSettings.ts";
@@ -56,7 +58,37 @@ import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
 import { isReviewed } from "./reviewMeta.ts";
 
-type Tab = "queue" | "reviewed" | "hidden";
+type Tab = "queue" | "reviewed" | "hidden" | "mine";
+
+/** The queue's filter and sort, for any list of open pull requests. */
+function filterAndSort(
+  prs: PullRequest[],
+  parsed: ReturnType<typeof parseQuery>,
+  sort: SortKey,
+  settings: Settings,
+  reviewed: Record<string, ReviewEvent>,
+): PullRequest[] {
+  const filtered = prs.filter((pr) =>
+    matchesQuery(
+      {
+        title: pr.title,
+        repo: pr.repo,
+        author: pr.author,
+        number: pr.number,
+        isDraft: pr.isDraft,
+        ciFailed: pr.ci.failed,
+        level: rateDifficulty(pr, settings).level,
+        reviewedByMe: reviewed[pr.id] === "APPROVE",
+      },
+      parsed,
+    ),
+  );
+  const sorted = [...filtered];
+  if (sort === "quickest") sorted.sort((a, b) => reviewCost(a) - reviewCost(b));
+  else if (sort === "newest") sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  else sorted.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  return sorted;
+}
 
 export function App() {
   const [tab, setTab] = useState<Tab>("queue");
@@ -64,12 +96,14 @@ export function App() {
   const { data, loading, error, refresh } = useReviews(settings);
   // The history hook only fetches once its tab has been opened.
   const history = useReviewed(tab === "reviewed");
+  const mine = useMine(tab === "mine");
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const readyCount = useReadyCount();
   const narrow = useMediaQuery("(max-width: 900px)");
   const { hidden, setHiddenFor } = useHidden();
 
   const [query, setQuery] = useState("");
+  const [mineQuery, setMineQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("quickest");
   const [historyQuery, setHistoryQuery] = useState("");
   const [verdict, setVerdict] = useState<VerdictFilter>("all");
@@ -79,6 +113,7 @@ export function App() {
   const [queueSelected, setQueueSelected] = useState<string | null>(null);
   const [historySelected, setHistorySelected] = useState<string | null>(null);
   const [hiddenSelected, setHiddenSelected] = useState<string | null>(null);
+  const [mineSelected, setMineSelected] = useState<string | null>(null);
 
   /** Focus mode: the list is hidden and the preview takes the full width. */
   const [expanded, setExpanded] = useState(false);
@@ -117,29 +152,21 @@ export function App() {
   );
   const parsed = useMemo(() => parseQuery(query), [query]);
 
-  const visible = useMemo(() => {
-    const filtered = prs.filter((pr) =>
-      matchesQuery(
-        {
-          title: pr.title,
-          repo: pr.repo,
-          author: pr.author,
-          number: pr.number,
-          isDraft: pr.isDraft,
-          ciFailed: pr.ci.failed,
-          level: rateDifficulty(pr, settings).level,
-          reviewedByMe: reviewed[pr.id] === "APPROVE",
-        },
-        parsed,
-      ),
-    );
-
-    const sorted = [...filtered];
-    if (sort === "quickest") sorted.sort((a, b) => reviewCost(a) - reviewCost(b));
-    else if (sort === "newest") sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    else sorted.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
-    return sorted;
-  }, [prs, parsed, sort, settings, reviewed]);
+  const visible = useMemo(
+    () => filterAndSort(prs, parsed, sort, settings, reviewed),
+    [prs, parsed, sort, settings, reviewed],
+  );
+  const visibleMine = useMemo(
+    () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, settings, reviewed),
+    [mine.pullRequests, mineQuery, sort, settings, reviewed],
+  );
+  const mineAuthors = useMemo(() => tally(mine.pullRequests, (pr) => pr.author), [mine.pullRequests]);
+  const mineRepos = useMemo(() => tally(mine.pullRequests, (pr) => pr.repo), [mine.pullRequests]);
+  const mineCounts = useMemo(() => {
+    const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
+    for (const pr of mine.pullRequests) tally[rateDifficulty(pr, settings).level]++;
+    return tally;
+  }, [mine.pullRequests, settings]);
 
   // Pickers list everything in the unfiltered queue, busiest first.
   const authors = useMemo(() => tally(prs, (pr) => pr.author), [prs]);
@@ -186,13 +213,26 @@ export function App() {
   /* ---------------------------------------------------------------------- */
 
   const list: PullRequest[] =
-    tab === "queue" ? visible : tab === "hidden" ? hiddenPrs : visibleHistory;
-  const selectedId = { queue: queueSelected, reviewed: historySelected, hidden: hiddenSelected }[tab];
+    tab === "queue" ? visible : tab === "hidden" ? hiddenPrs : tab === "mine" ? visibleMine : visibleHistory;
+  const selectedId = {
+    queue: queueSelected,
+    reviewed: historySelected,
+    hidden: hiddenSelected,
+    mine: mineSelected,
+  }[tab];
   const setSelectedId = {
     queue: setQueueSelected,
     reviewed: setHistorySelected,
     hidden: setHiddenSelected,
+    mine: setMineSelected,
   }[tab];
+
+  // Who you are: either list says. Your own pull requests can't be approved.
+  const viewer = data?.viewer ?? mine.data?.viewer ?? null;
+  const isOwn = useCallback(
+    (pr: PullRequest) => viewer !== null && pr.author.toLowerCase() === viewer.toLowerCase(),
+    [viewer],
+  );
 
   // Fall back to the top of the list when nothing is selected yet, or when the
   // selection has been filtered out — clearing the filter brings it back.
@@ -348,11 +388,17 @@ export function App() {
     const inQueue = prs.find((pr) => prKey(pr) === key);
     const inHidden = hiddenPrs.find((pr) => prKey(pr) === key);
     const inHistory = history.pullRequests.find((pr) => prKey(pr) === key);
-    const target = inQueue ?? inHidden ?? inHistory;
+    const inMine = mine.pullRequests.find((pr) => prKey(pr) === key);
+    const target = inQueue ?? inHidden ?? inMine ?? inHistory;
     if (!target) return;
-    const where: Tab = inQueue ? "queue" : inHidden ? "hidden" : "reviewed";
+    const where: Tab = inQueue ? "queue" : inHidden ? "hidden" : inMine ? "mine" : "reviewed";
     setTab(where);
-    ({ queue: setQueueSelected, reviewed: setHistorySelected, hidden: setHiddenSelected })[where](
+    ({
+      queue: setQueueSelected,
+      reviewed: setHistorySelected,
+      hidden: setHiddenSelected,
+      mine: setMineSelected,
+    })[where](
       target.id,
     );
     setPreviewTab("claude");
@@ -424,6 +470,7 @@ export function App() {
     (login: string) => {
       const apply = (q: string) => upsertToken(q, "author", login.toLowerCase());
       if (tab === "reviewed") setHistoryQuery(apply);
+      else if (tab === "mine") setMineQuery(apply);
       else {
         setQuery(apply);
         // Hidden has no filter bar; show that author's pull requests in the queue.
@@ -432,6 +479,13 @@ export function App() {
     },
     [tab],
   );
+
+  /** Refresh whatever list is showing. Hidden pull requests come from the queue. */
+  const refreshTab = useCallback(() => {
+    if (tab === "reviewed") history.refresh();
+    else if (tab === "mine") void mine.refresh();
+    else void refresh();
+  }, [tab, history.refresh, mine.refresh, refresh]);
 
   /* ---------------------------------------------------------------------- */
   /* Review submission — shared by the buttons and the keyboard shortcuts    */
@@ -577,7 +631,7 @@ export function App() {
         case "approve":
           // Step one only: this opens the confirmation. Confirming is a
           // second, separate Enter (or click) in the box it opens.
-          if (selected && canReviewSelected && !reviewed[selected.id]) askApprove(selected);
+          if (selected && canReviewSelected && !reviewed[selected.id] && !isOwn(selected)) askApprove(selected);
           return;
         case "requestChanges":
           if (selected && canReviewSelected && !reviewed[selected.id]) {
@@ -616,13 +670,11 @@ export function App() {
           toggleColorScheme();
           return;
         case "refresh":
-          // Hidden pull requests come from the queue, so that's what refreshes them.
-          if (tab === "reviewed") history.refresh();
-          else void refresh();
+          refreshTab();
           return;
         case "toggleHidden":
           // Only the queue and Hidden hold hideable pull requests.
-          if (selected && tab !== "reviewed") toggleHidden(selected);
+          if (selected && (tab === "queue" || tab === "hidden")) toggleHidden(selected);
           return;
         case "help":
           setShortcutsOpen(true);
@@ -647,8 +699,8 @@ export function App() {
     page,
     pickFor,
     reviewed,
-    history,
-    refresh,
+    refreshTab,
+    isOwn,
     toggleColorScheme,
     ai.available,
     ai.byPr,
@@ -665,8 +717,7 @@ export function App() {
         setSettingsOpen(true);
         return;
       case "refresh":
-        if (tab === "reviewed") history.refresh();
-        else void refresh();
+        refreshTab();
         return;
       case "help":
         setSettingsOpen(false);
@@ -683,7 +734,25 @@ export function App() {
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
   const prefetchPct = allPrs.length === 0 ? 0 : (readyCount / allPrs.length) * 100;
 
-  const listPane = tab !== "reviewed" ? (
+  const listPane = tab === "mine" ? (
+    <QueueList
+      variant="mine"
+      rows={visibleMine}
+      total={mine.pullRequests.length}
+      loaded={mine.data !== null}
+      loading={mine.loading}
+      error={mine.error}
+      fetchedAt={mine.data?.fetchedAt ?? null}
+      settings={settings}
+      selectedId={selectedKey}
+      reviewed={reviewed}
+      onSelect={select}
+      onFilterAuthor={filterByAuthor}
+      onClearFilter={() => setMineQuery("")}
+      onRetry={() => void mine.refresh()}
+      ai={queueAi}
+    />
+  ) : tab !== "reviewed" ? (
     <QueueList
       variant={tab === "hidden" ? "hidden" : "queue"}
       rows={tab === "hidden" ? hiddenPrs : visible}
@@ -754,6 +823,16 @@ export function App() {
                   </Badge>
                 </Group>
               </Tabs.Tab>
+              <Tabs.Tab value="mine" leftSection={<IconUser size={14} />}>
+                <Group gap={6} wrap="nowrap">
+                  My PRs
+                  {mine.data && mine.pullRequests.length > 0 && (
+                    <Badge size="xs" variant="light" color="gray">
+                      {mine.pullRequests.length}
+                    </Badge>
+                  )}
+                </Group>
+              </Tabs.Tab>
               <Tabs.Tab value="reviewed" leftSection={<IconHistory size={14} />}>
                 <Group gap={6} wrap="nowrap">
                   Reviewed
@@ -793,7 +872,7 @@ export function App() {
             <ActionIcon
               variant="subtle"
               color="gray"
-              onClick={() => (tab === "reviewed" ? history.refresh() : void refresh())}
+              onClick={refreshTab}
               aria-label="Refresh"
             >
               <IconRefresh size={17} />
@@ -854,6 +933,18 @@ export function App() {
               Hidden pull requests stay out of Needs review until you unhide them — ⇧H, or the
               eye on a row.
             </Text>
+          ) : tab === "mine" ? (
+            <FilterBar
+              query={mineQuery}
+              onQueryChange={setMineQuery}
+              sort={sort}
+              onSortChange={setSort}
+              authors={mineAuthors}
+              repos={mineRepos}
+              counts={mineCounts}
+              total={mine.pullRequests.length}
+              inputRef={searchRef}
+            />
           ) : tab === "queue" ? (
             <FilterBar
               query={query}
@@ -915,9 +1006,9 @@ export function App() {
               ai={aiControls}
               tab={previewTab}
               onTabChange={setPreviewTab}
-              viewer={data?.viewer ?? null}
+              viewer={viewer}
               hideState={
-                selected && tab !== "reviewed"
+                selected && (tab === "queue" || tab === "hidden")
                   ? { hidden: isHidden(hidden, selected), toggle: () => toggleHidden(selected) }
                   : undefined
               }

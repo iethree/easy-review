@@ -124,6 +124,33 @@ const REVIEWS_QUERY = /* GraphQL */ `
 `;
 
 /**
+ * Your own open pull requests: the ones you wrote, and the ones assigned to
+ * you. GitHub search has no OR across qualifiers, so it's two searches in one
+ * request.
+ */
+const MINE_QUERY = /* GraphQL */ `
+  ${PR_CORE}
+  ${PR_CHECKS}
+  query Mine($authored: String!, $assigned: String!, $first: Int!) {
+    viewer {
+      login
+    }
+    authored: search(query: $authored, type: ISSUE, first: $first) {
+      nodes {
+        ...PrCore
+        ...PrChecks
+      }
+    }
+    assigned: search(query: $assigned, type: ISSUE, first: $first) {
+      nodes {
+        ...PrCore
+        ...PrChecks
+      }
+    }
+  }
+`;
+
+/**
  * Pull requests you have already reviewed, newest activity first.
  *
  * `viewerLatestReview` avoids having to look up your own login first, so this
@@ -390,6 +417,22 @@ export class GitHubClient {
     return {
       viewer: data.viewer.login,
       pullRequests,
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Your open pull requests — written by you or assigned to you — newest activity first. */
+  async listMine(limit: number): Promise<ReviewsResponse> {
+    const [authored, assigned] = mineSearchQueries();
+    const data = await this.graphql<{
+      viewer: { login: string };
+      authored: { nodes: (RawPullRequest | null)[] };
+      assigned: { nodes: (RawPullRequest | null)[] };
+    }>(MINE_QUERY, { authored, assigned, first: Math.min(Math.max(limit, 1), 100) });
+
+    return {
+      viewer: data.viewer.login,
+      pullRequests: mergeById([...data.authored.nodes, ...data.assigned.nodes].map(normalizePullRequest)),
       fetchedAt: new Date().toISOString(),
     };
   }
@@ -754,4 +797,17 @@ function normalizeReviewed(node: RawReviewedPullRequest | null): ReviewedPullReq
     reviewedAt: review.submittedAt,
     reviewUrl: review.url ?? base.url,
   };
+}
+
+/** The two searches behind "My PRs": written by you, and assigned to you. */
+export function mineSearchQueries(): [authored: string, assigned: string] {
+  const base = "is:open is:pr archived:false";
+  return [`${base} author:@me`, `${base} assignee:@me`];
+}
+
+/** One of each pull request (yours and assigned to you counts once), newest activity first. */
+export function mergeById(prs: (PullRequest | null)[]): PullRequest[] {
+  const byId = new Map<string, PullRequest>();
+  for (const pr of prs) if (pr && !byId.has(pr.id)) byId.set(pr.id, pr);
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
