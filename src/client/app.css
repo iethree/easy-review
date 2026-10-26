@@ -961,3 +961,165 @@ body {
 .er-reviewers-editor {
   overflow-y: auto;
 }
+
+/* ---------------------------------------------------------------------------
+   Loading (components/Loading.tsx). Small waits get three commits taking
+   turns to hop; a whole pane gets the icon's mark drawing itself. With
+   reduced motion, both just breathe.
+   --------------------------------------------------------------------------- */
+
+.er-commits {
+  display: inline-flex;
+  align-items: center;
+  width: var(--loader-size);
+  height: var(--loader-size);
+  color: var(--loader-color);
+}
+
+.er-commits-dot {
+  flex: none;
+  width: calc(var(--loader-size) / 4.2);
+  height: calc(var(--loader-size) / 4.2);
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+  animation: er-commit-hop 1.1s ease-in-out infinite;
+}
+
+.er-commits-dot:nth-of-type(2) {
+  animation-delay: 0.14s;
+}
+
+.er-commits-dot:nth-of-type(3) {
+  animation-delay: 0.28s;
+}
+
+.er-commits-line {
+  flex: 1;
+  height: max(1px, calc(var(--loader-size) / 14));
+  background: currentColor;
+  opacity: 0.3;
+}
+
+@keyframes er-commit-hop {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.45;
+  }
+  25% {
+    transform: translateY(-38%) scale(1.3);
+    opacity: 1;
+  }
+}
+
+.er-mark-check {
+  stroke-dasharray: 100;
+  animation: er-mark-draw 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.er-mark-ring {
+  /* Hollow to the page, so the check's ends tuck under the commits, as in the icon. */
+  fill: var(--mantine-color-body);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: er-mark-pop 2.4s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.er-mark-ring-b {
+  animation-name: er-mark-pop-late;
+}
+
+@keyframes er-mark-draw {
+  0%,
+  12% {
+    stroke-dashoffset: 100;
+    opacity: 1;
+  }
+  55%,
+  82% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes er-mark-pop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  14%,
+  82% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes er-mark-pop-late {
+  0%,
+  50% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  64%,
+  82% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.er-loading-message {
+  animation: er-message-in 320ms ease-out;
+}
+
+@keyframes er-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* The refresh arrow turns while a refresh is under way. */
+.er-spin {
+  animation: er-spin 0.9s linear infinite;
+}
+
+@keyframes er-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .er-commits-dot,
+  .er-mark-check,
+  .er-mark-ring,
+  .er-spin {
+    animation: er-breathe 1.6s ease-in-out infinite;
+    stroke-dashoffset: 0;
+    transform: none;
+  }
+
+  .er-loading-message {
+    animation: none;
+  }
+}
+
+@keyframes er-breathe {
+  50% {
+    opacity: 0.4;
+  }
+}

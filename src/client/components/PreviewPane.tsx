@@ -6,7 +6,6 @@ import {
   Center,
   Group,
   Kbd,
-  Loader,
   Stack,
   Tabs,
   Text,
@@ -33,6 +32,7 @@ import { isReviewed, PR_STATE, VERDICT } from "../reviewMeta.ts";
 import { relativeTime } from "../time.ts";
 import { AiReviewButton } from "./AiReviewButton.tsx";
 import { ClaudeReviews, StatusIcon } from "./ClaudeReviews.tsx";
+import { DIFF_MESSAGES, LoadingScene } from "./Loading.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import type { DiffThreadItem } from "./DiffThread.tsx";
 import { DiffView } from "./DiffView.tsx";
@@ -396,18 +396,7 @@ function Body({ pr }: { pr: PullRequest }) {
     [conversation],
   );
 
-  if (!entry || entry.status === "loading") {
-    return (
-      <Center h={260}>
-        <Stack align="center" gap="xs">
-          <Loader size="sm" />
-          <Text size="xs" c="dimmed">
-            Fetching diff…
-          </Text>
-        </Stack>
-      </Center>
-    );
-  }
+  if (!entry || entry.status === "loading") return <LoadingScene messages={DIFF_MESSAGES} />;
 
   if (entry.status === "error") {
     return (

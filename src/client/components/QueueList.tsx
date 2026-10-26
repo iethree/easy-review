@@ -1,8 +1,9 @@
-import { Alert, Button, Center, Group, Loader, Stack, Text } from "@mantine/core";
+import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
 import { IconAlertCircle, IconEyeOff, IconInbox } from "@tabler/icons-react";
 import { prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { PrRow } from "./PrRow.tsx";
+import { LoadingScene, MINE_MESSAGES, QUEUE_MESSAGES } from "./Loading.tsx";
 
 interface Props {
   rows: PullRequest[];
@@ -70,16 +71,7 @@ export function QueueList({
   }
 
   if (loading && !loaded) {
-    return (
-      <Center py="xl">
-        <Stack align="center" gap="xs">
-          <Loader />
-          <Text size="sm" c="dimmed">
-            Asking GitHub what needs your eyes…
-          </Text>
-        </Stack>
-      </Center>
-    );
+    return <LoadingScene messages={variant === "mine" ? MINE_MESSAGES : QUEUE_MESSAGES} />;
   }
 
   if (rows.length === 0 && variant === "hidden") {

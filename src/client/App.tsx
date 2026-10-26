@@ -924,7 +924,12 @@ export function App() {
               onClick={refreshTab}
               aria-label="Refresh"
             >
-              <IconRefresh size={17} />
+              <IconRefresh
+                size={17}
+                className={
+                  (tab === "reviewed" ? history.loading : tab === "mine" ? mine.loading : loading) ? "er-spin" : undefined
+                }
+              />
             </ActionIcon>
           </Tooltip>
           {ai.supported && (

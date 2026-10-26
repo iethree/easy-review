@@ -1,4 +1,5 @@
-import { createTheme, rem } from "@mantine/core";
+import { createTheme, Loader, rem } from "@mantine/core";
+import { CommitsLoader } from "./components/Loading.tsx";
 
 /**
  * A dense, console-like theme: tighter radii and smaller default text than
@@ -20,6 +21,10 @@ export const theme = createTheme({
     },
   },
   components: {
+    // Every <Loader> is the app's own: commits taking turns to hop.
+    Loader: Loader.extend({
+      defaultProps: { loaders: { ...Loader.defaultLoaders, commits: CommitsLoader }, type: "commits" },
+    }),
     Badge: { defaultProps: { radius: "sm" } },
     Button: { defaultProps: { radius: "md" } },
     Tooltip: {

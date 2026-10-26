@@ -1,7 +1,8 @@
-import { Alert, Button, Center, Group, Loader, Stack, Text } from "@mantine/core";
+import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
 import { IconAlertCircle, IconHistory } from "@tabler/icons-react";
 import type { ReviewedPullRequest } from "../../shared/types.ts";
 import { ReviewedRow } from "./ReviewedRow.tsx";
+import { HISTORY_MESSAGES, LoadingScene } from "./Loading.tsx";
 
 interface Props {
   rows: ReviewedPullRequest[];
@@ -53,18 +54,7 @@ export function ReviewedList({
     );
   }
 
-  if (loading && fetched === 0) {
-    return (
-      <Center py="xl">
-        <Stack align="center" gap="xs">
-          <Loader />
-          <Text size="sm" c="dimmed">
-            Looking up what you have reviewed…
-          </Text>
-        </Stack>
-      </Center>
-    );
-  }
+  if (loading && fetched === 0) return <LoadingScene messages={HISTORY_MESSAGES} />;
 
   if (rows.length === 0) {
     return (
