@@ -16,11 +16,10 @@ interface Props {
   selectedId: string | null;
   reviewed: Record<string, ReviewEvent>;
   onSelect: (pr: PullRequest) => void;
-  onAskApprove: (pr: PullRequest) => void;
   onFilterAuthor: (login: string) => void;
   onClearFilter: () => void;
   onRetry: () => void;
-  /** "hidden" lists the PRs you tucked away, with unhide in place of approve. */
+  /** "hidden" lists the PRs you tucked away, each with an unhide button. */
   variant?: "queue" | "hidden";
   onUnhide?: (pr: PullRequest) => void;
   /** Present only when local Claude reviews are available. */
@@ -42,7 +41,6 @@ export function QueueList({
   selectedId,
   reviewed,
   onSelect,
-  onAskApprove,
   onFilterAuthor,
   onClearFilter,
   onRetry,
@@ -133,7 +131,6 @@ export function QueueList({
             selected={pr.id === selectedId}
             reviewed={reviewed[pr.id]}
             onSelect={onSelect}
-            onAskApprove={onAskApprove}
             onFilterAuthor={onFilterAuthor}
             showRepo={showRepo}
             aiJob={ai?.byPr.get(prKey(pr))}

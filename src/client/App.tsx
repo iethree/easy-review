@@ -696,7 +696,6 @@ export function App() {
       selectedId={selectedKey}
       reviewed={reviewed}
       onSelect={select}
-      onAskApprove={askApprove}
       onFilterAuthor={filterByAuthor}
       onClearFilter={() => setQuery("")}
       onRetry={() => void refresh()}

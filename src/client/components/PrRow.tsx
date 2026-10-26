@@ -1,5 +1,5 @@
 import { ActionIcon, Avatar, Badge, Group, Tooltip } from "@mantine/core";
-import { IconCheck, IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
+import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { memo } from "react";
 import type { AiReviewSummary } from "../../shared/aiReview.ts";
 import { rateDifficulty } from "../../shared/difficulty.ts";
@@ -17,8 +17,6 @@ interface Props {
   selected: boolean;
   reviewed: ReviewEvent | undefined;
   onSelect: (pr: PullRequest) => void;
-  /** Step one of approving: opens the confirmation in the preview. */
-  onAskApprove: (pr: PullRequest) => void;
   /** Clicking the author narrows the queue to just their pull requests. */
   onFilterAuthor: (login: string) => void;
   /** False when every row shares a repo, so it isn't repeated on each one. */
@@ -29,7 +27,7 @@ interface Props {
   aiJob?: AiReviewSummary;
   onAiStart?: (pr: PullRequest) => void;
   onAiOpen?: (pr: PullRequest) => void;
-  /** In the Hidden tab: brings the PR back, in place of approve. */
+  /** In the Hidden tab: brings the PR back. */
   onUnhide?: (pr: PullRequest) => void;
 }
 
@@ -45,7 +43,6 @@ export const PrRow = memo(function PrRow({
   selected,
   reviewed,
   onSelect,
-  onAskApprove,
   onFilterAuthor,
   showRepo,
   aiJob,
@@ -140,7 +137,8 @@ export const PrRow = memo(function PrRow({
             onOpen={() => onAiOpen(pr)}
           />
         )}
-        {onUnhide ? (
+        {/* No approve button here: approving is done from the preview, with the pull request in view. */}
+        {onUnhide && (
           <Tooltip label="Unhide (⇧H)">
             <ActionIcon
               variant="light"
@@ -153,25 +151,6 @@ export const PrRow = memo(function PrRow({
               aria-label={`Unhide ${pr.repo}#${pr.number}`}
             >
               <IconEye size={15} />
-            </ActionIcon>
-          </Tooltip>
-        ) : (
-          <Tooltip
-            label={reviewed ? "Already reviewed — refresh to update the queue" : "Approve… (Enter)"}
-          >
-            <ActionIcon
-              variant="light"
-              color="teal"
-              size="md"
-              disabled={reviewed !== undefined}
-              onClick={(e) => {
-                // Opens the confirmation; it never approves on its own.
-                e.stopPropagation();
-                onAskApprove(pr);
-              }}
-              aria-label={`Approve ${pr.repo}#${pr.number} (asks to confirm)`}
-            >
-              <IconCheck size={15} stroke={2.6} />
             </ActionIcon>
           </Tooltip>
         )}
