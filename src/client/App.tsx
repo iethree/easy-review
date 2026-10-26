@@ -18,6 +18,8 @@ import {
   IconHistory,
   IconInbox,
   IconKeyboard,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
   IconMoon,
   IconRefresh,
   IconSettings,
@@ -845,6 +847,20 @@ export function App() {
     <div className="er-shell">
       <header className="er-topbar">
         <Group gap="lg" wrap="nowrap" style={{ minWidth: 0 }}>
+          {/* The list, like a sidebar: the same as `o`, and the same focus mode. */}
+          <Tooltip label={expanded ? "Show the list (o)" : "Hide the list (o)"}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setExpanded((x) => !x)}
+              disabled={!selected && !expanded}
+              aria-label={expanded ? "Show the list" : "Hide the list"}
+              aria-pressed={!expanded}
+              style={page ? { visibility: "hidden" } : undefined}
+            >
+              {expanded ? <IconLayoutSidebarLeftExpand size={18} /> : <IconLayoutSidebarLeftCollapse size={18} />}
+            </ActionIcon>
+          </Tooltip>
           <Group gap="xs" wrap="nowrap" className="er-brand">
             <IconGitPullRequest size={22} color="var(--mantine-color-indigo-5)" />
             <Title order={1}>easy&#8288;-&#8288;review</Title>
