@@ -252,12 +252,16 @@ export async function prepareWorktree(
     git(["log", ...noDrivers, "--format=%h %an: %s", `${refs.base}..HEAD`], { cwd: path }),
   ]);
 
+  // Where the branch left its base: the "before" of everything in the diff.
+  const baseCommit = (await git(["merge-base", refs.base, "HEAD"], { cwd: path })).trim();
+
   const context = join(path, ".easy-review");
   await mkdir(context, { recursive: true });
   await Promise.all([
     Bun.write(join(context, "pr.diff"), diff),
     Bun.write(join(context, "commits.txt"), commits),
     Bun.write(join(context, "pr.md"), pr.description),
+    Bun.write(join(context, "base-commit"), `${baseCommit}\n`),
   ]);
 
   return { path, headSha };

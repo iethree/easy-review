@@ -30,6 +30,7 @@ import { useReviewDetail } from "../hooks/useLocalReviews.ts";
 import { relativeTime } from "../time.ts";
 import { splitReview } from "../../shared/findings.ts";
 import { Findings } from "./Findings.tsx";
+import { ReviewScreenshots } from "./Markdown.tsx";
 import { ProseReview } from "./ProseReview.tsx";
 
 interface Props {
@@ -99,177 +100,180 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
   const activity = detail?.activity ?? [];
 
   return (
-    <Stack gap="sm">
-      <Group justify="space-between" wrap="nowrap" align="center">
-        <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-          <Badge
-            color={status.color}
-            variant="light"
-            leftSection={running ? <Loader size={10} color={status.color} /> : null}
-            style={{ flex: "none" }}
-          >
-            {status.label}
-          </Badge>
-          <Text size="sm" c="dimmed" truncate>
-            {running ? job.phase : job.finishedAt ? `finished ${relativeTime(job.finishedAt)}` : ""}
-          </Text>
-          <Text size="xs" c="dimmed" ff="monospace" style={{ flex: "none" }}>
-            {duration(job.startedAt ?? job.createdAt, running ? null : job.finishedAt)}
-          </Text>
-        </Group>
-
-        <Group gap={6} wrap="nowrap">
-          {running ? (
-            <Button
-              size="compact-sm"
+    // Its screenshots, for the Markdown in it to show.
+    <ReviewScreenshots.Provider value={job.id}>
+      <Stack gap="sm">
+        <Group justify="space-between" wrap="nowrap" align="center">
+          <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+            <Badge
+              color={status.color}
               variant="light"
-              color="red"
-              leftSection={<IconPlayerStop size={14} />}
-              onClick={() => onCancel(job.id)}
+              leftSection={running ? <Loader size={10} color={status.color} /> : null}
+              style={{ flex: "none" }}
             >
-              Cancel
-            </Button>
-          ) : (
-            <Button
-              size="compact-sm"
-              variant="light"
-              leftSection={<IconRefresh size={14} />}
-              onClick={onStart}
-            >
-              Re-run
-            </Button>
-          )}
+              {status.label}
+            </Badge>
+            <Text size="sm" c="dimmed" truncate>
+              {running ? job.phase : job.finishedAt ? `finished ${relativeTime(job.finishedAt)}` : ""}
+            </Text>
+            <Text size="xs" c="dimmed" ff="monospace" style={{ flex: "none" }}>
+              {duration(job.startedAt ?? job.createdAt, running ? null : job.finishedAt)}
+            </Text>
+          </Group>
 
-          {detail?.review && (
-            <CopyButton value={detail.review}>
-              {({ copied, copy }) => (
-                <Tooltip label={copied ? "Copied" : "Copy the review as Markdown"}>
-                  <ActionIcon variant="subtle" color={copied ? "teal" : "gray"} onClick={copy} aria-label="Copy review">
-                    {copied ? <IconCheck size={15} /> : <IconCopy size={15} />}
-                  </ActionIcon>
-                </Tooltip>
-              )}
-            </CopyButton>
-          )}
-
-          {detail?.resumeCommand && <ResumeButton command={detail.resumeCommand} />}
-
-          {!running && (
-            <Tooltip label="Delete this review and its worktree">
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                onClick={() => onRemove(job.id)}
-                aria-label="Delete review"
+          <Group gap={6} wrap="nowrap">
+            {running ? (
+              <Button
+                size="compact-sm"
+                variant="light"
+                color="red"
+                leftSection={<IconPlayerStop size={14} />}
+                onClick={() => onCancel(job.id)}
               >
-                <IconTrash size={15} />
-              </ActionIcon>
-            </Tooltip>
-          )}
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                size="compact-sm"
+                variant="light"
+                leftSection={<IconRefresh size={14} />}
+                onClick={onStart}
+              >
+                Re-run
+              </Button>
+            )}
+
+            {detail?.review && (
+              <CopyButton value={detail.review}>
+                {({ copied, copy }) => (
+                  <Tooltip label={copied ? "Copied" : "Copy the review as Markdown"}>
+                    <ActionIcon variant="subtle" color={copied ? "teal" : "gray"} onClick={copy} aria-label="Copy review">
+                      {copied ? <IconCheck size={15} /> : <IconCopy size={15} />}
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+              </CopyButton>
+            )}
+
+            {detail?.resumeCommand && <ResumeButton command={detail.resumeCommand} />}
+
+            {!running && (
+              <Tooltip label="Delete this review and its worktree">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => onRemove(job.id)}
+                  aria-label="Delete review"
+                >
+                  <IconTrash size={15} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </Group>
         </Group>
-      </Group>
 
-      {stale && (
-        <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />} p="xs">
-          <Text size="xs">
-            This review is of {job.headSha.slice(0, 7)}; the pull request is now at{" "}
-            {pr.headSha.slice(0, 7)}. Re-run to review the new commits.
-          </Text>
-        </Alert>
-      )}
+        {stale && (
+          <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />} p="xs">
+            <Text size="xs">
+              This review is of {job.headSha.slice(0, 7)}; the pull request is now at{" "}
+              {pr.headSha.slice(0, 7)}. Re-run to review the new commits.
+            </Text>
+          </Alert>
+        )}
 
-      {job.status === "failed" && (
-        <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />} title="The review failed">
-          <Text size="sm">{job.error}</Text>
-          {detail?.stderrTail && (
-            <Code block mt="xs" fz={11}>
-              {detail.stderrTail}
-            </Code>
-          )}
-        </Alert>
-      )}
+        {job.status === "failed" && (
+          <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />} title="The review failed">
+            <Text size="sm">{job.error}</Text>
+            {detail?.stderrTail && (
+              <Code block mt="xs" fz={11}>
+                {detail.stderrTail}
+              </Code>
+            )}
+          </Alert>
+        )}
 
-      {job.status === "done" && review && (
-        <>
-          <ProseReview
-            pr={pr}
-            review={{ id: job.id, headSha: job.headSha }}
-            markdown={review.prose}
-            onAdded={() => onFindingAdded?.()}
-          />
-          {review.findings.length > 0 && (
-            <Findings
+        {job.status === "done" && review && (
+          <>
+            <ProseReview
               pr={pr}
               review={{ id: job.id, headSha: job.headSha }}
-              findings={review.findings}
+              markdown={review.prose}
               onAdded={() => onFindingAdded?.()}
             />
-          )}
-        </>
-      )}
-      {job.status === "done" && !detail && (
-        <Center py="lg">
-          <Loader size="sm" />
-        </Center>
-      )}
+            {review.findings.length > 0 && (
+              <Findings
+                pr={pr}
+                review={{ id: job.id, headSha: job.headSha }}
+                findings={review.findings}
+                onAdded={() => onFindingAdded?.()}
+              />
+            )}
+          </>
+        )}
+        {job.status === "done" && !detail && (
+          <Center py="lg">
+            <Loader size="sm" />
+          </Center>
+        )}
 
-      {(running || (job.status !== "done" && activity.length > 0)) && (
-        <Stack gap={2} className="er-activity">
-          {activity.length === 0 ? (
-            <Text size="xs" c="dimmed">
-              {job.status === "queued" ? "Waiting for another review to finish…" : "Getting started…"}
-            </Text>
-          ) : (
-            activity
-              .slice(-60)
-              .reverse()
-              .map((a, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a timestamp; the index tells them apart
-                <Group key={`${a.at}:${i}`} gap={8} wrap="nowrap">
-                  <Text size="xs" c="dimmed" ff="monospace" style={{ flex: "none" }} w={64}>
-                    {new Date(a.at).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hourCycle: "h23",
-                    })}
-                  </Text>
-                  <Text size="xs" ff="monospace" truncate>
-                    {a.text}
-                  </Text>
-                </Group>
-              ))
-          )}
-        </Stack>
-      )}
+        {(running || (job.status !== "done" && activity.length > 0)) && (
+          <Stack gap={2} className="er-activity">
+            {activity.length === 0 ? (
+              <Text size="xs" c="dimmed">
+                {job.status === "queued" ? "Waiting for another review to finish…" : "Getting started…"}
+              </Text>
+            ) : (
+              activity
+                .slice(-60)
+                .reverse()
+                .map((a, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a timestamp; the index tells them apart
+                  <Group key={`${a.at}:${i}`} gap={8} wrap="nowrap">
+                    <Text size="xs" c="dimmed" ff="monospace" style={{ flex: "none" }} w={64}>
+                      {new Date(a.at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hourCycle: "h23",
+                      })}
+                    </Text>
+                    <Text size="xs" ff="monospace" truncate>
+                      {a.text}
+                    </Text>
+                  </Group>
+                ))
+            )}
+          </Stack>
+        )}
 
-      {detail && (
-        <Text size="10px" c="dimmed" mt="xs" style={{ lineHeight: 1.6 }}>
-          Commit {job.headSha.slice(0, 7)}
-          {detail.model && ` · ${detail.model}`}
-          {running
-            ? ` · ${activity.length} step${activity.length === 1 ? "" : "s"} so far`
-            : job.turns !== null && ` · ${job.turns} turns`}
-          {job.costUsd !== null && ` · $${job.costUsd.toFixed(2)}`}
-          {detail.clonePath && ` · clone ${detail.clonePath} (${detail.cloneSource})`}
-          {detail.worktreePath ? (
-            <>
-              <br />
-              Worktree {detail.worktreePath}
-            </>
-          ) : (
-            detail.sessionId &&
-            !running && (
+        {detail && (
+          <Text size="10px" c="dimmed" mt="xs" style={{ lineHeight: 1.6 }}>
+            Commit {job.headSha.slice(0, 7)}
+            {detail.model && ` · ${detail.model}`}
+            {running
+              ? ` · ${activity.length} step${activity.length === 1 ? "" : "s"} so far`
+              : job.turns !== null && ` · ${job.turns} turns`}
+            {job.costUsd !== null && ` · $${job.costUsd.toFixed(2)}`}
+            {detail.clonePath && ` · clone ${detail.clonePath} (${detail.cloneSource})`}
+            {detail.worktreePath ? (
               <>
                 <br />
-                Its checkout has been removed, so this session can't be continued in a terminal —
-                re-run to review it again.
+                Worktree {detail.worktreePath}
               </>
-            )
-          )}
-        </Text>
-      )}
-    </Stack>
+            ) : (
+              detail.sessionId &&
+              !running && (
+                <>
+                  <br />
+                  Its checkout has been removed, so this session can't be continued in a terminal —
+                  re-run to review it again.
+                </>
+              )
+            )}
+          </Text>
+        )}
+      </Stack>
+    </ReviewScreenshots.Provider>
   );
 }
 

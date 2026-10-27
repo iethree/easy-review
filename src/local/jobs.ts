@@ -32,6 +32,7 @@ import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
 import { prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
 import { localPaths } from "./paths.ts";
 import { seedReviewers } from "./reviewers.ts";
+import { dropScreenshots, keepScreenshots } from "./screenshots.ts";
 
 type Killable = { kill: () => void };
 
@@ -256,6 +257,7 @@ export class ReviewJobs {
     this.jobs.delete(id);
     clearTimeout(this.saveTimers.get(id));
     await rm(join(localPaths().reviews, `${id}.json`), { force: true });
+    await dropScreenshots(id);
     return true;
   }
 
@@ -464,6 +466,8 @@ export class ReviewJobs {
 
       const tail = result.stderr.trim().split("\n").slice(-15).join("\n") || null;
       const r = result.state.result;
+      // Before the worktree can be cleaned up: they're part of the review.
+      await keepScreenshots(worktree.path, job.id).catch(() => []);
 
       if (this.cancelled.has(job.id)) {
         this.finish(job, { status: "cancelled", phase: "Cancelled", stderrTail: tail });

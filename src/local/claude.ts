@@ -25,7 +25,11 @@ import { childEnv } from "./env.ts";
 
 const TOOLS_READ_ONLY = `You have read-only tools (Read, Grep, Glob), confined to a git worktree checked out at the pull request's head commit.`;
 
-const TOOLS_RUN = `You are working in a git worktree checked out at the pull request's head commit. You can read and search it (Read, Grep, Glob), edit files in it (Edit, Write), and run commands (Bash). Use them to check what you suspect rather than guess: run the relevant tests, a type check, or a small script that exercises the change, and say in your review what you ran and what it showed. Stay inside the worktree: don't push, commit, change git config, or install anything outside it.`;
+const TOOLS_RUN = `You are working in a git worktree checked out at the pull request's head commit. You can read and search it (Read, Grep, Glob), edit files in it (Edit, Write), and run commands (Bash). Use them to check what you suspect rather than guess: run the relevant tests, a type check, or a small script that exercises the change, and say in your review what you ran and what it showed.
+
+Keep your changes to the worktree: don't push or commit, don't change git config, and don't install anything system-wide (brew, npm -g) — a tool's own download cache is fine. For the code as it was before the change, check the base commit out beside it: git worktree add --detach .easy-review/base $(cat .easy-review/base-commit).
+
+Images you save in .easy-review/screenshots (PNG, JPEG or WebP, plain file names) are kept with your review. Show one with ![what it shows](screenshots/<file>). Show a before and an after of the same view as a fenced block tagged compare holding two lines, before: screenshots/<file> and after: screenshots/<file>; the reader can wipe and fade between them.`;
 
 /** Fixed framing. The reviewer's own instructions go in the prompt. */
 export function reviewSystemPrompt(readOnly: boolean): string {
@@ -37,6 +41,7 @@ Context prepared for you, inside the working directory:
 - .easy-review/pr.md — title, author, base branch and description
 - .easy-review/pr.diff — the complete diff against the merge base (what GitHub shows)
 - .easy-review/commits.txt — the commits in the pull request
+- .easy-review/base-commit — the commit the pull request's branch started from
 
 Your final message is the review, in GitHub-flavoured Markdown. It is shown to the reviewer as-is, so make it the complete review rather than a summary of what you did.
 

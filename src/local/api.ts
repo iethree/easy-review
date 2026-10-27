@@ -13,6 +13,7 @@ import {
 import { detectClaude, type ClaudeStatus } from "./claude.ts";
 import type { ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
+import { screenshotFile } from "./screenshots.ts";
 import {
   createReviewer,
   deleteReviewer,
@@ -145,6 +146,11 @@ export function createLocalApi(jobs: ReviewJobs) {
           if (!job) return fail("No such review", 404);
 
           if (!parts[2] && method === "GET") return json({ ...job, resumeCommand: resumeCommand(job) });
+          if (parts[2] === "screenshots" && parts[3] && !parts[4] && method === "GET") {
+            const file = await screenshotFile(id, decodeURIComponent(parts[3]));
+            if (!file) return fail("No such screenshot", 404);
+            return new Response(file, { headers: { "cache-control": "private, max-age=31536000, immutable" } });
+          }
           if (parts[2] === "cancel" && method === "POST") return json(jobs.cancel(id));
           if (!parts[2] && method === "DELETE") {
             await jobs.remove(id);

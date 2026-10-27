@@ -78,7 +78,7 @@ test("the first run turns the old standing instructions into a reviewer called G
   await createReviewer({ name: "Security", instructions: "Injection." });
   await deleteReviewer("general");
   await seedReviewers("My old instructions.");
-  expect((await listReviewers()).map((r) => r.id)).toEqual(["diagrams", "layers", "security"]);
+  expect((await listReviewers()).map((r) => r.id)).toEqual(["changed-screens", "diagrams", "layers", "screen-comparison", "security"]);
 });
 
 test("built-in reviewers are offered once, to new and existing setups alike", async () => {
@@ -93,7 +93,7 @@ test("built-in reviewers are offered once, to new and existing setups alike", as
   // Deleted, it stays deleted.
   await deleteReviewer("layers");
   await seedReviewers("unused");
-  expect((await listReviewers()).map((r) => r.id)).toEqual(["diagrams", "general"]);
+  expect((await listReviewers()).map((r) => r.id)).toEqual(["changed-screens", "diagrams", "general", "screen-comparison"]);
 });
 
 test("a built-in never overwrites a file of the same name", async () => {
@@ -159,7 +159,7 @@ async function api() {
 test("the reviewer routes list, create, update and delete", async () => {
   const call = await api();
   const listed = (await (await call("GET", "reviewers")).json()) as { reviewers: { id: string }[]; dir: string };
-  expect(listed.reviewers.map((r) => r.id)).toEqual(["diagrams", "general", "layers"]);
+  expect(listed.reviewers.map((r) => r.id)).toEqual(["changed-screens", "diagrams", "general", "layers", "screen-comparison"]);
   expect(listed.dir).toBe(join(home, "reviewers"));
 
   const created = await call("POST", "reviewers", { name: "Security", instructions: "Injection." });
@@ -171,7 +171,9 @@ test("the reviewer routes list, create, update and delete", async () => {
 
   expect((await call("DELETE", "reviewers/security")).status).toBe(200);
   expect((await call("DELETE", "reviewers/layers")).status).toBe(200);
-  expect((await call("DELETE", "reviewers/diagrams")).status).toBe(200);
+  for (const id of ["diagrams", "changed-screens", "screen-comparison"]) {
+    expect((await call("DELETE", `reviewers/${id}`)).status).toBe(200);
+  }
   expect((await call("DELETE", "reviewers/general")).status).toBe(400);
   expect((await call("PUT", "reviewers/..%2Fconfig", { name: "x", instructions: "x" })).status).toBe(404);
 });

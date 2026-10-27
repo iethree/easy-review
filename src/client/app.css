@@ -603,6 +603,97 @@ body {
   height: auto;
 }
 
+/* A review's screenshots (components/Compare.tsx, and images in Markdown). */
+.er-screenshot {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.er-image-missing {
+  color: var(--mantine-color-dimmed);
+  font-style: italic;
+}
+
+.er-compare {
+  margin: 12px 0;
+}
+
+.er-compare-frame {
+  position: relative;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.er-compare-frame[data-mode="wipe"] {
+  cursor: ew-resize;
+}
+
+.er-compare-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The after sits exactly over the before. */
+.er-compare-after {
+  position: absolute;
+  inset: 0;
+}
+
+.er-compare-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--mantine-color-indigo-5);
+  pointer-events: none;
+}
+
+.er-compare-tag {
+  position: absolute;
+  top: 6px;
+  padding: 1px 6px;
+  border-radius: var(--mantine-radius-sm);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.er-compare-tag[data-side="before"] {
+  left: 6px;
+}
+
+.er-compare-tag[data-side="after"] {
+  right: 6px;
+}
+
+.er-compare-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.er-compare-side figure {
+  margin: 0;
+}
+
+.er-compare-side img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
 .er-diff-comment .er-markdown {
   font-size: 12.5px;
   line-height: 1.5;
