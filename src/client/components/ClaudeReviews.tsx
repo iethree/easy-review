@@ -69,7 +69,8 @@ export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemo
 }
 
 export function StatusIcon({ job }: { job: AiReviewSummary | undefined }) {
-  if (job && isActive(job.status)) return <Loader size={12} color="indigo" />;
+  // The tab's own text colour: an indigo loader vanished on the selected tab, which is indigo too.
+  if (job && isActive(job.status)) return <Loader size={14} color="currentColor" />;
   const color =
     job?.status === "done"
       ? "var(--mantine-color-teal-6)"

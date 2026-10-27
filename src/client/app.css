@@ -978,8 +978,9 @@ body {
 
 .er-commits-dot {
   flex: none;
-  width: calc(var(--loader-size) / 4.2);
-  height: calc(var(--loader-size) / 4.2);
+  /* Still a dot at the tiny sizes used in tabs and badges. */
+  width: max(3px, calc(var(--loader-size) / 4.2));
+  height: max(3px, calc(var(--loader-size) / 4.2));
   border-radius: 50%;
   background: currentColor;
   opacity: 0.45;
