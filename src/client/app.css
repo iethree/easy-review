@@ -591,6 +591,18 @@ body {
   gap: 7px;
 }
 
+/* A ```reladraw diagram in a review (components/Diagram.tsx): its own size, up to the column's. */
+.er-diagram {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.er-diagram img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 .er-diff-comment .er-markdown {
   font-size: 12.5px;
   line-height: 1.5;

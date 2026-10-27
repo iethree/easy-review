@@ -11,7 +11,7 @@ import { unified } from "unified";
 export interface ProseBlock {
   /** The block's own Markdown. */
   text: string;
-  /** Headings and rules frame the review; they aren't points to add. */
+  /** Headings and rules frame the review; they aren't points to add, and nor are diagrams. */
   addable: boolean;
 }
 
@@ -28,7 +28,9 @@ export function splitProse(markdown: string): ProseBlock[] {
       // Each item on its own: a list of points is the usual shape of a review.
       for (const item of node.children) blocks.push({ text: slice(item), addable: true });
     } else {
-      blocks.push({ text: slice(node), addable: node.type !== "heading" && node.type !== "thematicBreak" });
+      // Nor is a diagram: GitHub would show it as code.
+      const diagram = node.type === "code" && node.lang === "reladraw";
+      blocks.push({ text: slice(node), addable: node.type !== "heading" && node.type !== "thematicBreak" && !diagram });
     }
   }
   return blocks;

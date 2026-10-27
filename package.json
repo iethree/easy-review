@@ -27,6 +27,7 @@
     "react-markdown": "^10",
     "rehype-raw": "^7",
     "rehype-sanitize": "^6",
+    "reladraw": "0.19.1",
     "remark-gfm": "^4",
     "remark-parse": "^11",
     "unified": "^11"

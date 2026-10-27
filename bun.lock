@@ -16,6 +16,7 @@
         "react-markdown": "^10",
         "rehype-raw": "^7",
         "rehype-sanitize": "^6",
+        "reladraw": "0.19.1",
         "remark-gfm": "^4",
         "remark-parse": "^11",
         "unified": "^11",
@@ -712,6 +713,8 @@
     "rehype-raw": ["rehype-raw@7.0.0", "", { "dependencies": { "@types/hast": "^3.0.0", "hast-util-raw": "^9.0.0", "vfile": "^6.0.0" } }, "sha512-/aE8hCfKlQeA8LmyeyQvQF3eBiLRGNlfBJEvWH7ivp9sBqs7TNqBL5X3v157rM4IFETqDnIOO+z5M/biZbo9Ww=="],
 
     "rehype-sanitize": ["rehype-sanitize@6.0.0", "", { "dependencies": { "@types/hast": "^3.0.0", "hast-util-sanitize": "^5.0.0" } }, "sha512-CsnhKNsyI8Tub6L4sm5ZFsme4puGfc6pYylvXo1AeqaGbjOYyzNv3qZPwvs0oMJ39eryyeOdmxwUIo94IpEhqg=="],
+
+    "reladraw": ["reladraw@0.19.1", "", { "bin": { "reladraw": "dist/cli.js" } }, "sha512-FIaQBdgPEQU7RTnWBgWKju/MGuzQVqWzi/mVZ+Chf5Ija0JTrPdryjoYHgOz+NYrUNvUjVZvM8Qg9O0TARkdbg=="],
 
     "remark-gfm": ["remark-gfm@4.0.1", "", { "dependencies": { "@types/mdast": "^4.0.0", "mdast-util-gfm": "^3.0.0", "micromark-extension-gfm": "^3.0.0", "remark-parse": "^11.0.0", "remark-stringify": "^11.0.0", "unified": "^11.0.0" } }, "sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg=="],
 

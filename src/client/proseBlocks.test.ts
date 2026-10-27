@@ -46,3 +46,8 @@ test("a list item loses its bullet when it becomes a comment", () => {
   expect(withoutMarker("2. Second")).toBe("Second");
   expect(withoutMarker("Plain")).toBe("Plain");
 });
+
+test("a diagram is drawn in the review but not offered for yours, where it would be code", () => {
+  const blocks = splitProse("Before.\n\n```reladraw\nnode a\n```\n\n```ts\nconst x = 1;\n```\n");
+  expect(blocks.map((b) => b.addable)).toEqual([true, false, true]);
+});
