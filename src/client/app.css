@@ -265,6 +265,26 @@ body {
   gap: 10px;
 }
 
+/*
+ * The counts and the CI badge sit in fixed-width columns, so they line up
+ * down the list whatever the numbers: +1.2k needs 5ch, −999 4ch, 999f 4ch.
+ */
+.er-diffstat {
+  display: grid;
+  grid-template-columns: 5ch 5ch 4ch;
+  column-gap: 4px;
+  justify-items: end;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: default;
+}
+
+.er-ci-slot {
+  display: flex;
+  min-width: 76px;
+}
+
 .er-truncate {
   min-width: 0;
   overflow: hidden;
@@ -275,6 +295,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  /* Room for "Merged", so the counts beside it line up down the list. */
+  min-width: 64px;
 }
 
 /* ---------------------------------------------------------------------------

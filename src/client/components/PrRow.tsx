@@ -125,7 +125,9 @@ export const PrRow = memo(function PrRow({
               files={pr.changedFiles}
               compact
             />
-            <CiBadge pr={pr} />
+            <span className="er-ci-slot">
+              <CiBadge pr={pr} />
+            </span>
           </div>
         </div>
       </div>
