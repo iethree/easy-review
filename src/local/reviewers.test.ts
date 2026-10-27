@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalApi } from "./api.ts";
@@ -69,12 +69,42 @@ test("names become safe file names", () => {
 
 test("the first run turns the old standing instructions into a reviewer called General", async () => {
   await seedReviewers("My old instructions.");
-  expect(await listReviewers()).toEqual([{ id: "general", name: "General", instructions: "My old instructions." }]);
+  expect((await listReviewers()).find((r) => r.id === "general")).toEqual({
+    id: "general",
+    name: "General",
+    instructions: "My old instructions.",
+  });
   // Only the first run: deleting General later doesn't bring it back.
   await createReviewer({ name: "Security", instructions: "Injection." });
   await deleteReviewer("general");
   await seedReviewers("My old instructions.");
-  expect((await listReviewers()).map((r) => r.id)).toEqual(["security"]);
+  expect((await listReviewers()).map((r) => r.id)).toEqual(["layers", "security"]);
+});
+
+test("built-in reviewers are offered once, to new and existing setups alike", async () => {
+  // An existing setup, from before there were built-ins.
+  await mkdir(join(home, "reviewers"), { recursive: true });
+  await Bun.write(join(home, "reviewers", "general.md"), "---\nname: General\n---\n\nMine.\n");
+  await seedReviewers("unused");
+  const layers = (await listReviewers()).find((r) => r.id === "layers");
+  expect(layers?.name).toBe("Layers");
+  expect(layers?.instructions).toContain("layers");
+
+  // Deleted, it stays deleted.
+  await deleteReviewer("layers");
+  await seedReviewers("unused");
+  expect((await listReviewers()).map((r) => r.id)).toEqual(["general"]);
+});
+
+test("a built-in never overwrites a file of the same name", async () => {
+  await mkdir(join(home, "reviewers"), { recursive: true });
+  await Bun.write(join(home, "reviewers", "layers.md"), "---\nname: My layers\n---\n\nMy own.\n");
+  await seedReviewers("unused");
+  expect((await listReviewers()).find((r) => r.id === "layers")).toEqual({
+    id: "layers",
+    name: "My layers",
+    instructions: "My own.",
+  });
 });
 
 test("reviewers are created, listed by name, renamed in place and deleted", async () => {
@@ -115,7 +145,7 @@ test("a reviewer needs a name and instructions, and the last one can't be delete
 
 async function api() {
   const jobs = new ReviewJobs(async () => undefined, { autoSweep: false });
-  await jobs.init(); // seeds General
+  await jobs.init(); // seeds General, and the built-ins
   const { handle } = createLocalApi(jobs);
   return (method: string, path: string, body?: unknown) =>
     handle(
@@ -129,7 +159,7 @@ async function api() {
 test("the reviewer routes list, create, update and delete", async () => {
   const call = await api();
   const listed = (await (await call("GET", "reviewers")).json()) as { reviewers: { id: string }[]; dir: string };
-  expect(listed.reviewers.map((r) => r.id)).toEqual(["general"]);
+  expect(listed.reviewers.map((r) => r.id)).toEqual(["general", "layers"]);
   expect(listed.dir).toBe(join(home, "reviewers"));
 
   const created = await call("POST", "reviewers", { name: "Security", instructions: "Injection." });
@@ -140,6 +170,7 @@ test("the reviewer routes list, create, update and delete", async () => {
   expect(await updated.json()).toEqual({ id: "security", name: "Sec", instructions: "Auth." });
 
   expect((await call("DELETE", "reviewers/security")).status).toBe(200);
+  expect((await call("DELETE", "reviewers/layers")).status).toBe(200);
   expect((await call("DELETE", "reviewers/general")).status).toBe(400);
   expect((await call("PUT", "reviewers/..%2Fconfig", { name: "x", instructions: "x" })).status).toBe(404);
 });
