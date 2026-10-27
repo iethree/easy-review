@@ -1,8 +1,7 @@
-import { Anchor, Button, Checkbox, Group, Modal, Stack, Text } from "@mantine/core";
-import { IconRobot } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { ActionIcon, Anchor, Button, Checkbox, Group, Stack, Text, Tooltip } from "@mantine/core";
+import { IconRobot, IconX } from "@tabler/icons-react";
+import { useEffect, useRef, useState } from "react";
 import type { Reviewer } from "../../shared/aiReview.ts";
-import type { PullRequest } from "../../shared/types.ts";
 
 const STORAGE_KEY = "easy-review:picked-reviewers";
 
@@ -20,84 +19,99 @@ export function initialPick(reviewers: readonly Reviewer[], stored: string | nul
 }
 
 interface Props {
-  pr: PullRequest | null;
   reviewers: Reviewer[];
-  onClose: () => void;
-  onStart: (pr: PullRequest, reviewerIds: string[]) => void;
+  onStart: (reviewerIds: string[]) => void;
+  onCancel: () => void;
   onManage: () => void;
 }
 
-/** Which reviewers should look at this pull request. Enter starts them. */
-export function ReviewerPicker({ pr, reviewers, onClose, onStart, onManage }: Props) {
-  const [picked, setPicked] = useState<string[]>([]);
+/**
+ * Which reviewers should look at this pull request — asked in place, at the
+ * top of its Claude review tab. Enter starts them; Escape puts it away.
+ */
+export function ReviewerPicker({ reviewers, onStart, onCancel, onManage }: Props) {
+  const [picked, setPicked] = useState<string[]>(() => initialPick(reviewers, localStorage.getItem(STORAGE_KEY)));
+  const firstRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (pr) setPicked(initialPick(reviewers, localStorage.getItem(STORAGE_KEY)));
-  }, [pr, reviewers]);
+  // Ready for the keyboard as soon as it appears.
+  useEffect(() => firstRef.current?.focus({ preventScroll: true }), []);
 
   const start = () => {
-    if (!pr || picked.length === 0) return;
+    if (picked.length === 0) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(picked));
-    onStart(pr, picked);
-    onClose();
+    onStart(picked);
   };
 
   const all = picked.length === reviewers.length;
 
   return (
-    <Modal opened={pr !== null} onClose={onClose} title="Review with Claude" size="md" radius="md">
-      <form
-        onSubmit={(e) => {
+    <form
+      className="er-picker"
+      aria-label="Choose reviewers"
+      onSubmit={(e) => {
+        e.preventDefault();
+        start();
+      }}
+      // Its keys are its own: Enter on a checkbox starts too, and Escape
+      // closes this rather than reaching the app's shortcuts.
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
           e.preventDefault();
+          e.stopPropagation();
           start();
-        }}
-        // Enter on a checkbox starts too, not just on the button.
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
-            e.preventDefault();
-            start();
-          }
-        }}
-      >
-        <Stack gap="sm">
-          <Group justify="space-between">
-            <Text size="sm" c="dimmed">
-              Each reviewer runs as its own Claude session, in its own tab.
-            </Text>
-            <Anchor
-              component="button"
-              type="button"
-              size="xs"
-              onClick={() => setPicked(all ? reviewers.slice(0, 1).map((r) => r.id) : reviewers.map((r) => r.id))}
-            >
-              {all ? "Just one" : "All"}
-            </Anchor>
+        } else if (e.key === "Escape") {
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
+    >
+      <Stack gap="sm">
+        <Group justify="space-between" wrap="nowrap">
+          <Text size="sm" fw={600}>
+            Who should review this?
+          </Text>
+          <Group gap={8} wrap="nowrap">
+            {reviewers.length > 1 && (
+              <Anchor
+                component="button"
+                type="button"
+                size="xs"
+                onClick={() => setPicked(all ? reviewers.slice(0, 1).map((r) => r.id) : reviewers.map((r) => r.id))}
+              >
+                {all ? "Just one" : "All"}
+              </Anchor>
+            )}
+            <Tooltip label="Cancel (Esc)">
+              <ActionIcon size="sm" variant="subtle" color="gray" onClick={onCancel} aria-label="Cancel">
+                <IconX size={14} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
-          <Checkbox.Group value={picked} onChange={setPicked}>
-            <Stack gap={10}>
-              {reviewers.map((r, i) => (
-                <Checkbox
-                  key={r.id}
-                  value={r.id}
-                  data-autofocus={i === 0 || undefined}
-                  label={r.name}
-                  description={firstLine(r.instructions)}
-                  styles={{ description: { maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }}
-                />
-              ))}
-            </Stack>
-          </Checkbox.Group>
-          <Group justify="space-between" mt="xs">
-            <Anchor component="button" type="button" size="xs" c="dimmed" onClick={onManage}>
-              Edit reviewers…
-            </Anchor>
-            <Button type="submit" leftSection={<IconRobot size={16} />} disabled={picked.length === 0}>
-              {picked.length > 1 ? `Start ${picked.length} reviews` : "Start review"}
-            </Button>
-          </Group>
-        </Stack>
-      </form>
-    </Modal>
+        </Group>
+        <Checkbox.Group value={picked} onChange={setPicked}>
+          <Stack gap={8}>
+            {reviewers.map((r, i) => (
+              <Checkbox
+                key={r.id}
+                ref={i === 0 ? firstRef : undefined}
+                value={r.id}
+                label={r.name}
+                description={firstLine(r.instructions)}
+                styles={{ description: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }}
+              />
+            ))}
+          </Stack>
+        </Checkbox.Group>
+        <Group justify="space-between">
+          <Anchor component="button" type="button" size="xs" c="dimmed" onClick={onManage}>
+            Edit reviewers…
+          </Anchor>
+          <Button type="submit" size="xs" leftSection={<IconRobot size={15} />} disabled={picked.length === 0}>
+            {picked.length > 1 ? `Start ${picked.length} reviews` : "Start review"}
+          </Button>
+        </Group>
+      </Stack>
+    </form>
   );
 }
 

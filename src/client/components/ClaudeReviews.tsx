@@ -1,9 +1,10 @@
 import { ActionIcon, Loader, Tabs, Tooltip } from "@mantine/core";
 import { IconPlus, IconRobot } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { AiReviewPanel } from "./AiReviewPanel.tsx";
+import { ReviewerPicker } from "./ReviewerPicker.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -16,14 +17,19 @@ interface Props {
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
   onFindingAdded: () => void;
+  /** Present while choosing who should review: shown in place, at the top. */
+  picker?: ComponentProps<typeof ReviewerPicker>;
 }
 
 /** One tab per reviewer that has looked at this pull request. */
-export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemove, onFindingAdded }: Props) {
+export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemove, onFindingAdded, picker }: Props) {
   const [chosen, setChosen] = useState<string | null>(null);
+  const picking = picker && <ReviewerPicker {...picker} />;
 
   if (jobs.length === 0) {
-    return <AiReviewPanel pr={pr} job={undefined} onStart={() => onStart()} onCancel={onCancel} onRemove={onRemove} />;
+    return (
+      picking ?? <AiReviewPanel pr={pr} job={undefined} onStart={() => onStart()} onCancel={onCancel} onRemove={onRemove} />
+    );
   }
 
   const job = jobs.find((j) => j.reviewerId === chosen) ?? jobs[0];
@@ -34,6 +40,7 @@ export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemo
 
   return (
     <>
+      {picking}
       <Tabs value={job.reviewerId} onChange={setChosen} variant="pills" radius="xl" mb="sm">
         <Tabs.List>
           {jobs.map((j) => (

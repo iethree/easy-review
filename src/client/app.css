@@ -1191,3 +1191,13 @@ body {
   vertical-align: 1px;
   background: var(--er-level);
 }
+
+/* Choosing reviewers, in place at the top of the Claude review tab. */
+.er-picker {
+  margin-bottom: var(--mantine-spacing-sm);
+  padding: 12px;
+  border: 1px solid var(--mantine-color-indigo-light-color);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-indigo-light);
+  animation: er-message-in 160ms ease-out;
+}

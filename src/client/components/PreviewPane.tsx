@@ -22,7 +22,7 @@ import {
   IconFileText,
 } from "@tabler/icons-react";
 import { useCallback, useDeferredValue, useMemo, type RefObject } from "react";
-import { prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import { rateDifficulty } from "../../shared/difficulty.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { useDiff } from "../hooks/diffStore.ts";
@@ -89,6 +89,12 @@ export interface AiControls {
   remove: (id: string) => void;
   /** One of Claude's findings went into your review. */
   findingAdded: () => void;
+  /** The pull request whose reviewers are being chosen, if any. */
+  pickingFor: string | null;
+  reviewers: Reviewer[];
+  pick: (pr: PullRequest, reviewerIds: string[]) => void;
+  cancelPick: () => void;
+  manageReviewers: () => void;
 }
 
 export function PreviewPane(props: Props) {
@@ -190,6 +196,16 @@ export function PreviewPane(props: Props) {
                 onCancel={ai.cancel}
                 onRemove={ai.remove}
                 onFindingAdded={ai.findingAdded}
+                picker={
+                  ai.pickingFor === deferred.id
+                    ? {
+                        reviewers: ai.reviewers,
+                        onStart: (ids) => ai.pick(deferred, ids),
+                        onCancel: ai.cancelPick,
+                        onManage: ai.manageReviewers,
+                      }
+                    : undefined
+                }
               />
             ) : tab === "description" ? (
               <PrDescription pr={deferred} viewer={props.viewer} />

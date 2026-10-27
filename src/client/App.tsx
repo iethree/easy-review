@@ -40,7 +40,6 @@ import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
-import { ReviewerPicker } from "./components/ReviewerPicker.tsx";
 import { ReviewersPage } from "./components/ReviewersPage.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
@@ -428,8 +427,19 @@ export function App() {
       cancel: (id) => void ai.cancel(id).catch(() => {}),
       remove: (id) => void ai.remove(id).catch(() => {}),
       findingAdded: () => setReviewPaneOpen(true),
+      pickingFor: pickFor?.id ?? null,
+      reviewers: reviewers.reviewers,
+      pick: (pr, ids) => {
+        setPickFor(null);
+        runAiReview(pr, ids);
+      },
+      cancelPick: () => setPickFor(null),
+      manageReviewers: () => {
+        setPickFor(null);
+        setPage("reviewers");
+      },
     }),
-    [ai.available, ai.byPr, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove],
+    [ai.available, ai.byPr, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, runAiReview],
   );
 
   const queueAi = useMemo(
@@ -455,6 +465,7 @@ export function App() {
   useEffect(() => {
     setChangesFor((id) => (id === selectedKey ? id : null));
     setApproveFor((id) => (id === selectedKey ? id : null));
+    setPickFor((pr) => (pr?.id === selectedKey ? pr : null));
   }, [selectedKey]);
 
   // Keep DOM focus in the focused pane, so the browser's own scrolling keys
@@ -581,8 +592,8 @@ export function App() {
     }
 
     function onKeyDown(e: KeyboardEvent) {
-      // The Reviewers page and the reviewer picker have keys of their own.
-      if (page || pickFor) return;
+      // The Reviewers page has keys of its own.
+      if (page) return;
       const target = e.target as HTMLElement | null;
       const typing =
         target instanceof HTMLInputElement ||
@@ -711,7 +722,6 @@ export function App() {
     changesOpen,
     approveOpen,
     page,
-    pickFor,
     reviewed,
     refreshTab,
     isOwn,
@@ -1087,16 +1097,6 @@ export function App() {
         </div>
       )}
 
-      <ReviewerPicker
-        pr={pickFor}
-        reviewers={reviewers.reviewers}
-        onClose={() => setPickFor(null)}
-        onStart={runAiReview}
-        onManage={() => {
-          setPickFor(null);
-          setPage("reviewers");
-        }}
-      />
       <SettingsModal
         onOpenReviewers={() => {
           setSettingsOpen(false);
