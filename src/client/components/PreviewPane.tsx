@@ -6,6 +6,7 @@ import {
   Center,
   Group,
   Kbd,
+  Popover,
   Stack,
   Tabs,
   Text,
@@ -32,6 +33,7 @@ import { isReviewed, PR_STATE, VERDICT } from "../reviewMeta.ts";
 import { relativeTime } from "../time.ts";
 import { AiReviewButton } from "./AiReviewButton.tsx";
 import { ClaudeReviews, StatusIcon } from "./ClaudeReviews.tsx";
+import { ReviewerPicker } from "./ReviewerPicker.tsx";
 import { DIFF_MESSAGES, LoadingScene } from "./Loading.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import type { DiffThreadItem } from "./DiffThread.tsx";
@@ -196,16 +198,6 @@ export function PreviewPane(props: Props) {
                 onCancel={ai.cancel}
                 onRemove={ai.remove}
                 onFindingAdded={ai.findingAdded}
-                picker={
-                  ai.pickingFor === deferred.id
-                    ? {
-                        reviewers: ai.reviewers,
-                        onStart: (ids) => ai.pick(deferred, ids),
-                        onCancel: ai.cancelPick,
-                        onManage: ai.manageReviewers,
-                      }
-                    : undefined
-                }
               />
             ) : tab === "description" ? (
               <PrDescription pr={deferred} viewer={props.viewer} />
@@ -296,16 +288,44 @@ function Header({
             />
           )}
           {ai.available && (
-            <AiReviewButton
-              job={job}
-              headSha={pr.headSha}
-              label={`${pr.repo}#${pr.number}`}
-              onStart={() => {
-                onTabChange("claude");
-                ai.start(pr);
-              }}
-              onOpen={() => onTabChange("claude")}
-            />
+            // Choosing reviewers pops out of the robot, however it was asked for:
+            // every way in (c, a row's robot, the Claude tab) selects this pull request.
+            <Popover
+              opened={ai.pickingFor === pr.id}
+              onChange={(open) => !open && ai.cancelPick()}
+              position="bottom-end"
+              width={320}
+              shadow="md"
+              radius="md"
+              withArrow
+              arrowPosition="center"
+              offset={6}
+            >
+              <Popover.Target>
+                <span style={{ display: "inline-flex" }}>
+                  <AiReviewButton
+                    job={job}
+                    headSha={pr.headSha}
+                    label={`${pr.repo}#${pr.number}`}
+                    onStart={() => {
+                      onTabChange("claude");
+                      ai.start(pr);
+                    }}
+                    onOpen={() => onTabChange("claude")}
+                  />
+                </span>
+              </Popover.Target>
+              <Popover.Dropdown p="sm">
+                {ai.pickingFor === pr.id && (
+                  <ReviewerPicker
+                    reviewers={ai.reviewers}
+                    onStart={(ids) => ai.pick(pr, ids)}
+                    onCancel={ai.cancelPick}
+                    onManage={ai.manageReviewers}
+                  />
+                )}
+              </Popover.Dropdown>
+            </Popover>
           )}
           <Tooltip label={history ? "Open your review on GitHub" : "Open on GitHub (g)"}>
             <ActionIcon

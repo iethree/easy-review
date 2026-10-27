@@ -26,8 +26,8 @@ interface Props {
 }
 
 /**
- * Which reviewers should look at this pull request — asked in place, at the
- * top of its Claude review tab. Enter starts them; Escape puts it away.
+ * Which reviewers should look at this pull request — a popover from the
+ * robot in its header. Enter starts them; Escape puts it away.
  */
 export function ReviewerPicker({ reviewers, onStart, onCancel, onManage }: Props) {
   const [picked, setPicked] = useState<string[]>(() => initialPick(reviewers, localStorage.getItem(STORAGE_KEY)));
@@ -46,7 +46,6 @@ export function ReviewerPicker({ reviewers, onStart, onCancel, onManage }: Props
 
   return (
     <form
-      className="er-picker"
       aria-label="Choose reviewers"
       onSubmit={(e) => {
         e.preventDefault();
