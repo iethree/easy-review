@@ -32,6 +32,17 @@ export interface AiReviewConfig {
    * (~/projects/<name> and friends) are found without this.
    */
   clones: string;
+  /**
+   * Claude only reads the code, and runs none of it. Off by default: then it
+   * can run commands and edit files in the review's worktree, to check what
+   * it suspects — running the pull request's code on this machine.
+   */
+  readOnly: boolean;
+}
+
+/** The tools a review gets: reading, and unless read-only, running and editing. */
+export function reviewTools(readOnly: boolean): string[] {
+  return readOnly ? ["Read", "Grep", "Glob"] : ["Read", "Grep", "Glob", "Bash", "Edit", "Write"];
 }
 
 /**
@@ -90,6 +101,8 @@ export interface AiReviewJob extends AiReviewSummary {
   worktreePath: string | null;
   sessionId: string | null;
   model: string | null;
+  /** Ran read-only (see AiReviewConfig). Absent until it runs; reviews from before the setting were. */
+  readOnly?: boolean;
   /** The last of whatever the process wrote to stderr, for failures. */
   stderrTail: string | null;
 }
@@ -167,6 +180,7 @@ export const DEFAULT_AI_CONFIG: AiReviewConfig = {
   timeoutMinutes: 20,
   maxConcurrent: 2,
   clones: "",
+  readOnly: false,
 };
 
 export function prKey(pr: { owner: string; name: string; number: number }): string {
@@ -174,11 +188,12 @@ export function prKey(pr: { owner: string; name: string; number: number }): stri
 }
 
 /**
- * Continue the review interactively — with the same restrictions, since the
- * directory holds the pull request's code, not yours.
+ * Continue the review interactively — with the same restrictions and tools,
+ * since the directory holds the pull request's code, not yours.
  */
-export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId">): string | null {
+export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId" | "readOnly">): string | null {
   if (!job.worktreePath || !job.sessionId) return null;
   const quoted = `'${job.worktreePath.replace(/'/g, `'\\''`)}'`;
-  return `cd ${quoted} && claude --resume ${job.sessionId} --restricted --strict-mcp-config --tools Read,Grep,Glob`;
+  const tools = reviewTools(job.readOnly ?? true).join(",");
+  return `cd ${quoted} && claude --resume ${job.sessionId} --restricted --strict-mcp-config --tools ${tools}`;
 }

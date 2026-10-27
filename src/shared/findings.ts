@@ -1,7 +1,7 @@
 /**
  * Findings: the points a Claude review makes, in a form the UI can act on.
  *
- * Every reviewer is asked (REVIEW_SYSTEM_PROMPT in src/local/claude.ts) to end
+ * Every reviewer is asked (reviewSystemPrompt in src/local/claude.ts) to end
  * its review with a fenced block tagged `easy-review-findings` holding a JSON
  * array. The Claude pane shows the prose without it, and each finding as a
  * card you can add to the review you're putting together.

@@ -33,6 +33,7 @@ export function normalizeConfig(input: unknown): AiReviewConfig {
     timeoutMinutes: clampInt(raw.timeoutMinutes, 1, 120, d.timeoutMinutes),
     maxConcurrent: clampInt(raw.maxConcurrent, 1, 6, d.maxConcurrent),
     clones: typeof raw.clones === "string" ? raw.clones : d.clones,
+    readOnly: typeof raw.readOnly === "boolean" ? raw.readOnly : d.readOnly,
   };
 }
 

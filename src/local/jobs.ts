@@ -432,6 +432,8 @@ export class ReviewJobs {
         worktreePath: worktree.path,
         headSha: worktree.headSha,
         clonePath: clone.path,
+        // How it ran, for continuing it in a terminal with the same tools.
+        readOnly: config.readOnly,
       });
 
       let seen = 0;
