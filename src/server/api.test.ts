@@ -131,6 +131,10 @@ test("one comment with nowhere to land, or nothing to say, stops the whole revie
     { path: "" },
     { body: "" },
     { body: "   " },
+    // A range must start before it ends.
+    { startLine: 12 },
+    { startLine: 20 },
+    { startLine: 0 },
   ];
   for (const overrides of broken) {
     const res = await api().handle(
@@ -241,4 +245,29 @@ test("the conversation route turns GitHub's comments into a timeline", async () 
   const body = (await res.json()) as { items: { kind: string; body: string }[]; truncated: boolean };
   expect(body.items).toEqual([expect.objectContaining({ kind: "comment", body: "hi" })]);
   expect(body.truncated).toBe(false);
+});
+
+test("a comment on several lines goes up as GitHub's start_line to line, on one side", async () => {
+  const sent = stubGitHub();
+  const res = await api().handle(
+    review({
+      event: "COMMENT",
+      body: "One suggestion",
+      commitId: "abc1234",
+      comments: [lineComment({ startLine: 10, body: "Use this:\n\n```suggestion\nconst x = 1;\n```" })],
+    }),
+  );
+  expect(res.status).toBe(200);
+  expect(sent[0]?.body).toMatchObject({
+    comments: [
+      {
+        path: "src/app.ts",
+        start_line: 10,
+        start_side: "RIGHT",
+        line: 12,
+        side: "RIGHT",
+        body: "Use this:\n\n```suggestion\nconst x = 1;\n```",
+      },
+    ],
+  });
 });

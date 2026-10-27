@@ -1181,14 +1181,57 @@ body {
 }
 
 .er-finding {
+  position: relative;
   padding: 10px 12px;
   border: 1px solid var(--er-row-border);
   border-radius: var(--mantine-radius-md);
-  transition: opacity 150ms ease;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
 }
 
-.er-finding[data-added="true"] {
-  opacity: 0.6;
+.er-finding:hover,
+.er-finding:focus-within {
+  border-color: var(--mantine-color-indigo-4);
+  background: var(--er-row-hover);
+}
+
+/* Adding is a mouseover away, or a Tab away; once added, it says so. */
+.er-finding-action {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.er-finding:hover .er-finding-action,
+.er-finding:focus-within .er-finding-action,
+.er-finding[data-added="true"] .er-finding-action {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .er-finding-action {
+    opacity: 1;
+  }
+}
+
+.er-finding-suggestion {
+  margin-top: 8px;
+}
+
+.er-finding-suggestion pre {
+  margin: 0;
+  padding: 6px 10px;
+  overflow-x: auto;
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--er-diff-text);
+  background: var(--er-diff-add-bg);
+  border-left: 3px solid var(--mantine-color-teal-5);
+  border-radius: var(--mantine-radius-sm);
 }
 
 .er-finding-body {

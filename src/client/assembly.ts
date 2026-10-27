@@ -126,7 +126,14 @@ export function addFinding(
   const a = current()[pr.id] ?? EMPTY;
   const key = findingKey(review.id, index);
   if (place.kind === "line") {
-    addDraft(pr.id, { path: place.path, line: place.line, side: place.side, body: commentBody(finding), commitId: pr.headSha });
+    addDraft(pr.id, {
+      path: place.path,
+      line: place.line,
+      ...(place.startLine !== undefined ? { startLine: place.startLine } : {}),
+      side: place.side,
+      body: commentBody(finding, place),
+      commitId: pr.headSha,
+    });
   }
   commit(
     withAssembly(current(), pr.id, {

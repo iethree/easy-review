@@ -93,7 +93,8 @@ export function ReviewPane({ pr, ownPr, reviewed, onSubmit, onClose }: Props) {
                   <div key={draft.id} className="er-review-pane-comment">
                     <Group justify="space-between" wrap="nowrap" gap={6}>
                       <Code fz={11} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {draft.path}:{draft.line}
+                        {draft.path}:{draft.startLine ? `${draft.startLine}–` : ""}
+                        {draft.line}
                       </Code>
                       <ActionIcon
                         size="xs"

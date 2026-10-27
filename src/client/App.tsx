@@ -531,7 +531,13 @@ export function App() {
         ...(commitId && drafts.length > 0
           ? {
               commitId,
-              comments: drafts.map((d) => ({ path: d.path, line: d.line, side: d.side, body: d.body })),
+              comments: drafts.map((d) => ({
+                path: d.path,
+                line: d.line,
+                ...(d.startLine !== undefined ? { startLine: d.startLine } : {}),
+                side: d.side,
+                body: d.body,
+              })),
             }
           : {}),
       });

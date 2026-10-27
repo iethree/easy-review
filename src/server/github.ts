@@ -608,7 +608,14 @@ export class GitHubClient {
     if (body) payload.body = body;
     if (inline && inline.comments.length > 0) {
       payload.commit_id = inline.commitId;
-      payload.comments = inline.comments.map(({ path, line, side, body }) => ({ path, line, side, body }));
+      // A comment on several lines is GitHub's start_line/start_side to line/side.
+      payload.comments = inline.comments.map(({ path, line, startLine, side, body }) => ({
+        path,
+        line,
+        side,
+        body,
+        ...(startLine !== undefined ? { start_line: startLine, start_side: side } : {}),
+      }));
     }
 
     const res = await fetch(`${REST_URL}/repos/${owner}/${name}/pulls/${number}/reviews`, {

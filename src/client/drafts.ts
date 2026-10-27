@@ -32,6 +32,8 @@ function isDraft(value: unknown): value is DraftComment {
     Number.isInteger(d.line) &&
     (d.line as number) > 0 &&
     (d.side === "LEFT" || d.side === "RIGHT") &&
+    (d.startLine === undefined ||
+      (Number.isInteger(d.startLine) && (d.startLine as number) > 0 && (d.startLine as number) < (d.line as number))) &&
     typeof d.body === "string" &&
     typeof d.commitId === "string" &&
     typeof d.createdAt === "string"

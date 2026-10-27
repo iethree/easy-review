@@ -87,3 +87,49 @@ test("findings read as comments and as summary bullets", () => {
   expect(summaryItem({ ...at(2), body: "two\nlines" })).toBe("- **t** (`src/a.ts:2`) — two lines");
   expect(summaryItem({ severity: "nit", title: "Overall", body: "" })).toBe("- **Overall**");
 });
+
+const RANGE_DIFF = parseDiff(`diff --git a/src/b.ts b/src/b.ts
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -1,4 +1,4 @@
+ one
+-two
++TWO
+ three
+ four
+@@ -20,2 +20,2 @@
+ twenty
+-old
++new
+`);
+
+test("a suggestion and a range are read; a backwards range or a suggestion on a deleted line is not", () => {
+  const { findings } = splitReview(
+    review(
+      JSON.stringify([
+        { severity: "suggestion", title: "a", body: "b", path: "src/b.ts", startLine: 1, line: 3, side: "RIGHT", suggestion: "one\nTwo\nthree\n" },
+        { severity: "nit", title: "c", body: "d", path: "src/b.ts", startLine: 5, line: 3, side: "RIGHT" },
+        { severity: "nit", title: "e", body: "f", path: "src/b.ts", line: 2, side: "LEFT", suggestion: "x" },
+      ]),
+    ),
+  );
+  expect(findings[0]).toEqual({
+    severity: "suggestion", title: "a", body: "b", path: "src/b.ts", startLine: 1, line: 3, side: "RIGHT", suggestion: "one\nTwo\nthree",
+  });
+  expect(findings[1]?.startLine).toBeUndefined();
+  expect(findings[2]?.suggestion).toBeUndefined();
+});
+
+test("a range within one hunk is kept; one that spans two hunks shrinks to its last line", () => {
+  const finding = (startLine: number, line: number): Finding => ({ severity: "nit", title: "t", body: "b", path: "src/b.ts", startLine, line, side: "RIGHT" });
+  expect(placeFinding(finding(1, 3), RANGE_DIFF, "s", "s")).toEqual({ kind: "line", path: "src/b.ts", startLine: 1, line: 3, side: "RIGHT" });
+  expect(placeFinding(finding(3, 21), RANGE_DIFF, "s", "s")).toEqual({ kind: "line", path: "src/b.ts", line: 21, side: "RIGHT" });
+});
+
+test("a suggestion becomes a suggested change only where the comment covers exactly its lines", () => {
+  const f: Finding = { severity: "suggestion", title: "Name it", body: "Clearer.", path: "src/b.ts", startLine: 1, line: 3, side: "RIGHT", suggestion: "one\nTwo\nthree" };
+  expect(commentBody(f, { startLine: 1, line: 3 })).toBe("**Name it**\n\nClearer.\n\n```suggestion\none\nTwo\nthree\n```");
+  // Shrunk to one line, applying it would replace the wrong lines: leave it out.
+  expect(commentBody(f, { line: 3 })).toBe("**Name it**\n\nClearer.");
+  expect(summaryItem(f)).toBe("- **Name it** (`src/b.ts:1–3`) — Clearer.");
+});

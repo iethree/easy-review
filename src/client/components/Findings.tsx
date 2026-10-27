@@ -22,8 +22,9 @@ interface Props {
 }
 
 /**
- * Claude's points, one card each, to pick from for your own review. Adding one
- * puts it on its line in the diff when it can, and in the summary when not.
+ * Claude's points, one section each, to pick from for your own review. Adding
+ * one puts it on its lines in the diff — with its suggested change, which the
+ * author can apply — when it can, and in the summary when not.
  */
 export function Findings({ pr, review, findings, onAdded }: Props) {
   const { added } = useAssembly(pr.id);
@@ -55,43 +56,50 @@ export function Findings({ pr, review, findings, onAdded }: Props) {
       {findings.map((finding, i) => {
         const severity = SEVERITY[finding.severity];
         const done = isAdded(i);
+        const lines = finding.line ? `:${finding.startLine ? `${finding.startLine}–` : ""}${finding.line}` : "";
         return (
-          <div key={findingKey(review.id, i)} className="er-finding" data-added={done}>
-            <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
-              <Stack gap={4} style={{ minWidth: 0 }}>
-                <Group gap={6} wrap="nowrap">
-                  <Badge size="xs" variant="light" color={severity.color} style={{ flex: "none" }}>
-                    {severity.label}
-                  </Badge>
-                  <Text size="sm" fw={600} truncate>
-                    {finding.title}
-                  </Text>
-                </Group>
-                {finding.path && (
-                  <Code fz={11} style={{ alignSelf: "flex-start" }}>
-                    {finding.path}
-                    {finding.line ? `:${finding.line}` : ""}
-                  </Code>
-                )}
-              </Stack>
-              <Button
-                size="compact-xs"
-                variant={done ? "subtle" : "light"}
-                color={done ? "teal" : undefined}
-                leftSection={done ? <IconCheck size={12} /> : <IconPlus size={12} />}
-                disabled={done}
-                onClick={() => add([i])}
-                style={{ flex: "none" }}
-              >
-                {done ? "In review" : "Add to review"}
-              </Button>
+          // A section per point; its action shows on hover or focus, so the
+          // list reads as a review rather than a wall of buttons.
+          <section key={findingKey(review.id, i)} className="er-finding" data-added={done} aria-label={finding.title}>
+            <Group gap={6} wrap="nowrap" pr={110}>
+              <Badge size="xs" variant="light" color={severity.color} style={{ flex: "none" }}>
+                {severity.label}
+              </Badge>
+              <Text size="sm" fw={600} truncate>
+                {finding.title}
+              </Text>
             </Group>
+            {finding.path && (
+              <Code fz={11} mt={4} style={{ display: "inline-block" }}>
+                {finding.path}
+                {lines}
+              </Code>
+            )}
             {finding.body && (
               <div className="er-finding-body">
                 <Markdown>{finding.body}</Markdown>
               </div>
             )}
-          </div>
+            {finding.suggestion !== undefined && (
+              <div className="er-finding-suggestion">
+                <Text size="10px" fw={700} tt="uppercase" c="dimmed" mb={4} style={{ letterSpacing: 0.4 }}>
+                  Suggested change
+                </Text>
+                <pre>{finding.suggestion || " "}</pre>
+              </div>
+            )}
+            <div className="er-finding-action">
+              {done ? (
+                <Badge size="sm" variant="light" color="teal" leftSection={<IconCheck size={11} />}>
+                  In review
+                </Badge>
+              ) : (
+                <Button size="compact-xs" leftSection={<IconPlus size={12} />} onClick={() => add([i])}>
+                  Add to review
+                </Button>
+              )}
+            </div>
+          </section>
         );
       })}
     </Stack>
