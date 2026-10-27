@@ -48,15 +48,26 @@ export function ReviewMarkLoader({ size = 64 }: { size?: number }) {
   );
 }
 
-/** Cycles through `messages` every couple of seconds, so a wait has some company. */
-function useRotating(messages: readonly string[], everyMs = 2400): string {
+/** A fresh order every time, so the first thing you read isn't always the same. */
+function shuffled<T>(items: readonly T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j] as T, out[i] as T];
+  }
+  return out;
+}
+
+/** Cycles through `messages`, shuffled, every couple of seconds, so a wait has some company. */
+function useRotating(messages: readonly string[], everyMs = 2200): string {
+  const [order] = useState(() => shuffled(messages));
   const [i, setI] = useState(0);
   useEffect(() => {
-    if (messages.length < 2) return;
-    const id = setInterval(() => setI((n) => (n + 1) % messages.length), everyMs);
+    if (order.length < 2) return;
+    const id = setInterval(() => setI((n) => (n + 1) % order.length), everyMs);
     return () => clearInterval(id);
-  }, [messages, everyMs]);
-  return messages[i % messages.length] ?? "";
+  }, [order, everyMs]);
+  return order[i % order.length] ?? "";
 }
 
 /** A load that fills a pane: the mark, and a message that changes as you wait. */
@@ -73,28 +84,48 @@ export function LoadingScene({ messages, py = 48 }: { messages: readonly string[
 }
 
 export const QUEUE_MESSAGES = [
-  "Asking GitHub what needs your eyes…",
-  "Lining up the quick wins…",
-  "Counting the lines so you don't have to…",
-  "Checking which builds are green…",
-  "Sorting easy from hard…",
+  "Shaking the pull request tree…",
+  "Herding stray branches…",
+  "Bribing the CI gremlins…",
+  "Waking the Octocat gently…",
+  "Sorting the one-liners from the sagas…",
+  "Finding out what “small refactor” means this time…",
+  "Brewing a fresh pot of diffs…",
+  "Untangling someone’s rebase…",
+  "Folding tiny origami LGTMs…",
+  "Asking the merge conflicts to see themselves out…",
+  "Counting semicolons. All of them.",
+  "Checking who wrote “quick fix” at 2am…",
+  "Polishing the green checkmarks…",
+  "Rounding up the stragglers…",
+  "Reading the room, and the README…",
 ] as const;
 
 export const MINE_MESSAGES = [
-  "Gathering your pull requests…",
-  "Finding everything with your name on it…",
-  "Checking on your builds…",
+  "Gathering your masterpieces…",
+  "Reading your commit messages back to you…",
+  "Checking whether CI likes you today…",
+  "Finding everything with your fingerprints on it…",
+  "Nudging your reviewers, politely…",
+  "Admiring your branch names…",
+  "Counting the TODOs you promised to fix…",
 ] as const;
 
 export const HISTORY_MESSAGES = [
-  "Digging through your past reviews…",
-  "Remembering what you approved…",
-  "Dusting off old verdicts…",
+  "Rewinding the tape…",
+  "Dusting off old LGTMs…",
+  "Revisiting your greatest approvals…",
+  "Consulting the archives…",
+  "Remembering who you were last Tuesday…",
+  "Leafing through your verdicts…",
 ] as const;
 
 export const DIFF_MESSAGES = [
-  "Fetching the diff…",
-  "Unfolding the hunks…",
+  "Unfurling the hunks…",
   "Painting the pluses green and the minuses red…",
-  "Highlighting the syntax…",
+  "Lining up the before and the after…",
+  "Untangling the indentation…",
+  "Ironing out the whitespace…",
+  "Highlighting the interesting bits…",
+  "Sharpening the syntax colours…",
 ] as const;
