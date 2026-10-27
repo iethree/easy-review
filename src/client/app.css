@@ -1237,10 +1237,21 @@ body {
   min-width: 0;
 }
 
+/*
+ * As wide as you've dragged it (ReviewPaneHandle), and never so wide that
+ * the list and the code go below their minimums when the window shrinks.
+ */
 .er-review-pane {
   flex: none;
-  width: 340px;
+  width: clamp(280px, var(--er-review-w, 340px), max(280px, calc(100% - 800px)));
   margin: 10px 16px 14px 0;
+}
+
+/* In the split's right padding, so the gap beside the pane stays as it was. */
+.er-review-pane-handle {
+  flex: none;
+  width: 12px;
+  margin: 10px 2px 14px -14px;
 }
 
 .er-review-pane-comment {

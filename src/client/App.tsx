@@ -41,7 +41,7 @@ import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
 import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
-import { SplitView, type SplitMode } from "./components/SplitView.tsx";
+import { ReviewPaneHandle, SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestNow, useReadyCount } from "./hooks/diffStore.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
 import { useReviewed } from "./hooks/useReviewed.ts";
@@ -1076,6 +1076,7 @@ export function App() {
               />
             }
           />
+          {reviewPaneOpen && <ReviewPaneHandle />}
           {reviewPaneOpen && (
             <ReviewPane
               key={selected?.id ?? "none"}
