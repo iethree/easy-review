@@ -57,6 +57,7 @@ import { useHidden } from "./hooks/useHidden.ts";
 import { invalidateConversation } from "./hooks/useConversation.ts";
 import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
+import { resolveTab, reviewTab, tabOrder } from "./previewTabs.ts";
 import { isReviewed } from "./reviewMeta.ts";
 import { DIFFICULTY_COLOR } from "./theme.ts";
 
@@ -342,9 +343,9 @@ export function App() {
   });
 
   const openAiReview = useCallback(
-    (pr: PullRequest) => {
+    (pr: PullRequest, reviewerId: string) => {
       select(pr);
-      setPreviewTab("claude");
+      setPreviewTab(reviewTab(reviewerId));
     },
     [select],
   );
@@ -364,9 +365,10 @@ export function App() {
   const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
 
   const runAiReview = useCallback(
-    (pr: PullRequest, ids: string[] | undefined) => {
-      openAiReview(pr);
-      ai.start(pr, ids).catch((err: unknown) =>
+    (pr: PullRequest, reviewerId: string) => {
+      setPickFor(null);
+      openAiReview(pr, reviewerId);
+      ai.start(pr, [reviewerId]).catch((err: unknown) =>
         notifications.show({
           color: "red",
           title: "Couldn't start the review",
@@ -378,19 +380,19 @@ export function App() {
     [openAiReview, ai.start],
   );
 
-  /** With no reviewers named: the only one, or a choice of them. */
+  /** With no reviewer named: open the + over the pull request, to choose one. */
   const startAiReview = useCallback(
-    (pr: PullRequest, ids?: string[]) => {
-      if (ids || reviewers.reviewers.length <= 1) {
-        runAiReview(pr, ids ?? reviewers.reviewers.map((r) => r.id).slice(0, 1));
+    (pr: PullRequest, reviewerId?: string) => {
+      if (reviewerId !== undefined) {
+        runAiReview(pr, reviewerId);
         return;
       }
-      openAiReview(pr);
+      select(pr);
       setPickFor(pr);
       // The files may have been edited elsewhere since they were read.
       void reviewers.refresh().catch(() => {});
     },
-    [runAiReview, openAiReview, reviewers.reviewers, reviewers.refresh],
+    [runAiReview, select, reviewers.refresh],
   );
 
   openRef.current = (job) => {
@@ -411,7 +413,7 @@ export function App() {
     })[where](
       target.id,
     );
-    setPreviewTab("claude");
+    setPreviewTab(reviewTab(job.reviewerId));
     setExpanded(narrow);
     return true;
   };
@@ -419,7 +421,6 @@ export function App() {
   const aiControls = useMemo<AiControls>(
     () => ({
       available: ai.available,
-      byPr: ai.byPr,
       reviewsByPr: ai.reviewsByPr,
       reviewerIds,
       start: startAiReview,
@@ -428,22 +429,18 @@ export function App() {
       findingAdded: () => setReviewPaneOpen(true),
       pickingFor: pickFor?.id ?? null,
       reviewers: reviewers.reviewers,
-      pick: (pr, ids) => {
-        setPickFor(null);
-        runAiReview(pr, ids);
-      },
       cancelPick: () => setPickFor(null),
       manageReviewers: () => {
         setPickFor(null);
         setPage("reviewers");
       },
     }),
-    [ai.available, ai.byPr, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, runAiReview],
+    [ai.available, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers],
   );
 
   const queueAi = useMemo(
-    () => (ai.available ? { byPr: ai.byPr, onStart: startAiReview, onOpen: openAiReview } : undefined),
-    [ai.available, ai.byPr, startAiReview, openAiReview],
+    () => (ai.available ? { byPr: ai.byPr, reviewsByPr: ai.reviewsByPr } : undefined),
+    [ai.available, ai.byPr, ai.reviewsByPr],
   );
 
   // Make sure the selected diff, and the ones either side of it, are loading
@@ -648,11 +645,10 @@ export function App() {
           previewScrollRef.current?.scrollBy({ top: action.direction * 80 });
           return;
         case "cycleTab": {
-          const tabs: PreviewTab[] = ai.available
-            ? ["description", "diff", "claude"]
-            : ["description", "diff"];
+          const reviews = (ai.available && selected && ai.reviewsByPr.get(prKey(selected))) || [];
+          const tabs = tabOrder(reviews);
           setPreviewTab((t) => {
-            const i = Math.max(tabs.indexOf(t), 0);
+            const i = Math.max(tabs.indexOf(resolveTab(t, reviews).tab), 0);
             return tabs[(i + action.direction + tabs.length) % tabs.length] ?? "diff";
           });
           return;
@@ -671,11 +667,12 @@ export function App() {
           }
           return;
         case "claude": {
-          // Start a Claude review, or flip between it and the diff.
+          // Flip between Claude's review and the diff — or, with none yet,
+          // choose a reviewer from the +.
           if (!ai.available || !selected) return;
           const job = ai.byPr.get(prKey(selected));
-          if (!job || job.status === "cancelled") startAiReview(selected);
-          else setPreviewTab((t) => (t === "claude" ? "diff" : "claude"));
+          if (!job) startAiReview(selected);
+          else setPreviewTab((t) => (t.startsWith("review:") ? "diff" : reviewTab(job.reviewerId)));
           if (narrow) setExpanded(true);
           return;
         }
@@ -731,6 +728,7 @@ export function App() {
     toggleColorScheme,
     ai.available,
     ai.byPr,
+    ai.reviewsByPr,
     startAiReview,
     askApprove,
     toggleHidden,

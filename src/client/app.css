@@ -647,9 +647,16 @@ body {
    Claude reviews
    --------------------------------------------------------------------------- */
 
-/* The robot breathes while Claude works. */
-.er-robot[data-running="true"] {
+/* A review count breathes while Claude works. */
+.er-breathe[data-running="true"] {
   animation: er-breathe 1.4s ease-in-out infinite;
+}
+
+/* A row's count of Claude reviews, in a fixed slot so the rows line up. */
+.er-review-count {
+  display: inline-flex;
+  justify-content: center;
+  width: 22px;
 }
 
 @keyframes er-breathe {
@@ -663,7 +670,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .er-robot[data-running="true"] {
+  .er-breathe[data-running="true"] {
     animation: none;
   }
 }

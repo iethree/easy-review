@@ -28,9 +28,9 @@ interface Props {
   onUnhide?: (pr: PullRequest) => void;
   /** Present only when local Claude reviews are available. */
   ai?: {
+    /** One review per pull request, standing for all its reviewers (see groupByPr). */
     byPr: Map<string, AiReviewSummary>;
-    onStart: (pr: PullRequest) => void;
-    onOpen: (pr: PullRequest) => void;
+    reviewsByPr: Map<string, AiReviewSummary[]>;
   };
 }
 
@@ -139,8 +139,7 @@ export function QueueList({
             onFilterAuthor={onFilterAuthor}
             showRepo={showRepo}
             aiJob={ai?.byPr.get(prKey(pr))}
-            onAiStart={ai?.onStart}
-            onAiOpen={ai?.onOpen}
+            aiCount={ai?.reviewsByPr.get(prKey(pr))?.length ?? 0}
             onUnhide={variant === "hidden" ? onUnhide : undefined}
           />
         ))}

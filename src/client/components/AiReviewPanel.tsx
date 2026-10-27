@@ -34,7 +34,8 @@ import { ProseReview } from "./ProseReview.tsx";
 
 interface Props {
   pr: PullRequest;
-  job: AiReviewSummary | undefined;
+  job: AiReviewSummary;
+  /** Run this reviewer again. */
   onStart: () => void;
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
@@ -72,25 +73,22 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
   const detail = useReviewDetail(job);
   // The prose, and the findings block the review ends with, apart.
   const review = useMemo(() => (detail?.review ? splitReview(detail.review) : null), [detail?.review]);
-  const running = job !== undefined && isActive(job.status);
+  const running = isActive(job.status);
   useTick(running);
 
-  if (!job || job.status === "cancelled") {
+  if (job.status === "cancelled") {
     return (
       <Center py={60} px="md">
         <Stack align="center" gap="sm" maw={420}>
           <IconRobot size={40} color="var(--mantine-color-gray-5)" />
-          <Text fw={600}>{job ? "Review cancelled" : "No Claude review yet"}</Text>
+          <Text fw={600}>Review cancelled</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Checks out #{pr.number} into its own worktree and has Claude Code review it, once for
-            each reviewer you pick. Claude gets read-only tools, confined to that checkout.
+            Checks out #{pr.number} into its own worktree and has Claude Code review it as{" "}
+            {job.reviewerName}. Claude gets read-only tools, confined to that checkout.
           </Text>
           <Button leftSection={<IconRobot size={16} />} onClick={onStart}>
-            Review with Claude
+            Review again
           </Button>
-          <Text size="xs" c="dimmed">
-            or press <Code>c</Code>
-          </Text>
         </Stack>
       </Center>
     );
@@ -305,4 +303,17 @@ function ResumeButton({ command }: { command: string }) {
       </Popover.Dropdown>
     </Popover>
   );
+}
+
+/** A review's state, as the icon on its tab. */
+export function StatusIcon({ job }: { job: AiReviewSummary | undefined }) {
+  // The tab's own text colour: an indigo loader vanished on the selected tab, which is indigo too.
+  if (job && isActive(job.status)) return <Loader size={14} color="currentColor" />;
+  const color =
+    job?.status === "done"
+      ? "var(--mantine-color-teal-6)"
+      : job?.status === "failed"
+        ? "var(--mantine-color-red-6)"
+        : undefined; // currentColor
+  return <IconRobot size={14} color={color} />;
 }

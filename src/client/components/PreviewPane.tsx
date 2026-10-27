@@ -6,7 +6,6 @@ import {
   Center,
   Group,
   Kbd,
-  Popover,
   Stack,
   Tabs,
   Text,
@@ -31,9 +30,9 @@ import { useConversation } from "../hooks/useConversation.ts";
 import { useDrafts } from "../drafts.ts";
 import { isReviewed, PR_STATE, VERDICT } from "../reviewMeta.ts";
 import { relativeTime } from "../time.ts";
-import { AiReviewButton } from "./AiReviewButton.tsx";
-import { ClaudeReviews, StatusIcon } from "./ClaudeReviews.tsx";
-import { ReviewerPicker } from "./ReviewerPicker.tsx";
+import { type PreviewTab, resolveTab, reviewTab } from "../previewTabs.ts";
+import { AiReviewPanel, StatusIcon } from "./AiReviewPanel.tsx";
+import { ReviewerMenu } from "./ReviewerMenu.tsx";
 import { DIFF_MESSAGES, LoadingScene } from "./Loading.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import type { DiffThreadItem } from "./DiffThread.tsx";
@@ -72,30 +71,27 @@ interface Props {
   viewer: string | null;
 }
 
-/** Description comes first, as it does on GitHub. */
-export type PreviewTab = "description" | "diff" | "claude";
+export type { PreviewTab };
 
 /** Stable empty list, so the diff's memoised file blocks stay memoised. */
 const NO_THREADS: DiffThreadItem[] = [];
+const NO_REVIEWS: AiReviewSummary[] = [];
 
 /** Local Claude reviews; `available` is false when the claude CLI isn't installed. */
 export interface AiControls {
   available: boolean;
-  /** One review per pull request, standing for all its reviewers (see groupByPr). */
-  byPr: Map<string, AiReviewSummary>;
   /** The latest review by each reviewer. */
   reviewsByPr: Map<string, AiReviewSummary[]>;
   reviewerIds: ReadonlySet<string>;
-  /** No ids: ask which reviewers (or use the only one). */
-  start: (pr: PullRequest, reviewerIds?: string[]) => void;
+  /** No reviewer: open the + to choose one. */
+  start: (pr: PullRequest, reviewerId?: string) => void;
   cancel: (id: string) => void;
   remove: (id: string) => void;
   /** One of Claude's findings went into your review. */
   findingAdded: () => void;
-  /** The pull request whose reviewers are being chosen, if any. */
+  /** The pull request whose + is open, if any. */
   pickingFor: string | null;
   reviewers: Reviewer[];
-  pick: (pr: PullRequest, reviewerIds: string[]) => void;
   cancelPick: () => void;
   manageReviewers: () => void;
 }
@@ -141,13 +137,13 @@ export function PreviewPane(props: Props) {
 
   const stale = deferred !== null && deferred.id !== pr.id;
   const { ai } = props;
-  const tab: PreviewTab = props.tab === "claude" && !ai.available ? "diff" : props.tab;
-  const job = ai.available ? ai.byPr.get(prKey(pr)) : undefined;
+  const reviews = (ai.available && ai.reviewsByPr.get(prKey(pr))) || NO_REVIEWS;
+  const { tab, review } = resolveTab(props.tab, reviews);
 
   return (
     // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
     <div className="er-pane" data-focused={focused} onFocus={onFocusPane}>
-      <Header {...props} pr={pr} job={job} />
+      <Header {...props} pr={pr} />
       <Tabs
         value={tab}
         onChange={(v) => props.onTabChange((v as PreviewTab) ?? "description")}
@@ -172,10 +168,24 @@ export function PreviewPane(props: Props) {
           >
             Diff
           </Tabs.Tab>
-          {ai.available && (
-            <Tabs.Tab value="claude" leftSection={<StatusIcon job={job} />}>
-              Claude review
+          {reviews.map((r) => (
+            <Tabs.Tab key={r.id} value={reviewTab(r.reviewerId)} leftSection={<StatusIcon job={r} />}>
+              {r.reviewerName}
             </Tabs.Tab>
+          ))}
+          {ai.available && (
+            <ReviewerMenu
+              reviewers={ai.reviewers}
+              reviews={reviews}
+              opened={ai.pickingFor === pr.id}
+              onOpenChange={(open) => (open ? ai.start(pr) : ai.cancelPick())}
+              onStart={(id) => ai.start(pr, id)}
+              onShow={(id) => {
+                ai.cancelPick();
+                props.onTabChange(reviewTab(id));
+              }}
+              onManage={ai.manageReviewers}
+            />
           )}
         </Tabs.List>
       </Tabs>
@@ -191,12 +201,16 @@ export function PreviewPane(props: Props) {
         >
           <Box p="sm">
             <ErrorBoundary>
-              {tab === "claude" ? (
-                <ClaudeReviews
+              {review ? (
+                <AiReviewPanel
+                  key={review.id}
                   pr={deferred}
-                  jobs={ai.reviewsByPr.get(prKey(deferred)) ?? []}
-                  reviewerIds={ai.reviewerIds}
-                  onStart={(ids) => ai.start(deferred, ids)}
+                  job={review}
+                  // Re-run by the same reviewer; one deleted since, or a review
+                  // from before there were reviewers, asks instead.
+                  onStart={() =>
+                    ai.start(deferred, ai.reviewerIds.has(review.reviewerId) ? review.reviewerId : undefined)
+                  }
                   onCancel={ai.cancel}
                   onRemove={ai.remove}
                   onFindingAdded={ai.findingAdded}
@@ -226,12 +240,9 @@ function Header({
   expanded,
   onToggleExpand,
   narrow,
-  ai,
-  onTabChange,
   hideState,
-  job,
   viewer,
-}: Props & { pr: PullRequest; job: AiReviewSummary | undefined }) {
+}: Props & { pr: PullRequest }) {
   const history = isReviewed(pr) ? pr : null;
   const verdict = history ? VERDICT[history.verdict] : null;
   const state = history ? PR_STATE[history.state] : null;
@@ -289,46 +300,6 @@ function Header({
               onApproveOpenChange={onApproveOpenChange}
               ownPr={viewer !== null && pr.author.toLowerCase() === viewer.toLowerCase()}
             />
-          )}
-          {ai.available && (
-            // Choosing reviewers pops out of the robot, however it was asked for:
-            // every way in (c, a row's robot, the Claude tab) selects this pull request.
-            <Popover
-              opened={ai.pickingFor === pr.id}
-              onChange={(open) => !open && ai.cancelPick()}
-              position="bottom-end"
-              width={320}
-              shadow="md"
-              radius="md"
-              withArrow
-              arrowPosition="center"
-              offset={6}
-            >
-              <Popover.Target>
-                <span style={{ display: "inline-flex" }}>
-                  <AiReviewButton
-                    job={job}
-                    headSha={pr.headSha}
-                    label={`${pr.repo}#${pr.number}`}
-                    onStart={() => {
-                      onTabChange("claude");
-                      ai.start(pr);
-                    }}
-                    onOpen={() => onTabChange("claude")}
-                  />
-                </span>
-              </Popover.Target>
-              <Popover.Dropdown p="sm">
-                {ai.pickingFor === pr.id && (
-                  <ReviewerPicker
-                    reviewers={ai.reviewers}
-                    onStart={(ids) => ai.pick(pr, ids)}
-                    onCancel={ai.cancelPick}
-                    onManage={ai.manageReviewers}
-                  />
-                )}
-              </Popover.Dropdown>
-            </Popover>
           )}
           <Tooltip label={history ? "Open your review on GitHub" : "Open on GitHub (g)"}>
             <ActionIcon
