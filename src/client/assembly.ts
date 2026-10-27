@@ -8,6 +8,7 @@
 import { useSyncExternalStore } from "react";
 import { addDraft } from "./drafts.ts";
 import { commentBody, placeFinding, summaryItem, type Finding } from "../shared/findings.ts";
+import { findCodeRefs, withoutMarker } from "./proseBlocks.ts";
 import type { ParsedDiff, PullRequest } from "../shared/types.ts";
 
 export interface Assembly {
@@ -138,6 +139,67 @@ export function addFinding(
   commit(
     withAssembly(current(), pr.id, {
       summary: place.kind === "summary" ? appendLine(a.summary, summaryItem(finding)) : a.summary,
+      added: a.added.includes(key) ? a.added : [...a.added, key],
+    }),
+  );
+  return place.kind;
+}
+
+/** Paragraphs go in the summary as paragraphs: a blank line between. */
+export function appendBlock(summary: string, block: string): string {
+  const trimmed = summary.replace(/\s+$/, "");
+  return trimmed ? `${trimmed}\n\n${block.trim()}` : block.trim();
+}
+
+/**
+ * Where a piece of Claude's prose would go: a comment on the lines it points
+ * at, when it points at exactly one place in the diff, otherwise the summary.
+ */
+export function placeProse(
+  pr: Pick<PullRequest, "headSha">,
+  review: { headSha: string },
+  text: string,
+  diff: ParsedDiff | null,
+): ReturnType<typeof placeFinding> {
+  const refs = findCodeRefs(text);
+  const [ref] = refs;
+  if (refs.length !== 1 || !ref) return { kind: "summary" };
+  return placeFinding(
+    { severity: "nit", title: "", body: "", path: ref.path, line: ref.line, startLine: ref.startLine, side: "RIGHT" },
+    diff,
+    review.headSha,
+    pr.headSha,
+  );
+}
+
+export function proseKey(reviewId: string, index: number): string {
+  return `${reviewId}:p${index}`;
+}
+
+/** Puts one piece of Claude's prose into your review, where placeProse says. */
+export function addProse(
+  pr: PullRequest,
+  review: { id: string; headSha: string },
+  text: string,
+  index: number,
+  diff: ParsedDiff | null,
+): "line" | "summary" {
+  const place = placeProse(pr, review, text, diff);
+  const a = current()[pr.id] ?? EMPTY;
+  const key = proseKey(review.id, index);
+  if (place.kind === "line") {
+    addDraft(pr.id, {
+      path: place.path,
+      line: place.line,
+      ...(place.startLine !== undefined ? { startLine: place.startLine } : {}),
+      side: place.side,
+      body: withoutMarker(text),
+      commitId: pr.headSha,
+    });
+  }
+  commit(
+    withAssembly(current(), pr.id, {
+      summary: place.kind === "summary" ? appendBlock(a.summary, text) : a.summary,
       added: a.added.includes(key) ? a.added : [...a.added, key],
     }),
   );

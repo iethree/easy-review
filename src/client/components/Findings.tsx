@@ -1,10 +1,11 @@
 import { Badge, Button, Code, Group, Stack, Text } from "@mantine/core";
-import { IconCheck, IconPlus } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import { addFinding, findingKey, useAssembly } from "../assembly.ts";
 import { peek } from "../hooks/diffStore.ts";
-import type { Finding, FindingSeverity } from "../../shared/findings.ts";
+import { placeFinding, type Finding, type FindingSeverity } from "../../shared/findings.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { Markdown } from "./Markdown.tsx";
+import { AddButton } from "./ProseReview.tsx";
 
 const SEVERITY: Record<FindingSeverity, { color: string; label: string }> = {
   blocking: { color: "red", label: "Blocking" },
@@ -31,9 +32,17 @@ export function Findings({ pr, review, findings, onAdded }: Props) {
   const isAdded = (i: number) => added.includes(findingKey(review.id, i));
   const remaining = findings.map((_, i) => i).filter((i) => !isAdded(i));
 
+  const entry = peek(pr);
+  const diff = entry?.status === "ready" ? entry.data.diff : null;
+  /** What the + will do with it, for its tooltip. */
+  const destination = (finding: Finding) => {
+    const place = placeFinding(finding, diff, review.headSha, pr.headSha);
+    return place.kind === "line"
+      ? `Comment on ${place.path.split("/").pop()}:${place.startLine ? `${place.startLine}–` : ""}${place.line}`
+      : "Add to summary";
+  };
+
   const add = (indexes: number[]) => {
-    const entry = peek(pr);
-    const diff = entry?.status === "ready" ? entry.data.diff : null;
     for (const i of indexes) {
       const finding = findings[i];
       if (finding) addFinding(pr, review, finding, i, diff);
@@ -61,7 +70,7 @@ export function Findings({ pr, review, findings, onAdded }: Props) {
           // A section per point; its action shows on hover or focus, so the
           // list reads as a review rather than a wall of buttons.
           <section key={findingKey(review.id, i)} className="er-finding" data-added={done} aria-label={finding.title}>
-            <Group gap={6} wrap="nowrap" pr={110}>
+            <Group gap={6} wrap="nowrap" pr={32}>
               <Badge size="xs" variant="light" color={severity.color} style={{ flex: "none" }}>
                 {severity.label}
               </Badge>
@@ -89,15 +98,7 @@ export function Findings({ pr, review, findings, onAdded }: Props) {
               </div>
             )}
             <div className="er-finding-action">
-              {done ? (
-                <Badge size="sm" variant="light" color="teal" leftSection={<IconCheck size={11} />}>
-                  In review
-                </Badge>
-              ) : (
-                <Button size="compact-xs" leftSection={<IconPlus size={12} />} onClick={() => add([i])}>
-                  Add to review
-                </Button>
-              )}
+              <AddButton done={done} label={destination(finding)} onAdd={() => add([i])} />
             </div>
           </section>
         );

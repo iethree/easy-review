@@ -101,6 +101,17 @@ export function splitReview(text: string): { prose: string; findings: Finding[] 
 }
 
 /**
+ * The diff's file for a path as written in a review: the whole path, or —
+ * since reviews often shorten them — the end of exactly one file's path.
+ */
+function fileFor(diff: ParsedDiff, path: string) {
+  const exact = diff.files.find((f) => f.path === path || f.oldPath === path);
+  if (exact) return exact;
+  const tail = diff.files.filter((f) => f.path.endsWith(`/${path}`));
+  return tail.length === 1 ? tail[0] : undefined;
+}
+
+/**
  * Where a finding can go in a review. GitHub takes a line comment only on a
  * line in the diff, of the commit the review is on — so a finding about any
  * other line, or from a review of an older commit, goes in the summary.
@@ -113,7 +124,7 @@ export function placeFinding(
 ): { kind: "line"; path: string; line: number; startLine?: number; side: DiffSide } | { kind: "summary" } {
   const { path, line, side, startLine } = finding;
   if (!path || !line || !side || !diff || reviewedSha !== headSha) return { kind: "summary" };
-  const file = diff.files.find((f) => f.path === path || f.oldPath === path);
+  const file = fileFor(diff, path);
   const has = (lines: DiffLine[], n: number) =>
     lines.some((l) => (side === "RIGHT" ? l.newNumber === n : l.kind === "del" && l.oldNumber === n));
   // A range must sit within one hunk: GitHub won't take one across a gap.

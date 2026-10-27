@@ -4,7 +4,7 @@ import { useState } from "react";
 import { composeApprovalBody, DEFAULT_APPROVAL_EMOJI } from "../../shared/approval.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { clearAssembly, setSummary, useAssembly } from "../assembly.ts";
-import { removeDrafts, reviewCommit, useDrafts } from "../drafts.ts";
+import { editDraft, removeDrafts, reviewCommit, useDrafts } from "../drafts.ts";
 
 interface Props {
   pr: PullRequest | null;
@@ -106,9 +106,19 @@ export function ReviewPane({ pr, ownPr, reviewed, onSubmit, onClose }: Props) {
                         <IconX size={12} />
                       </ActionIcon>
                     </Group>
-                    <Text size="xs" mt={4} lineClamp={4} style={{ whiteSpace: "pre-wrap" }}>
-                      {draft.body}
-                    </Text>
+                    <Textarea
+                      mt={6}
+                      size="xs"
+                      autosize
+                      minRows={2}
+                      value={draft.body}
+                      onChange={(e) => editDraft(pr.id, draft.id, e.currentTarget.value)}
+                      // GitHub won't take an empty comment: emptied, it goes.
+                      onBlur={(e) => {
+                        if (!e.currentTarget.value.trim()) removeDrafts(pr.id, [draft.id]);
+                      }}
+                      aria-label={`Comment on ${draft.path}:${draft.line}`}
+                    />
                   </div>
                 ))
               )}

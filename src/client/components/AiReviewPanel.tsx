@@ -30,7 +30,7 @@ import { useReviewDetail } from "../hooks/useLocalReviews.ts";
 import { relativeTime } from "../time.ts";
 import { splitReview } from "../../shared/findings.ts";
 import { Findings } from "./Findings.tsx";
-import { Markdown } from "./Markdown.tsx";
+import { ProseReview } from "./ProseReview.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -193,7 +193,12 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
 
       {job.status === "done" && review && (
         <>
-          <Markdown>{review.prose}</Markdown>
+          <ProseReview
+            pr={pr}
+            review={{ id: job.id, headSha: job.headSha }}
+            markdown={review.prose}
+            onAdded={() => onFindingAdded?.()}
+          />
           {review.findings.length > 0 && (
             <Findings
               pr={pr}

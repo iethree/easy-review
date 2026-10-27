@@ -1197,7 +1197,8 @@ body {
 }
 
 /* Adding is a mouseover away, or a Tab away; once added, it says so. */
-.er-finding-action {
+.er-finding-action,
+.er-add-action {
   position: absolute;
   top: 8px;
   right: 10px;
@@ -1207,14 +1208,49 @@ body {
 
 .er-finding:hover .er-finding-action,
 .er-finding:focus-within .er-finding-action,
-.er-finding[data-added="true"] .er-finding-action {
+.er-finding[data-added="true"] .er-finding-action,
+.er-addable:hover .er-add-action,
+.er-addable:focus-within .er-add-action,
+.er-addable[data-added="true"] .er-add-action {
   opacity: 1;
 }
 
 @media (hover: none) {
-  .er-finding-action {
+  .er-finding-action,
+  .er-add-action {
     opacity: 1;
   }
+}
+
+/* Claude's prose, a block at a time (components/ProseReview.tsx). */
+.er-addable {
+  position: relative;
+  margin: 0 -8px;
+  padding: 4px 8px;
+  border-radius: var(--mantine-radius-sm);
+  transition: background-color 120ms ease;
+}
+
+.er-addable:hover,
+.er-addable:focus-within {
+  background: var(--er-row-hover);
+}
+
+.er-addable[data-added="true"] {
+  box-shadow: inset 2px 0 0 var(--mantine-color-teal-5);
+}
+
+/* One block per Markdown render: the spacing between them is the blocks'. */
+.er-prose .er-markdown > :first-child {
+  margin-top: 0;
+}
+
+.er-prose .er-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.er-prose > * + * {
+  margin-top: 8px;
 }
 
 .er-finding-suggestion {
