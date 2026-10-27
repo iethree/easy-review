@@ -26,7 +26,6 @@ import {
   IconSettings,
   IconSun,
   IconUser,
-  IconUsers,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficulty.ts";
@@ -40,10 +39,9 @@ import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
-import { ReviewersPage } from "./components/ReviewersPage.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
-import { SettingsPage } from "./components/SettingsPage.tsx";
+import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
 import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
 import { SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestNow, useReadyCount } from "./hooks/diffStore.ts";
@@ -130,8 +128,13 @@ export function App() {
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  /** A page in place of the lists: Reviewers, or Settings. */
-  const [page, setPage] = useState<"reviewers" | "settings" | null>(null);
+  /** Settings, as a page in place of the lists; and which of its sections. */
+  const [page, setPage] = useState<"settings" | null>(null);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("queue");
+  const openSettings = useCallback((section?: SettingsSection) => {
+    if (section) setSettingsSection(section);
+    setPage("settings");
+  }, []);
   /** The third pane: the review you're putting together. */
   const [reviewPaneOpen, setReviewPaneOpen] = useState(false);
   /** The pull request whose reviewers are being chosen. */
@@ -432,10 +435,10 @@ export function App() {
       cancelPick: () => setPickFor(null),
       manageReviewers: () => {
         setPickFor(null);
-        setPage("reviewers");
+        openSettings("reviewers");
       },
     }),
-    [ai.available, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers],
+    [ai.available, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, openSettings],
   );
 
   const queueAi = useMemo(
@@ -748,7 +751,7 @@ export function App() {
         setShortcutsOpen(true);
         return;
       case "reviewers":
-        if (ai.supported) setPage("reviewers");
+        if (ai.supported) openSettings("reviewers");
         return;
     }
   });
@@ -993,18 +996,6 @@ export function App() {
               <IconClipboardText size={17} />
             </ActionIcon>
           </Tooltip>
-          {ai.supported && (
-            <Tooltip label="Reviewers">
-              <ActionIcon
-                variant={page === "reviewers" ? "light" : "subtle"}
-                color="gray"
-                onClick={() => setPage("reviewers")}
-                aria-label="Reviewers"
-              >
-                <IconUsers size={17} />
-              </ActionIcon>
-            </Tooltip>
-          )}
           <Tooltip label="Shortcuts (?)">
             <ActionIcon
               variant="subtle"
@@ -1038,11 +1029,12 @@ export function App() {
         </Group>
       </header>
 
-      {page === "reviewers" && <ReviewersPage store={reviewers} onClose={() => setPage(null)} />}
       {page === "settings" && (
         <SettingsPage
           onClose={() => setPage(null)}
-          onOpenReviewers={() => setPage("reviewers")}
+          section={settingsSection}
+          onSectionChange={setSettingsSection}
+          reviewers={reviewers}
           settings={settings}
           onChange={update}
           onReset={reset}

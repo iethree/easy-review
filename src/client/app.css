@@ -1007,8 +1007,8 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   Pages — Reviewers and Settings: a list of what there is beside the one
-   open, in the space the pull request panes usually take.
+   Settings: a page in place of the pull request panes, its sections listed
+   beside the one open.
    --------------------------------------------------------------------------- */
 
 .er-page {
@@ -1038,6 +1038,19 @@ body {
 
 .er-page-content {
   overflow-y: auto;
+}
+
+/* Settings › Reviewers: the reviewers beside the one being edited. */
+.er-reviewers {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 100%;
+}
+
+.er-reviewers-list {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--er-row-border);
 }
 
 /* Settings read best at a form's width, not the window's. */
