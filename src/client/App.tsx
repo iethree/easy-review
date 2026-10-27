@@ -21,10 +21,8 @@ import {
   IconKeyboard,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
-  IconMoon,
   IconRefresh,
   IconSettings,
-  IconSun,
   IconUser,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -99,7 +97,7 @@ export function App() {
   // The history hook only fetches once its tab has been opened.
   const history = useReviewed(tab === "reviewed");
   const mine = useMine(tab === "mine");
-  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const { toggleColorScheme } = useMantineColorScheme();
   const readyCount = useReadyCount();
   const narrow = useMediaQuery("(max-width: 900px)");
   const { hidden, setHiddenFor } = useHidden();
@@ -1014,16 +1012,6 @@ export function App() {
               aria-label="Settings"
             >
               <IconSettings size={17} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Toggle theme (t)">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={toggleColorScheme}
-              aria-label={colorScheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {colorScheme === "dark" ? <IconSun size={17} /> : <IconMoon size={17} />}
             </ActionIcon>
           </Tooltip>
         </Group>

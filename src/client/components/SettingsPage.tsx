@@ -8,13 +8,24 @@ import {
   NavLink,
   NumberInput,
   Progress,
+  SegmentedControl,
   Stack,
   Switch,
   Text,
   Title,
   Tooltip,
+  type MantineColorScheme,
+  useMantineColorScheme,
 } from "@mantine/core";
-import { IconAlertCircle, IconArrowLeft, IconFolder, IconListCheck, IconRobot, IconUsers } from "@tabler/icons-react";
+import {
+  IconAlertCircle,
+  IconArrowLeft,
+  IconFolder,
+  IconListCheck,
+  IconPalette,
+  IconRobot,
+  IconUsers,
+} from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { LocalStatus } from "../../shared/aiReview.ts";
 import { rateDifficulty, type Difficulty } from "../../shared/difficulty.ts";
@@ -39,7 +50,7 @@ interface Props {
   onSectionChange: (section: SettingsSection) => void;
 }
 
-export type SettingsSection = "queue" | "claude" | "reviewers" | "checkouts";
+export type SettingsSection = "queue" | "appearance" | "claude" | "reviewers" | "checkouts";
 
 /**
  * Settings: a page of its own, in place of the pull requests. Changes apply
@@ -58,7 +69,7 @@ export function SettingsPage({
   onSectionChange,
 }: Props) {
   // The Claude sections exist only where reviews can run.
-  const section = local.supported || wanted === "queue" ? wanted : "queue";
+  const section = local.supported || wanted === "queue" || wanted === "appearance" ? wanted : "queue";
 
   // A reviewer being edited isn't left behind unsaved without asking.
   const dirty = useRef(false);
@@ -105,6 +116,7 @@ export function SettingsPage({
 
   const sections: { value: SettingsSection; label: string; icon: React.ReactNode }[] = [
     { value: "queue", label: "Queue", icon: <IconListCheck size={16} /> },
+    { value: "appearance", label: "Appearance", icon: <IconPalette size={16} /> },
     ...(local.supported
       ? [
           { value: "claude" as const, label: "Claude review", icon: <IconRobot size={16} /> },
@@ -144,7 +156,9 @@ export function SettingsPage({
             <ReviewersSettings store={reviewers} onDirtyChange={onDirtyChange} />
           ) : (
             <div className="er-settings">
-              {section === "checkouts" && local.supported ? (
+              {section === "appearance" ? (
+                <AppearanceSettings />
+              ) : section === "checkouts" && local.supported ? (
                 // Mounted only while it's showing, so opening Settings doesn't run `du`.
                 <CheckoutSettings active />
               ) : section === "claude" && local.supported ? (
@@ -292,5 +306,30 @@ export function SettingsPage({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Light, dark, or whichever the system is in — also `t`, from anywhere. */
+function AppearanceSettings() {
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  return (
+    <Box>
+      <Title order={3} mb={4}>
+        Colour scheme
+      </Title>
+      <Text size="xs" c="dimmed" mb="sm">
+        System follows your computer's light or dark mode. Press <b>t</b> anywhere to switch between light and
+        dark.
+      </Text>
+      <SegmentedControl
+        value={colorScheme}
+        onChange={(v) => setColorScheme(v as MantineColorScheme)}
+        data={[
+          { value: "light", label: "Light" },
+          { value: "dark", label: "Dark" },
+          { value: "auto", label: "System" },
+        ]}
+      />
+    </Box>
   );
 }
