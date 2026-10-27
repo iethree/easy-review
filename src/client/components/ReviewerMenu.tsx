@@ -20,7 +20,15 @@ export function ReviewerMenu({ reviewers, reviews, opened, onOpenChange, onStart
     <Menu opened={opened} onChange={onOpenChange} position="bottom-start" width={260} shadow="md" radius="md">
       <Menu.Target>
         <Tooltip label="Review with… (c)" disabled={opened}>
-          <ActionIcon variant="subtle" color="gray" size="sm" ml={4} aria-label="Review with Claude">
+          {/* Centred on the tabs: the strip stretches its items, and this one has a height of its own. */}
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            size="sm"
+            ml={4}
+            style={{ alignSelf: "center" }}
+            aria-label="Review with Claude"
+          >
             <IconPlus size={15} />
           </ActionIcon>
         </Tooltip>
