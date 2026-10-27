@@ -54,6 +54,7 @@ export const PrRow = memo(function PrRow({
     // biome-ignore lint/a11y: rows are chosen with the keyboard through the app's keymap (j/k), not focus
     <div
       className="er-item"
+      data-pr-id={pr.id}
       data-selected={selected}
       data-row-id={pr.id}
       style={{ "--er-accent": accent } as React.CSSProperties}

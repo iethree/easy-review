@@ -439,9 +439,27 @@ export function App() {
     [ai.available, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, openSettings],
   );
 
+  /** From a row's context menu: start it where it is, without opening it. */
+  const quickStart = useCallback(
+    (pr: PullRequest, reviewerId: string) => {
+      ai.start(pr, [reviewerId]).catch((err: unknown) =>
+        notifications.show({
+          color: "red",
+          title: "Couldn't start the review",
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 8000,
+        }),
+      );
+    },
+    [ai.start],
+  );
+
   const queueAi = useMemo(
-    () => (ai.available ? { byPr: ai.byPr, reviewsByPr: ai.reviewsByPr } : undefined),
-    [ai.available, ai.byPr, ai.reviewsByPr],
+    () =>
+      ai.available
+        ? { byPr: ai.byPr, reviewsByPr: ai.reviewsByPr, reviewers: reviewers.reviewers, start: quickStart }
+        : undefined,
+    [ai.available, ai.byPr, ai.reviewsByPr, reviewers.reviewers, quickStart],
   );
 
   // Make sure the selected diff, and the ones either side of it, are loading

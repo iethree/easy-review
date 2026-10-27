@@ -1,8 +1,10 @@
 import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
 import { IconAlertCircle, IconEyeOff, IconInbox } from "@tabler/icons-react";
-import { prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { useState } from "react";
+import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { PrRow } from "./PrRow.tsx";
+import { QuickReviewMenu } from "./QuickReviewMenu.tsx";
 import { LoadingScene, MINE_MESSAGES, QUEUE_MESSAGES } from "./Loading.tsx";
 
 interface Props {
@@ -31,6 +33,9 @@ interface Props {
     /** One review per pull request, standing for all its reviewers (see groupByPr). */
     byPr: Map<string, AiReviewSummary>;
     reviewsByPr: Map<string, AiReviewSummary[]>;
+    reviewers: Reviewer[];
+    /** Start a reviewer on a pull request, without leaving what's on screen. */
+    start: (pr: PullRequest, reviewerId: string) => void;
   };
 }
 
@@ -52,6 +57,7 @@ export function QueueList({
   onUnhide,
   ai,
 }: Props) {
+  const [menuAt, setMenuAt] = useState<{ pr: PullRequest; x: number; y: number } | null>(null);
   if (error) {
     return (
       <Alert
@@ -119,6 +125,16 @@ export function QueueList({
   return (
     <>
       <div
+        // Right-click a row for its reviewers. One handler for the list, so
+        // the rows (memoised) don't each need one.
+        onContextMenu={(e) => {
+          if (!ai) return;
+          const id = (e.target as HTMLElement).closest<HTMLElement>("[data-pr-id]")?.dataset.prId;
+          const pr = id ? rows.find((r) => r.id === id) : undefined;
+          if (!pr) return;
+          e.preventDefault();
+          setMenuAt({ pr, x: e.clientX, y: e.clientY });
+        }}
         role="listbox"
         aria-label={
           variant === "hidden"
@@ -144,6 +160,15 @@ export function QueueList({
           />
         ))}
       </div>
+      {ai && (
+        <QuickReviewMenu
+          at={menuAt}
+          reviewers={ai.reviewers}
+          reviews={(menuAt && ai.reviewsByPr.get(prKey(menuAt.pr))) || []}
+          onStart={ai.start}
+          onClose={() => setMenuAt(null)}
+        />
+      )}
 
       <Group justify="space-between" px="sm" py={8}>
         <Text size="10px" c="dimmed">
