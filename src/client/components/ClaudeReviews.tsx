@@ -34,10 +34,18 @@ export function ClaudeReviews({ pr, jobs, reviewerIds, onStart, onCancel, onRemo
 
   return (
     <>
-      <Tabs value={job.reviewerId} onChange={setChosen} variant="pills" radius="xl" mb="sm">
+      {/* Tabs by job id: a review from before there were reviewers has "" for
+          its reviewer, which Mantine won't take as a tab's value. */}
+      <Tabs
+        value={job.id}
+        onChange={(id) => setChosen(jobs.find((j) => j.id === id)?.reviewerId ?? null)}
+        variant="pills"
+        radius="xl"
+        mb="sm"
+      >
         <Tabs.List>
           {jobs.map((j) => (
-            <Tabs.Tab key={j.reviewerId} value={j.reviewerId} leftSection={<StatusIcon job={j} />}>
+            <Tabs.Tab key={j.id} value={j.id} leftSection={<StatusIcon job={j} />}>
               {j.reviewerName}
             </Tabs.Tab>
           ))}

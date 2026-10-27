@@ -38,6 +38,7 @@ import { DIFF_MESSAGES, LoadingScene } from "./Loading.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import type { DiffThreadItem } from "./DiffThread.tsx";
 import { DiffView } from "./DiffView.tsx";
+import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { DifficultyBadge } from "./DifficultyBadge.tsx";
 import { PrDescription } from "./PrDescription.tsx";
 import { ReviewActions } from "./ReviewActions.tsx";
@@ -189,21 +190,23 @@ export function PreviewPane(props: Props) {
           data-stale={stale}
         >
           <Box p="sm">
-            {tab === "claude" ? (
-              <ClaudeReviews
-                pr={deferred}
-                jobs={ai.reviewsByPr.get(prKey(deferred)) ?? []}
-                reviewerIds={ai.reviewerIds}
-                onStart={(ids) => ai.start(deferred, ids)}
-                onCancel={ai.cancel}
-                onRemove={ai.remove}
-                onFindingAdded={ai.findingAdded}
-              />
-            ) : tab === "description" ? (
-              <PrDescription pr={deferred} viewer={props.viewer} />
-            ) : (
-              <Body pr={deferred} />
-            )}
+            <ErrorBoundary>
+              {tab === "claude" ? (
+                <ClaudeReviews
+                  pr={deferred}
+                  jobs={ai.reviewsByPr.get(prKey(deferred)) ?? []}
+                  reviewerIds={ai.reviewerIds}
+                  onStart={(ids) => ai.start(deferred, ids)}
+                  onCancel={ai.cancel}
+                  onRemove={ai.remove}
+                  onFindingAdded={ai.findingAdded}
+                />
+              ) : tab === "description" ? (
+                <PrDescription pr={deferred} viewer={props.viewer} />
+              ) : (
+                <Body pr={deferred} />
+              )}
+            </ErrorBoundary>
           </Box>
         </div>
       )}
