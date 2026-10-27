@@ -15,9 +15,10 @@ export function DiffStat({ additions, deletions, files, compact: inline }: Props
   const label = `${files} file${files === 1 ? "" : "s"} · +${additions} −${deletions}`;
 
   if (inline) {
+    // Fixed columns, right-aligned, so the numbers line up from row to row.
     return (
       <Tooltip label={label}>
-        <Group gap={5} wrap="nowrap" ff="monospace" fz={11} lh={1.2} style={{ cursor: "default" }}>
+        <span className="er-diffstat">
           <Text span c="teal.6" fw={600} fz="inherit" ff="inherit">
             +{compact(additions)}
           </Text>
@@ -27,7 +28,7 @@ export function DiffStat({ additions, deletions, files, compact: inline }: Props
           <Text span c="dimmed" fz="inherit" ff="inherit">
             {files}f
           </Text>
-        </Group>
+        </span>
       </Tooltip>
     );
   }

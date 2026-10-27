@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { DEFAULT_AI_CONFIG } from "../shared/aiReview.ts";
 import { applyEvent, buildArgs, buildPrompt, describeToolUse, EMPTY_STREAM } from "./claude.ts";
 import { childEnv } from "./env.ts";
 
@@ -25,7 +24,7 @@ test("model and effort are passed only when set", () => {
 test("the prompt carries the PR and the reviewer's own instructions", () => {
   const prompt = buildPrompt(
     { owner: "metabase", name: "metabase", number: 42, title: "Fix it" },
-    { ...DEFAULT_AI_CONFIG, instructions: "  Only look at SQL.  " },
+    "  Only look at SQL.  ",
   );
   expect(prompt).toContain("#42 in metabase/metabase");
   expect(prompt).toContain('"Fix it"');
@@ -157,4 +156,11 @@ test("several events for one turn don't inflate anything", () => {
   const state = oneTurn.reduce((s, e) => applyEvent(s, e, CWD), EMPTY_STREAM);
   expect(state.activity).toEqual(["Read a.ts", "Read b.ts"]);
   expect("turns" in state).toBe(false);
+});
+
+test("every reviewer, whatever its instructions, is asked for findings the UI can use", () => {
+  const args = buildArgs("x", { model: "", effort: "" });
+  const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
+  expect(system).toContain("easy-review-findings");
+  expect(system).toContain('"severity"');
 });

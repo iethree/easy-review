@@ -23,12 +23,14 @@ import {
   IconTerminal2,
   IconTrash,
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { useReviewDetail } from "../hooks/useLocalReviews.ts";
 import { relativeTime } from "../time.ts";
-import { Markdown } from "./Markdown.tsx";
+import { splitReview } from "../../shared/findings.ts";
+import { Findings } from "./Findings.tsx";
+import { ProseReview } from "./ProseReview.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -36,6 +38,8 @@ interface Props {
   onStart: () => void;
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
+  /** A finding went into your review. */
+  onFindingAdded?: () => void;
 }
 
 const STATUS = {
@@ -64,8 +68,10 @@ function useTick(active: boolean) {
   }, [active]);
 }
 
-export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
+export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded }: Props) {
   const detail = useReviewDetail(job);
+  // The prose, and the findings block the review ends with, apart.
+  const review = useMemo(() => (detail?.review ? splitReview(detail.review) : null), [detail?.review]);
   const running = job !== undefined && isActive(job.status);
   useTick(running);
 
@@ -76,8 +82,8 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
           <IconRobot size={40} color="var(--mantine-color-gray-5)" />
           <Text fw={600}>{job ? "Review cancelled" : "No Claude review yet"}</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Checks out #{pr.number} into its own worktree and has Claude Code review it with your
-            standing instructions. Claude gets read-only tools, confined to that checkout.
+            Checks out #{pr.number} into its own worktree and has Claude Code review it, once for
+            each reviewer you pick. Claude gets read-only tools, confined to that checkout.
           </Text>
           <Button leftSection={<IconRobot size={16} />} onClick={onStart}>
             Review with Claude
@@ -185,7 +191,24 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
         </Alert>
       )}
 
-      {job.status === "done" && detail?.review && <Markdown>{detail.review}</Markdown>}
+      {job.status === "done" && review && (
+        <>
+          <ProseReview
+            pr={pr}
+            review={{ id: job.id, headSha: job.headSha }}
+            markdown={review.prose}
+            onAdded={() => onFindingAdded?.()}
+          />
+          {review.findings.length > 0 && (
+            <Findings
+              pr={pr}
+              review={{ id: job.id, headSha: job.headSha }}
+              findings={review.findings}
+              onAdded={() => onFindingAdded?.()}
+            />
+          )}
+        </>
+      )}
       {job.status === "done" && !detail && (
         <Center py="lg">
           <Loader size="sm" />
@@ -203,6 +226,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove }: Props) {
               .slice(-60)
               .reverse()
               .map((a, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a timestamp; the index tells them apart
                 <Group key={`${a.at}:${i}`} gap={8} wrap="nowrap">
                   <Text size="xs" c="dimmed" ff="monospace" style={{ flex: "none" }} w={64}>
                     {new Date(a.at).toLocaleTimeString([], {

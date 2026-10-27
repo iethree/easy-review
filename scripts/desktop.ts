@@ -113,6 +113,7 @@ const config = {
   },
   // electron-builder fills in ${arch} for each architecture it packages.
   extraResources: [{ from: `${OUT}/server-\${arch}`, to: "server" }],
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder's own placeholders
   artifactName: "${productName}-${version}-${arch}.${ext}",
   mac: {
     category: "public.app-category.developer-tools",

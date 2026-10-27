@@ -184,6 +184,8 @@ export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 export interface ReviewCommentDraft {
   path: string;
   line: number;
+  /** For a comment on several lines: the first of them (`line` is the last). Same side. */
+  startLine?: number;
   /** RIGHT for added or unchanged lines, LEFT for deleted ones. */
   side: DiffSide;
   body: string;

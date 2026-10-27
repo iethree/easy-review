@@ -69,6 +69,7 @@ const FileBlock = memo(function FileBlock({
 
   return (
     <div className="er-diff-file">
+      {/* biome-ignore lint/a11y/useSemanticElements: a header row with its own keyboard handling; a <button> can't hold its layout */}
       <div
         className="er-diff-filehead"
         onClick={() => setOpen((o) => !o)}
@@ -126,6 +127,7 @@ const FileBlock = memo(function FileBlock({
               rendered += lines.length;
 
               return (
+                // biome-ignore lint/suspicious/noArrayIndexKey: hunks never reorder; their position is their identity
                 <div key={hi}>
                   <div className="er-diff-hunk">
                     @@ {hunk.header || `hunk ${hi + 1}`}
@@ -141,6 +143,7 @@ const FileBlock = memo(function FileBlock({
                     return (
                       // A fragment, not a wrapper element: a diff this size
                       // shouldn't carry a spare DOM node for every line.
+                      // biome-ignore lint/suspicious/noArrayIndexKey: lines never reorder
                       <Fragment key={li}>
                         <div className="er-diff-line" data-kind={line.kind}>
                           <span className="er-gutter">{line.oldNumber ?? ""}</span>
@@ -219,6 +222,7 @@ function Code({ line, tokens }: { line: DiffLine; tokens: Token[] | null }) {
     <>
       {tokens.map((token, i) =>
         token.className ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: tokens never reorder
           <span key={i} className={token.className}>
             {token.text}
           </span>
@@ -290,6 +294,7 @@ export const DiffView = memo(function DiffView({
     <div className="er-diff">
       {diff.files.map((file, i) => (
         <FileBlock
+          // biome-ignore lint/suspicious/noArrayIndexKey: a path can appear twice (renames); the index tells them apart
           key={`${file.path}:${i}`}
           file={file}
           defaultOpen={openFlags[i] ?? false}

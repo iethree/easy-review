@@ -86,6 +86,14 @@ export function createApi({ getToken, onReviewSubmitted }: ApiOptions) {
       if (path === "/api/conversation" && request.method === "GET") {
         return await handleConversation(gh, url);
       }
+      if (path === "/api/mine" && request.method === "GET") {
+        const fresh = url.searchParams.get("fresh") === "1";
+        const cached = fresh ? undefined : listCache.get("mine");
+        if (cached) return json(cached);
+        const result = await gh.listMine(100);
+        listCache.set("mine", result);
+        return json(result);
+      }
       if (path === "/api/reviewed" && request.method === "GET") {
         return await handleReviewed(gh, url);
       }
@@ -244,6 +252,7 @@ export function createApi({ getToken, onReviewSubmitted }: ApiOptions) {
         Number.isInteger(c.line) &&
         c.line > 0 &&
         (c.side === "LEFT" || c.side === "RIGHT") &&
+        (c.startLine === undefined || (Number.isInteger(c.startLine) && c.startLine > 0 && c.startLine < c.line)) &&
         typeof c.body === "string" &&
         c.body.trim() !== "",
     );
@@ -261,7 +270,13 @@ export function createApi({ getToken, onReviewSubmitted }: ApiOptions) {
       comments.length > 0 && body.commitId
         ? {
             commitId: body.commitId,
-            comments: comments.map((c) => ({ path: c.path, line: c.line, side: c.side, body: c.body.trim() })),
+            comments: comments.map((c) => ({
+              path: c.path,
+              line: c.line,
+              ...(c.startLine !== undefined ? { startLine: c.startLine } : {}),
+              side: c.side,
+              body: c.body.trim(),
+            })),
           }
         : undefined,
     );

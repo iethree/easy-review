@@ -31,11 +31,12 @@ interface Props {
   prs: PullRequest[];
   /** Local Claude reviews: only offered when the server supports them. */
   local: { supported: boolean; status: LocalStatus | null };
+  onOpenReviewers: () => void;
 }
 
 type SettingsTab = "queue" | "claude" | "checkouts";
 
-export function SettingsModal({ opened, onClose, settings, onChange, onReset, prs, local }: Props) {
+export function SettingsModal({ opened, onClose, settings, onChange, onReset, prs, local, onOpenReviewers }: Props) {
   const [tab, setTab] = useState<SettingsTab>("queue");
   // Live preview: how the queue on screen classifies under these thresholds.
   const counts = useMemo(() => {
@@ -87,7 +88,7 @@ export function SettingsModal({ opened, onClose, settings, onChange, onReset, pr
         </Stack>
       ) : tab === "claude" && local.supported ? (
         <Stack gap="lg">
-          <ClaudeSettings status={local.status} opened={opened} />
+          <ClaudeSettings status={local.status} opened={opened} onOpenReviewers={onOpenReviewers} />
           <Group justify="flex-end">
             <Button size="xs" onClick={onClose}>
               Done

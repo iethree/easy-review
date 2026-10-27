@@ -13,6 +13,14 @@ import {
 import { detectClaude, type ClaudeStatus } from "./claude.ts";
 import type { ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
+import {
+  createReviewer,
+  deleteReviewer,
+  listReviewers,
+  REVIEWER_ID,
+  ReviewerError,
+  updateReviewer,
+} from "./reviewers.ts";
 
 const NAME = /^[\w.-]+$/;
 
@@ -24,6 +32,11 @@ function json(body: unknown, status = 200): Response {
 }
 
 const fail = (error: string, status: number) => json({ error }, status);
+
+async function body(request: Request): Promise<{ name?: unknown; instructions?: unknown }> {
+  const parsed = (await request.json().catch(() => null)) as unknown;
+  return parsed && typeof parsed === "object" ? parsed : {};
+}
 
 export function createLocalApi(jobs: ReviewJobs) {
   // `claude --version` costs a process spawn; re-check at most once a minute.
@@ -59,6 +72,19 @@ export function createLocalApi(jobs: ReviewJobs) {
         }
       }
 
+      if (parts[0] === "reviewers") {
+        const id = parts[1];
+        if (!id && method === "GET") return json({ reviewers: await listReviewers(), dir: localPaths().reviewers });
+        if (!id && method === "POST") return json(await createReviewer(await body(request)), 201);
+        if (id && REVIEWER_ID.test(id) && !parts[2]) {
+          if (method === "PUT") return json(await updateReviewer(id, await body(request)));
+          if (method === "DELETE") {
+            await deleteReviewer(id);
+            return json({ ok: true });
+          }
+        }
+      }
+
       if (parts[0] === "checkouts") {
         if (!parts[1] && method === "GET") {
           const body: CheckoutsResponse = {
@@ -88,22 +114,30 @@ export function createLocalApi(jobs: ReviewJobs) {
         if (!id && method === "GET") return json({ jobs: jobs.list() });
 
         if (!id && method === "POST") {
-          const body = (await request.json().catch(() => null)) as {
+          const input = (await request.json().catch(() => null)) as {
             owner?: unknown;
             name?: unknown;
             number?: unknown;
+            reviewers?: unknown;
           } | null;
-          const owner = String(body?.owner ?? "");
-          const name = String(body?.name ?? "");
-          const number = Number(body?.number);
+          const owner = String(input?.owner ?? "");
+          const name = String(input?.name ?? "");
+          const number = Number(input?.number);
           if (!NAME.test(owner) || !NAME.test(name) || !Number.isInteger(number) || number <= 0) {
             return fail("owner, name and a positive number are required", 400);
+          }
+          const all = await listReviewers();
+          // No list: the first reviewer, as before there was a choice.
+          const ids = Array.isArray(input?.reviewers) ? input.reviewers : all.slice(0, 1).map((r) => r.id);
+          const chosen = all.filter((r) => ids.includes(r.id));
+          if (chosen.length === 0 || chosen.length !== new Set(ids).size) {
+            return fail("Choose one or more reviewers that exist.", 400);
           }
           if (!(await claudeStatus()).available) {
             return fail("The claude CLI isn't available to the server.", 503);
           }
-          const job = await jobs.start(owner, name, number);
-          return json({ ...job, resumeCommand: resumeCommand(job) }, 202);
+          const started = await jobs.start(owner, name, number, chosen);
+          return json({ jobs: started.map((job) => ({ ...job, resumeCommand: resumeCommand(job) })) }, 202);
         }
 
         if (id) {
@@ -119,6 +153,7 @@ export function createLocalApi(jobs: ReviewJobs) {
         }
       }
     } catch (err) {
+      if (err instanceof ReviewerError) return fail(err.message, 400);
       return fail(err instanceof Error ? err.message : "Unexpected error", 500);
     }
 

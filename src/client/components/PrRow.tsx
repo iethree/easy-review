@@ -1,5 +1,5 @@
-import { ActionIcon, Avatar, Badge, Group, Tooltip } from "@mantine/core";
-import { IconCheck, IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
+import { ActionIcon, Avatar, Badge, Group, Tooltip, VisuallyHidden } from "@mantine/core";
+import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { memo } from "react";
 import type { AiReviewSummary } from "../../shared/aiReview.ts";
 import { rateDifficulty } from "../../shared/difficulty.ts";
@@ -9,7 +9,6 @@ import { relativeTime } from "../time.ts";
 import { AiReviewButton } from "./AiReviewButton.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
-import { DifficultyBadge } from "./DifficultyBadge.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -17,8 +16,6 @@ interface Props {
   selected: boolean;
   reviewed: ReviewEvent | undefined;
   onSelect: (pr: PullRequest) => void;
-  /** Step one of approving: opens the confirmation in the preview. */
-  onAskApprove: (pr: PullRequest) => void;
   /** Clicking the author narrows the queue to just their pull requests. */
   onFilterAuthor: (login: string) => void;
   /** False when every row shares a repo, so it isn't repeated on each one. */
@@ -29,9 +26,11 @@ interface Props {
   aiJob?: AiReviewSummary;
   onAiStart?: (pr: PullRequest) => void;
   onAiOpen?: (pr: PullRequest) => void;
-  /** In the Hidden tab: brings the PR back, in place of approve. */
+  /** In the Hidden tab: brings the PR back. */
   onUnhide?: (pr: PullRequest) => void;
 }
+
+const LEVEL_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard" } as const;
 
 const REVIEWED_LABEL: Record<ReviewEvent, string> = {
   APPROVE: "approved",
@@ -45,7 +44,6 @@ export const PrRow = memo(function PrRow({
   selected,
   reviewed,
   onSelect,
-  onAskApprove,
   onFilterAuthor,
   showRepo,
   aiJob,
@@ -57,6 +55,7 @@ export const PrRow = memo(function PrRow({
   const accent = `var(--mantine-color-${DIFFICULTY_COLOR[rating.level]}-5)`;
 
   return (
+    // biome-ignore lint/a11y: rows are chosen with the keyboard through the app's keymap (j/k), not focus
     <div
       className="er-item"
       data-selected={selected}
@@ -67,9 +66,11 @@ export const PrRow = memo(function PrRow({
       aria-selected={selected}
       tabIndex={-1}
     >
-      <div className="er-item-accent" />
-
-      <DifficultyBadge rating={rating} size="sm" compact />
+      {/* Difficulty is the stripe's colour alone; the tooltip and screen readers say it in words. */}
+      <Tooltip label={`${LEVEL_LABEL[rating.level]} review — ${rating.reason}`} position="right" openDelay={400} multiline w={240}>
+        <div className="er-item-accent" />
+      </Tooltip>
+      <VisuallyHidden>{LEVEL_LABEL[rating.level]} review</VisuallyHidden>
 
       <div className="er-item-main">
         <div className="er-item-title">
@@ -100,6 +101,7 @@ export const PrRow = memo(function PrRow({
             </Tooltip>
             <span aria-hidden>·</span>
             <Tooltip label={`Show only ${pr.author}'s pull requests`} openDelay={500}>
+              {/* biome-ignore lint/a11y: a mouse shortcut; from the keyboard, type author: in the filter */}
               <span
                 className="er-author"
                 onClick={(e) => {
@@ -123,7 +125,9 @@ export const PrRow = memo(function PrRow({
               files={pr.changedFiles}
               compact
             />
-            <CiBadge pr={pr} />
+            <span className="er-ci-slot">
+              <CiBadge pr={pr} />
+            </span>
           </div>
         </div>
       </div>
@@ -138,7 +142,8 @@ export const PrRow = memo(function PrRow({
             onOpen={() => onAiOpen(pr)}
           />
         )}
-        {onUnhide ? (
+        {/* No approve button here: approving is done from the preview, with the pull request in view. */}
+        {onUnhide && (
           <Tooltip label="Unhide (⇧H)">
             <ActionIcon
               variant="light"
@@ -151,25 +156,6 @@ export const PrRow = memo(function PrRow({
               aria-label={`Unhide ${pr.repo}#${pr.number}`}
             >
               <IconEye size={15} />
-            </ActionIcon>
-          </Tooltip>
-        ) : (
-          <Tooltip
-            label={reviewed ? "Already reviewed — refresh to update the queue" : "Approve… (Enter)"}
-          >
-            <ActionIcon
-              variant="light"
-              color="teal"
-              size="md"
-              disabled={reviewed !== undefined}
-              onClick={(e) => {
-                // Opens the confirmation; it never approves on its own.
-                e.stopPropagation();
-                onAskApprove(pr);
-              }}
-              aria-label={`Approve ${pr.repo}#${pr.number} (asks to confirm)`}
-            >
-              <IconCheck size={15} stroke={2.6} />
             </ActionIcon>
           </Tooltip>
         )}

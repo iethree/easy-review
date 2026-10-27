@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import { describeRestError } from "./github.ts";
+import type { PullRequest } from "../shared/types.ts";
+import { describeRestError, mergeById, mineSearchQueries } from "./github.ts";
 
 test("uses the errors array, which is where the real reason lives", () => {
   // Verbatim from GitHub's reviews endpoint: `errors` holds plain strings and
@@ -58,4 +59,17 @@ test("ignores error entries with nothing useful in them", () => {
     "Review failed (422)",
   );
   expect(describeRestError(422, { errors: [{ code: "custom" }] }, "Review failed")).toBe("custom");
+});
+
+test("My PRs are the open ones you wrote, and the open ones assigned to you", () => {
+  expect(mineSearchQueries()).toEqual([
+    "is:open is:pr archived:false author:@me",
+    "is:open is:pr archived:false assignee:@me",
+  ]);
+});
+
+test("a pull request you wrote and are assigned to is listed once, newest activity first", () => {
+  const pr = (id: string, updatedAt: string) => ({ id, updatedAt }) as PullRequest;
+  const merged = mergeById([pr("a", "2026-10-01"), null, pr("b", "2026-10-03"), pr("a", "2026-10-01")]);
+  expect(merged.map((p) => p.id)).toEqual(["b", "a"]);
 });

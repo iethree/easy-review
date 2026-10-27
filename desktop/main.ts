@@ -14,9 +14,11 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
+  ipcMain,
   Menu,
   type MenuItemConstructorOptions,
   nativeTheme,
+  Notification,
   protocol,
   screen,
   shell,
@@ -24,6 +26,7 @@ import {
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { parseNotice } from "./notice.ts";
 import { APP_ORIGIN, forward, SCHEME } from "./proxy.ts";
 import { type RunningServer, type ServerCommand, startServer } from "./server.ts";
 import { resolvePath } from "./shellPath.ts";
@@ -168,6 +171,31 @@ function showWindow() {
   }
 }
 
+// --- Notifications ---------------------------------------------------------
+
+/** Held until dismissed: one that's garbage-collected loses its click handler. */
+const posted = new Set<Notification>();
+
+ipcMain.on("notify", (event, input: unknown) => {
+  // Only from the app's own page.
+  if (!event.senderFrame?.url.startsWith(`${APP_ORIGIN}/`)) return;
+  const notice = parseNotice(input);
+  if (!notice || !Notification.isSupported()) return;
+
+  const notification = new Notification({ title: notice.title, body: notice.body });
+  posted.add(notification);
+  notification.on("click", () => {
+    posted.delete(notification);
+    showWindow();
+    // A window opened just now is still loading; it asks for the review once it has.
+    const deliver = () => send("notification-click", notice.id);
+    if (window?.webContents.isLoading()) window.webContents.once("did-finish-load", deliver);
+    else deliver();
+  });
+  notification.on("close", () => posted.delete(notification));
+  notification.show();
+});
+
 // --- Menus -----------------------------------------------------------------
 
 function buildMenu() {
@@ -185,6 +213,7 @@ function buildMenu() {
               { label: "Check for Updates…", click: () => void checkForUpdates({ manual: true }) },
               { type: "separator" },
               { label: "Settings…", accelerator: "Cmd+,", click: command("settings") },
+              { label: "Reviewers…", accelerator: "Cmd+Shift+,", click: command("reviewers") },
               { type: "separator" },
               { role: "services" },
               { type: "separator" },

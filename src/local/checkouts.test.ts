@@ -65,6 +65,9 @@ function savedReview(over: Partial<AiReviewJob>): AiReviewJob {
   const at = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
+    reviewerId: "general",
+    reviewerName: "General",
+    instructions: "Review it.",
     owner: "acme",
     name: "app",
     number: 7,

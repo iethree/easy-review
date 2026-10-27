@@ -23,6 +23,7 @@ import {
   type AiReviewSummary,
   type Checkout,
   type RemoveCheckoutsResult,
+  type Reviewer,
 } from "../shared/aiReview.ts";
 import { GitHubClient } from "../server/github.ts";
 import { diskUsage, isStale, scanCheckouts } from "./checkouts.ts";
@@ -30,16 +31,17 @@ import { buildArgs, buildPrompt, runClaude, type StreamState } from "./claude.ts
 import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
 import { prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
 import { localPaths } from "./paths.ts";
+import { seedReviewers } from "./reviewers.ts";
 
 type Killable = { kill: () => void };
 
 export function summarize(job: AiReviewJob): AiReviewSummary {
   const {
-    id, owner, name, number, title, headSha, status, phase,
+    id, reviewerId, reviewerName, owner, name, number, title, headSha, status, phase,
     createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns,
   } = job;
   return {
-    id, owner, name, number, title, headSha, status, phase,
+    id, reviewerId, reviewerName, owner, name, number, title, headSha, status, phase,
     createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns,
   };
 }
@@ -83,6 +85,7 @@ export class ReviewJobs {
 
   async init(): Promise<void> {
     this.config = await loadConfig();
+    await seedReviewers(this.config.instructions);
     const dir = localPaths().reviews;
     await mkdir(dir, { recursive: true });
 
@@ -90,6 +93,10 @@ export class ReviewJobs {
       if (!file.endsWith(".json")) continue;
       try {
         const job = (await Bun.file(join(dir, file)).json()) as AiReviewJob;
+        // Saved before there were reviewers.
+        job.reviewerId ??= "";
+        job.reviewerName ??= "Claude";
+        job.instructions ??= "";
         if (isActive(job.status)) {
           Object.assign(job, {
             status: "failed",
@@ -150,20 +157,53 @@ export class ReviewJobs {
     return this.jobs.get(id);
   }
 
-  /** Starts a review, or returns the one already under way for that PR. */
-  async start(owner: string, name: string, number: number): Promise<AiReviewJob> {
+  /**
+   * Starts a review by each reviewer — or, for a reviewer already reviewing
+   * that pull request, returns the review under way.
+   */
+  async start(owner: string, name: string, number: number, reviewers: Reviewer[]): Promise<AiReviewJob[]> {
     const key = prKey({ owner, name, number });
+    const running = new Map<string, AiReviewJob>();
     for (const job of this.jobs.values()) {
-      if (prKey(job) === key && isActive(job.status)) return job;
+      if (prKey(job) === key && isActive(job.status)) running.set(job.reviewerId, job);
     }
+    if (reviewers.every((r) => running.has(r.id))) return reviewers.map((r) => running.get(r.id) as AiReviewJob);
 
     const token = await this.getToken();
     if (!token) throw new Error("Not signed in to GitHub — run `gh auth login`.");
     const pr = await new GitHubClient(token).fetchPullRequest(owner, name, number);
+    const description = describePr(owner, name, number, pr);
 
+    const started: AiReviewJob[] = [];
+    for (const reviewer of reviewers) {
+      const existing = running.get(reviewer.id);
+      if (existing) {
+        started.push(existing);
+        continue;
+      }
+      const job = this.newJob(owner, name, number, pr, reviewer);
+      this.jobs.set(job.id, job);
+      await this.save(job);
+      this.descriptions.set(job.id, description);
+      started.push(job);
+    }
+    this.pump();
+    return started;
+  }
+
+  private newJob(
+    owner: string,
+    name: string,
+    number: number,
+    pr: { title: string; headSha: string; baseRef: string },
+    reviewer: Reviewer,
+  ): AiReviewJob {
     const now = new Date().toISOString();
-    const job: AiReviewJob = {
+    return {
       id: crypto.randomUUID(),
+      reviewerId: reviewer.id,
+      reviewerName: reviewer.name,
+      instructions: reviewer.instructions,
       owner,
       name,
       number,
@@ -188,10 +228,6 @@ export class ReviewJobs {
       model: null,
       stderrTail: null,
     };
-    this.jobs.set(job.id, job);
-    await this.save(job);
-    this.pump(describePr(owner, name, number, pr), job.id);
-    return job;
   }
 
   cancel(id: string): AiReviewJob | undefined {
@@ -335,9 +371,7 @@ export class ReviewJobs {
   /** PR descriptions are fetched once, at start; held here until the job runs. */
   private descriptions = new Map<string, string>();
 
-  private pump(description?: string, forId?: string): void {
-    if (description && forId) this.descriptions.set(forId, description);
-
+  private pump(): void {
     const queued = [...this.jobs.values()]
       .filter((j) => j.status === "queued")
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -403,7 +437,8 @@ export class ReviewJobs {
       let seen = 0;
       const result = await runClaude({
         cwd: worktree.path,
-        args: buildArgs(buildPrompt(job, config), config),
+        // Legacy jobs, from before reviewers, re-run with the old setting.
+        args: buildArgs(buildPrompt(job, job.instructions || config.instructions), config),
         timeoutMs: config.timeoutMinutes * 60_000,
         onSpawn,
         onState: (state: StreamState) => {

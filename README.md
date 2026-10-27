@@ -7,7 +7,10 @@ This is a fast, multi-paned review UI that uses your local github CLI and claude
 ![screenshot](./preview.png)
 
 - Keyboard shortcuts for fast navigation.
+- My PRs: your own open pull requests and the ones assigned to you, for self-review — Claude reviewers and comments (GitHub doesn't let you approve your own).
 - Worktrees for multitasking.
+- Claude's findings as cards: add the ones you agree with to your review — on their line in the diff where GitHub allows, in the summary otherwise — and submit it from the review pane on the right.
+- Several Claude reviewers at once — "Security", "Performance", your own — each with its own instructions, kept as Markdown files in `~/.easy-review/reviewers`.
 
 ## How to use
 
@@ -17,6 +20,8 @@ gh auth login    # if you aren't already signed in
 bun run dev      # http://localhost:5175
 ```
 
+Before you push: `bun run lint`, `bun run typecheck` and `bun test`. CI runs all three on every push to `main` and every pull request (`.github/workflows/checks.yml`).
+
 ## The macOS app
 
 ```bash
@@ -24,7 +29,7 @@ bun run desktop          # run it from source
 bun run desktop:build    # package it → dist/desktop/easy-review-<version>-<arch>.dmg and .zip
 ```
 
-The app is an Electron window around the same server: it runs the compiled server binary and shows it in a native title bar, with menus, and with links that open in your browser. Opened from Finder, it reads your login shell's PATH, so `gh` and `claude` are found where your terminal finds them.
+The app is an Electron window around the same server: it runs the compiled server binary and shows it in a native title bar, with menus, and with links that open in your browser. When a Claude review finishes while the app is in the background, macOS tells you; click the notification to open the review. Opened from Finder, it reads your login shell's PATH, so `gh` and `claude` are found where your terminal finds them.
 
 A local build is signed ad hoc, which is enough on the Mac that built it. To sign with a Developer ID, set `CSC_NAME` to a keychain identity, or `CSC_LINK` and `CSC_KEY_PASSWORD` to a .p12 certificate.
 

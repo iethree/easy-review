@@ -51,7 +51,7 @@ export async function saveConfig(input: unknown): Promise<AiReviewConfig> {
   const config = normalizeConfig(input);
   const path = localPaths().config;
   await mkdir(dirname(path), { recursive: true });
-  await Bun.write(path, JSON.stringify(config, null, 2) + "\n");
+  await Bun.write(path, `${JSON.stringify(config, null, 2)}\n`);
   return config;
 }
 

@@ -81,22 +81,14 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     return () => clearInterval(id);
   }, [supported, anyActive, refresh]);
 
-  /** The latest job for each pull request — what its robot shows. */
-  const byPr = useMemo(() => {
-    const map = new Map<string, AiReviewSummary>();
-    for (const job of jobs) {
-      const key = prKey(job);
-      const existing = map.get(key);
-      if (!existing || job.createdAt > existing.createdAt) map.set(key, job);
-    }
-    return map;
-  }, [jobs]);
+  const { byPr, reviewsByPr } = useMemo(() => groupByPr(jobs), [jobs]);
 
   const start = useCallback(
-    async (pr: { owner: string; name: string; number: number }) => {
+    /** No reviewers: the server uses the first. */
+    async (pr: { owner: string; name: string; number: number }, reviewers?: string[]) => {
       await call("/api/local/reviews", {
         method: "POST",
-        body: JSON.stringify({ owner: pr.owner, name: pr.name, number: pr.number }),
+        body: JSON.stringify({ owner: pr.owner, name: pr.name, number: pr.number, reviewers }),
       });
       await refresh();
     },
@@ -127,10 +119,48 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     status,
     jobs,
     byPr,
+    reviewsByPr,
     start,
     cancel,
     remove,
   };
+}
+
+/**
+ * For each pull request: the latest review by each reviewer (by name), and
+ * one review to stand for them all on its robot — one still running if any
+ * is, then one that failed, then the latest.
+ */
+export function groupByPr(jobs: readonly AiReviewSummary[]) {
+  const latest = new Map<string, Map<string, AiReviewSummary>>();
+  for (const job of jobs) {
+    const key = prKey(job);
+    const reviewers = latest.get(key) ?? new Map<string, AiReviewSummary>();
+    latest.set(key, reviewers);
+    const existing = reviewers.get(job.reviewerId);
+    if (!existing || job.createdAt > existing.createdAt) reviewers.set(job.reviewerId, job);
+  }
+
+  const reviewsByPr = new Map<string, AiReviewSummary[]>();
+  const byPr = new Map<string, AiReviewSummary>();
+  for (const [key, reviewers] of latest) {
+    const list = [...reviewers.values()].sort(
+      (a, b) => a.reviewerName.localeCompare(b.reviewerName) || a.createdAt.localeCompare(b.createdAt),
+    );
+    reviewsByPr.set(key, list);
+    const newest = list.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+    const shown =
+      list.find((j) => isActive(j.status)) ??
+      list.find((j) => j.status === "failed") ??
+      // A cancelled review is idle only if nothing else has been done.
+      list.filter((j) => j.status !== "cancelled").reduce<AiReviewSummary | undefined>(
+        (a, b) => (!a || b.createdAt > a.createdAt ? b : a),
+        undefined,
+      ) ??
+      newest;
+    byPr.set(key, shown);
+  }
+  return { byPr, reviewsByPr };
 }
 
 /** The full job — review text, activity, paths — for the one being looked at. */
@@ -139,6 +169,7 @@ export function useReviewDetail(summary: AiReviewSummary | undefined) {
   const id = summary?.id;
   const version = summary?.updatedAt;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version (updatedAt) is the trigger to refetch
   useEffect(() => {
     if (!id) {
       setDetail(null);

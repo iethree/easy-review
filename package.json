@@ -4,7 +4,9 @@
   "private": true,
   "version": "0.1.0",
   "devDependencies": {
+    "@biomejs/biome": "2.6.3",
     "@types/bun": "latest",
+    "@types/mdast": "^4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "electron": "^45",
@@ -25,7 +27,9 @@
     "react-markdown": "^10",
     "rehype-raw": "^7",
     "rehype-sanitize": "^6",
-    "remark-gfm": "^4"
+    "remark-gfm": "^4",
+    "remark-parse": "^11",
+    "unified": "^11"
   },
   "description": "Fast, keyboard-driven triage for the pull requests waiting on your review.",
   "scripts": {
@@ -36,6 +40,7 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "desktop": "bun scripts/desktop.ts",
-    "desktop:build": "bun scripts/desktop.ts --build"
+    "desktop:build": "bun scripts/desktop.ts --build",
+    "lint": "biome lint --error-on-warnings ."
   }
 }

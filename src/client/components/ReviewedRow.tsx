@@ -27,6 +27,7 @@ export const ReviewedRow = memo(function ReviewedRow({
   const accent = `var(--mantine-color-${verdict.color}-5)`;
 
   return (
+    // biome-ignore lint/a11y: rows are chosen with the keyboard through the app's keymap (j/k), not focus
     <div
       className="er-item er-item-history"
       data-selected={selected}
@@ -65,6 +66,7 @@ export const ReviewedRow = memo(function ReviewedRow({
             </Tooltip>
             <span aria-hidden>·</span>
             <Tooltip label={`Show only ${pr.author}'s pull requests`} openDelay={500}>
+              {/* biome-ignore lint/a11y: a mouse shortcut; from the keyboard, type author: in the filter */}
               <span
                 className="er-author"
                 onClick={(e) => {
