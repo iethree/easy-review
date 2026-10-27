@@ -43,7 +43,7 @@ import { QueueList } from "./components/QueueList.tsx";
 import { ReviewersPage } from "./components/ReviewersPage.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
-import { SettingsModal } from "./components/SettingsModal.tsx";
+import { SettingsPage } from "./components/SettingsPage.tsx";
 import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
 import { SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestNow, useReadyCount } from "./hooks/diffStore.ts";
@@ -128,10 +128,9 @@ export function App() {
   const [approveFor, setApproveFor] = useState<string | null>(null);
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  /** The Reviewers page, in place of the lists. */
-  const [page, setPage] = useState<"reviewers" | null>(null);
+  /** A page in place of the lists: Reviewers, or Settings. */
+  const [page, setPage] = useState<"reviewers" | "settings" | null>(null);
   /** The third pane: the review you're putting together. */
   const [reviewPaneOpen, setReviewPaneOpen] = useState(false);
   /** The pull request whose reviewers are being chosen. */
@@ -287,7 +286,7 @@ export function App() {
       notifications.show({
         id,
         color: "gray",
-        title: `${willHide ? "Hidden" : "Back in Needs review"} · ${pr.repo}#${pr.number}`,
+        title: `${willHide ? "Hidden" : "Back in Review"} · ${pr.repo}#${pr.number}`,
         message: (
           <Text
             size="xs"
@@ -479,7 +478,7 @@ export function App() {
     const active = document.activeElement;
     const lost = !active || active === document.body;
     if (el && (lost || (other?.contains(active) ?? false))) el.focus({ preventScroll: true });
-  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, settingsOpen, shortcutsOpen]);
+  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, page, shortcutsOpen]);
 
   // Keep the selected row visible when moving by keyboard — and after the
   // list is swapped (tab) or shown again (expanded).
@@ -598,7 +597,7 @@ export function App() {
     }
 
     function onKeyDown(e: KeyboardEvent) {
-      // The Reviewers page has keys of its own.
+      // The pages have keys of their own.
       if (page) return;
       const target = e.target as HTMLElement | null;
       const typing =
@@ -613,8 +612,7 @@ export function App() {
           target?.blur();
           return;
         }
-        if (settingsOpen || shortcutsOpen) {
-          setSettingsOpen(false);
+        if (shortcutsOpen) {
           setShortcutsOpen(false);
           return;
         }
@@ -629,7 +627,7 @@ export function App() {
 
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       // While a box or dialog is up, let it own the keyboard.
-      if (settingsOpen || shortcutsOpen || changesOpen || approveOpen) return;
+      if (shortcutsOpen || changesOpen || approveOpen) return;
 
       const action = actionForKey(e.key, e.repeat);
       if (!action || (action.type === "approve" && onControl)) return;
@@ -695,7 +693,7 @@ export function App() {
           searchRef.current?.focus();
           return;
         case "settings":
-          setSettingsOpen(true);
+          setPage("settings");
           return;
         case "theme":
           toggleColorScheme();
@@ -723,7 +721,6 @@ export function App() {
     canReviewSelected,
     narrow,
     expanded,
-    settingsOpen,
     shortcutsOpen,
     changesOpen,
     approveOpen,
@@ -744,13 +741,12 @@ export function App() {
     switch (name) {
       case "settings":
         setShortcutsOpen(false);
-        setSettingsOpen(true);
+        setPage("settings");
         return;
       case "refresh":
         refreshTab();
         return;
       case "help":
-        setSettingsOpen(false);
         setShortcutsOpen(true);
         return;
       case "reviewers":
@@ -782,7 +778,7 @@ export function App() {
         onQueryChange={() => {}}
         placeholder=""
         inputRef={searchRef}
-        note="Hidden pull requests stay out of Needs review until you unhide them — ⇧H, or the eye on a row."
+        note="Hidden pull requests stay out of Review until you unhide them — ⇧H, or the eye on a row."
       />
     ) : tab === "reviewed" ? (
       <ListFilter
@@ -911,6 +907,7 @@ export function App() {
 
           {/* The Reviewers page has its own way back; it isn't left by accident. */}
           <Tabs
+            className="er-main-tabs"
             style={page ? { visibility: "hidden" } : undefined}
             value={tab}
             onChange={(v) => setTab((v as Tab) ?? "queue")}
@@ -920,7 +917,7 @@ export function App() {
             <Tabs.List>
               <Tabs.Tab value="queue" leftSection={<IconInbox size={14} />}>
                 <Group gap={6} wrap="nowrap">
-                  Needs review
+                  Review
                   <Badge size="xs" variant="light" color={prs.length > 0 ? "indigo" : "gray"}>
                     {prs.length}
                   </Badge>
@@ -928,7 +925,7 @@ export function App() {
               </Tabs.Tab>
               <Tabs.Tab value="mine" leftSection={<IconUser size={14} />}>
                 <Group gap={6} wrap="nowrap">
-                  My PRs
+                  Mine
                   {mine.data && mine.pullRequests.length > 0 && (
                     <Badge size="xs" variant="light" color="gray">
                       {mine.pullRequests.length}
@@ -1003,7 +1000,7 @@ export function App() {
               <ActionIcon
                 variant={page === "reviewers" ? "light" : "subtle"}
                 color="gray"
-                onClick={() => setPage((p) => (p === "reviewers" ? p : "reviewers"))}
+                onClick={() => setPage("reviewers")}
                 aria-label="Reviewers"
               >
                 <IconUsers size={17} />
@@ -1022,9 +1019,9 @@ export function App() {
           </Tooltip>
           <Tooltip label="Settings (,)">
             <ActionIcon
-              variant="subtle"
+              variant={page === "settings" ? "light" : "subtle"}
               color="gray"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => setPage("settings")}
               aria-label="Settings"
             >
               <IconSettings size={17} />
@@ -1044,6 +1041,17 @@ export function App() {
       </header>
 
       {page === "reviewers" && <ReviewersPage store={reviewers} onClose={() => setPage(null)} />}
+      {page === "settings" && (
+        <SettingsPage
+          onClose={() => setPage(null)}
+          onOpenReviewers={() => setPage("reviewers")}
+          settings={settings}
+          onChange={update}
+          onReset={reset}
+          prs={prs}
+          local={{ supported: ai.supported, status: ai.status }}
+        />
+      )}
 
       {!page && (
         <div className="er-workspace">
@@ -1103,19 +1111,6 @@ export function App() {
         </div>
       )}
 
-      <SettingsModal
-        onOpenReviewers={() => {
-          setSettingsOpen(false);
-          setPage("reviewers");
-        }}
-        opened={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        settings={settings}
-        onChange={update}
-        onReset={reset}
-        prs={prs}
-        local={{ supported: ai.supported, status: ai.status }}
-      />
       <ShortcutsModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );

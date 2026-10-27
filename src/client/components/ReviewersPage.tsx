@@ -110,8 +110,8 @@ export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: (
   };
 
   return (
-    <div className="er-reviewers">
-      <div className="er-reviewers-head">
+    <div className="er-page">
+      <div className="er-page-head">
         <Group gap="xs">
           <Tooltip label="Back to pull requests (Esc)">
             <ActionIcon variant="subtle" color="gray" onClick={() => leave(onClose)} aria-label="Back">
@@ -130,8 +130,8 @@ export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: (
           <Loader size="sm" />
         </Center>
       ) : (
-        <div className="er-reviewers-body">
-          <div className="er-pane er-reviewers-list">
+        <div className="er-page-body">
+          <div className="er-pane er-page-nav">
             <ScrollArea style={{ flex: 1 }}>
               {reviewers.map((r) => (
                 <NavLink
@@ -156,7 +156,7 @@ export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: (
             </Button>
           </div>
 
-          <div className="er-pane er-reviewers-editor">
+          <div className="er-pane er-page-content">
             {draft && (
               <form
                 onSubmit={(e) => {

@@ -883,7 +883,8 @@ body {
 /* ---------------------------------------------------------------------------
    The desktop app (desktop/main.ts). The top bar is the window's title bar:
    it drags the window, makes room for the traffic lights, and dims while the
-   window is in the background, as macOS toolbars do. The page's chrome stops
+   window is in the background, as macOS toolbars do. The lists are tabs in
+   it, as a browser's are, the open one joined to the page below. The page's chrome stops
    behaving like a web page — no text selection, no pointing hand — while the
    code and the conversation stay selectable.
    --------------------------------------------------------------------------- */
@@ -892,20 +893,31 @@ body {
 :root[data-desktop] {
   --mantine-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --er-titlebar-bg: var(--mantine-color-gray-0);
-  --er-tab-active-bg: rgba(0, 0, 0, 0.07);
+  --er-tab-hover-bg: rgba(0, 0, 0, 0.05);
 }
 
 :root[data-desktop][data-mantine-color-scheme="dark"] {
   --er-titlebar-bg: var(--mantine-color-dark-8);
-  --er-tab-active-bg: rgba(255, 255, 255, 0.09);
+  --er-tab-hover-bg: rgba(255, 255, 255, 0.06);
 }
 
+/*
+ * 44px, its contents in the bottom 34 — the tabs' height, so the traffic
+ * lights (trafficLightPosition in desktop/main.ts) and buttons line up with
+ * the tabs' labels.
+ */
 [data-desktop] .er-topbar {
   -webkit-app-region: drag;
-  min-height: 52px;
-  padding: 8px 12px 8px 16px;
+  align-items: stretch;
+  height: 44px;
+  padding: 0 12px 0 16px;
   background: var(--er-titlebar-bg);
   user-select: none;
+}
+
+[data-desktop] .er-topbar > * {
+  align-self: flex-end;
+  height: 34px;
 }
 
 [data-desktop="darwin"] .er-topbar {
@@ -925,16 +937,53 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* A quiet segmented control rather than a filled web pill. */
-[data-desktop] .er-topbar .mantine-Tabs-tab {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 13px;
+[data-desktop] .er-main-tabs {
+  align-self: stretch;
 }
 
-[data-desktop] .er-topbar .mantine-Tabs-tab[data-active] {
-  background: var(--er-tab-active-bg);
+[data-desktop] .er-main-tabs .mantine-Tabs-list {
+  height: 100%;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+/* Just the name and a count: no icons, no pills. */
+[data-desktop] .er-main-tabs .mantine-Tabs-tab {
+  height: 32px;
+  /* Over the bar's bottom border, so the open tab runs into the page. */
+  margin-bottom: -1px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--mantine-color-dimmed);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+[data-desktop] .er-main-tabs .mantine-Tabs-tab:not([data-active]):hover {
+  background: var(--er-tab-hover-bg);
   color: var(--mantine-color-text);
+}
+
+[data-desktop] .er-main-tabs .mantine-Tabs-tab[data-active] {
+  background: var(--mantine-color-body);
+  border-color: var(--er-row-border);
+  color: var(--mantine-color-text);
+}
+
+[data-desktop] .er-main-tabs .mantine-Tabs-tabSection {
+  display: none;
+}
+
+[data-desktop] .er-main-tabs .mantine-Badge-root {
+  height: auto;
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 [data-desktop][data-inactive] .er-topbar > * {
@@ -951,11 +1000,11 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   The Reviewers page: the list of reviewers beside the one being edited, in
-   the space the pull request panes usually take.
+   Pages — Reviewers and Settings: a list of what there is beside the one
+   open, in the space the pull request panes usually take.
    --------------------------------------------------------------------------- */
 
-.er-reviewers {
+.er-page {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -964,7 +1013,7 @@ body {
   padding: 10px 16px 14px;
 }
 
-.er-reviewers-head {
+.er-page-head {
   flex: none;
   display: flex;
   align-items: center;
@@ -972,7 +1021,7 @@ body {
   gap: var(--mantine-spacing-md);
 }
 
-.er-reviewers-body {
+.er-page-body {
   flex: 1;
   min-height: 0;
   display: grid;
@@ -980,8 +1029,14 @@ body {
   gap: 12px;
 }
 
-.er-reviewers-editor {
+.er-page-content {
   overflow-y: auto;
+}
+
+/* Settings read best at a form's width, not the window's. */
+.er-settings {
+  max-width: 680px;
+  padding: var(--mantine-spacing-md);
 }
 
 /* ---------------------------------------------------------------------------

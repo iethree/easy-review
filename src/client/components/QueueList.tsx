@@ -81,7 +81,7 @@ export function QueueList({
           <IconEyeOff size={38} color="var(--mantine-color-gray-5)" />
           <Text fw={600}>Nothing hidden.</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Press ⇧H on a pull request in Needs review to tuck it away here. It stays hidden
+            Press ⇧H on a pull request in Review to tuck it away here. It stays hidden
             until you unhide it.
           </Text>
         </Stack>
