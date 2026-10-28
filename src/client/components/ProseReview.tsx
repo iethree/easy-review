@@ -2,7 +2,7 @@ import { ActionIcon, Tooltip } from "@mantine/core";
 import { IconCheck, IconPlus } from "@tabler/icons-react";
 import { useMemo } from "react";
 import type { PullRequest } from "../../shared/types.ts";
-import { addProse, placeProse, proseKey, useAssembly } from "../assembly.ts";
+import { addProse, placeProse, proseKey, useAdded } from "../assembly.ts";
 import { peek } from "../hooks/diffStore.ts";
 import { splitProse } from "../proseBlocks.ts";
 import { Markdown } from "./Markdown.tsx";
@@ -22,7 +22,7 @@ interface Props {
  */
 export function ProseReview({ pr, review, markdown, onAdded }: Props) {
   const blocks = useMemo(() => splitProse(markdown), [markdown]);
-  const { added } = useAssembly(pr.id);
+  const added = useAdded(pr.id);
   const entry = peek(pr);
   const diff = entry?.status === "ready" ? entry.data.diff : null;
 
@@ -31,7 +31,7 @@ export function ProseReview({ pr, review, markdown, onAdded }: Props) {
       {blocks.map((block, i) => {
         // biome-ignore lint/suspicious/noArrayIndexKey: blocks never reorder; their position is their identity
         if (!block.addable) return <Markdown key={i}>{block.text}</Markdown>;
-        const done = added.includes(proseKey(review.id, i));
+        const done = added.has(proseKey(review.id, i));
         const place = placeProse(pr, review, block.text, diff);
         const where =
           place.kind === "line"

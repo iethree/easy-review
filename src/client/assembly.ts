@@ -5,23 +5,35 @@
  * request, like the drafts, until the review is submitted.
  */
 
-import { useSyncExternalStore } from "react";
-import { addDraft } from "./drafts.ts";
+import { useMemo, useSyncExternalStore } from "react";
+import { addDraft, useDrafts, type DraftComment } from "./drafts.ts";
 import { commentBody, placeFinding, summaryItem, type Finding } from "../shared/findings.ts";
 import { findCodeRefs, withoutMarker } from "./proseBlocks.ts";
 import type { ParsedDiff, PullRequest } from "../shared/types.ts";
 
+/** Where an added piece went: a draft comment, or this text in the summary. */
+export type Placed = { draft: string } | { text: string };
+
 export interface Assembly {
   /** The review's own text: what goes in the box when you submit. */
   summary: string;
-  /** `${reviewId}:${index}` of each finding added. */
-  added: string[];
+  /**
+   * Each piece of Claude's review added, by `${reviewId}:${index}`, and where
+   * it went — so that removing it from your review makes it addable again.
+   */
+  added: Record<string, Placed>;
 }
 
 export type AssemblyMap = Record<string, Assembly>;
 
 const STORAGE_KEY = "easy-review.assembly.v1";
-const EMPTY: Assembly = { summary: "", added: [] };
+const EMPTY: Assembly = { summary: "", added: {} };
+
+function isPlaced(value: unknown): value is Placed {
+  if (!value || typeof value !== "object") return false;
+  const p = value as Record<string, unknown>;
+  return typeof p.draft === "string" || typeof p.text === "string";
+}
 
 export function parseAssemblies(raw: string | null): AssemblyMap {
   if (!raw) return {};
@@ -34,7 +46,12 @@ export function parseAssemblies(raw: string | null): AssemblyMap {
       const { summary, added } = a as Record<string, unknown>;
       out[prId] = {
         summary: typeof summary === "string" ? summary : "",
-        added: Array.isArray(added) ? added.filter((k): k is string => typeof k === "string") : [],
+        // Before pieces said where they went they were a list of keys; with
+        // nothing to check them against, they count as not added.
+        added:
+          added && typeof added === "object" && !Array.isArray(added)
+            ? Object.fromEntries(Object.entries(added).filter(([, p]) => isPlaced(p)))
+            : {},
       };
     }
     return out;
@@ -52,13 +69,26 @@ export function appendLine(summary: string, line: string): string {
 /** A pull request with nothing in it drops out, so storage doesn't collect empties. */
 export function withAssembly(map: AssemblyMap, prId: string, next: Assembly): AssemblyMap {
   const out = { ...map };
-  if (next.summary.trim() === "" && next.added.length === 0) delete out[prId];
+  if (next.summary.trim() === "" && Object.keys(next.added).length === 0) delete out[prId];
   else out[prId] = next;
   return out;
 }
 
 export function findingKey(reviewId: string, index: number): string {
   return `${reviewId}:${index}`;
+}
+
+/**
+ * The pieces still in your review: their draft comment not deleted, or their
+ * text still in the summary. One you removed, or edited, can be added again.
+ */
+export function stillAdded(assembly: Assembly, drafts: readonly Pick<DraftComment, "id">[]): Set<string> {
+  const ids = new Set(drafts.map((d) => d.id));
+  const keys = new Set<string>();
+  for (const [key, placed] of Object.entries(assembly.added)) {
+    if ("draft" in placed ? ids.has(placed.draft) : assembly.summary.includes(placed.text)) keys.add(key);
+  }
+  return keys;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -102,6 +132,13 @@ export function useAssembly(prId: string | null | undefined): Assembly {
   );
 }
 
+/** The keys of the pieces still in a pull request's review (see stillAdded). */
+export function useAdded(prId: string | null | undefined): Set<string> {
+  const assembly = useAssembly(prId);
+  const drafts = useDrafts(prId);
+  return useMemo(() => stillAdded(assembly, drafts), [assembly, drafts]);
+}
+
 export function setSummary(prId: string, summary: string): void {
   const a = current()[prId] ?? EMPTY;
   commit(withAssembly(current(), prId, { ...a, summary }));
@@ -127,7 +164,7 @@ export function addFinding(
   const a = current()[pr.id] ?? EMPTY;
   const key = findingKey(review.id, index);
   if (place.kind === "line") {
-    addDraft(pr.id, {
+    const draft = addDraft(pr.id, {
       path: place.path,
       line: place.line,
       ...(place.startLine !== undefined ? { startLine: place.startLine } : {}),
@@ -135,13 +172,16 @@ export function addFinding(
       body: commentBody(finding, place),
       commitId: pr.headSha,
     });
+    commit(withAssembly(current(), pr.id, { ...a, added: { ...a.added, [key]: { draft } } }));
+  } else {
+    const text = summaryItem(finding);
+    commit(
+      withAssembly(current(), pr.id, {
+        summary: appendLine(a.summary, text),
+        added: { ...a.added, [key]: { text } },
+      }),
+    );
   }
-  commit(
-    withAssembly(current(), pr.id, {
-      summary: place.kind === "summary" ? appendLine(a.summary, summaryItem(finding)) : a.summary,
-      added: a.added.includes(key) ? a.added : [...a.added, key],
-    }),
-  );
   return place.kind;
 }
 
@@ -188,7 +228,7 @@ export function addProse(
   const a = current()[pr.id] ?? EMPTY;
   const key = proseKey(review.id, index);
   if (place.kind === "line") {
-    addDraft(pr.id, {
+    const draft = addDraft(pr.id, {
       path: place.path,
       line: place.line,
       ...(place.startLine !== undefined ? { startLine: place.startLine } : {}),
@@ -196,12 +236,14 @@ export function addProse(
       body: withoutMarker(text),
       commitId: pr.headSha,
     });
+    commit(withAssembly(current(), pr.id, { ...a, added: { ...a.added, [key]: { draft } } }));
+  } else {
+    commit(
+      withAssembly(current(), pr.id, {
+        summary: appendBlock(a.summary, text),
+        added: { ...a.added, [key]: { text: text.trim() } },
+      }),
+    );
   }
-  commit(
-    withAssembly(current(), pr.id, {
-      summary: place.kind === "summary" ? appendBlock(a.summary, text) : a.summary,
-      added: a.added.includes(key) ? a.added : [...a.added, key],
-    }),
-  );
   return place.kind;
 }

@@ -1,6 +1,6 @@
 import { Badge, Button, Code, Group, Stack, Text } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
-import { addFinding, findingKey, useAssembly } from "../assembly.ts";
+import { addFinding, findingKey, useAdded } from "../assembly.ts";
 import { peek } from "../hooks/diffStore.ts";
 import { placeFinding, type Finding, type FindingSeverity } from "../../shared/findings.ts";
 import type { PullRequest } from "../../shared/types.ts";
@@ -28,8 +28,8 @@ interface Props {
  * author can apply — when it can, and in the summary when not.
  */
 export function Findings({ pr, review, findings, onAdded }: Props) {
-  const { added } = useAssembly(pr.id);
-  const isAdded = (i: number) => added.includes(findingKey(review.id, i));
+  const added = useAdded(pr.id);
+  const isAdded = (i: number) => added.has(findingKey(review.id, i));
   const remaining = findings.map((_, i) => i).filter((i) => !isAdded(i));
 
   const entry = peek(pr);

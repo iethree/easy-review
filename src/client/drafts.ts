@@ -174,14 +174,11 @@ export function getDrafts(prId: string): DraftComment[] {
   return current()[prId] ?? NONE;
 }
 
-export function addDraft(prId: string, draft: ReviewCommentDraft & { commitId: string }): void {
-  commit(
-    withDraft(current(), prId, {
-      ...draft,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-    }),
-  );
+/** Returns the new draft's id. */
+export function addDraft(prId: string, draft: ReviewCommentDraft & { commitId: string }): string {
+  const id = crypto.randomUUID();
+  commit(withDraft(current(), prId, { ...draft, id, createdAt: new Date().toISOString() }));
+  return id;
 }
 
 export function editDraft(prId: string, id: string, body: string): void {
