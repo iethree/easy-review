@@ -17,6 +17,7 @@ import {
   IconAlertTriangle,
   IconCheck,
   IconCopy,
+  IconMessageChatbot,
   IconPlayerStop,
   IconRefresh,
   IconRobot,
@@ -42,6 +43,8 @@ interface Props {
   onRemove: (id: string) => void;
   /** A finding went into your review. */
   onFindingAdded?: () => void;
+  /** Open the chat about this review: about one part of it, if quoted. */
+  onAsk?: (quote?: string) => void;
 }
 
 const STATUS = {
@@ -70,7 +73,7 @@ function useTick(active: boolean) {
   }, [active]);
 }
 
-export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded }: Props) {
+export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded, onAsk }: Props) {
   const detail = useReviewDetail(job);
   // The prose, and the findings block the review ends with, apart.
   const review = useMemo(() => (detail?.review ? splitReview(detail.review) : null), [detail?.review]);
@@ -98,6 +101,8 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
   const status = STATUS[job.status];
   const stale = job.status === "done" && job.headSha !== pr.headSha;
   const activity = detail?.activity ?? [];
+  // Its session goes on in its checkout; once that's removed, it can't.
+  const ask = job.status === "done" && detail?.sessionId && detail.worktreePath ? onAsk : undefined;
 
   return (
     // Its screenshots, for the Markdown in it to show.
@@ -140,6 +145,17 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
                 onClick={onStart}
               >
                 Re-run
+              </Button>
+            )}
+
+            {ask && (
+              <Button
+                size="compact-sm"
+                variant="light"
+                leftSection={<IconMessageChatbot size={14} />}
+                onClick={() => ask()}
+              >
+                {job.chatPhase ? "Answering…" : detail?.chat?.length ? "Chat" : "Ask"}
               </Button>
             )}
 
@@ -199,6 +215,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
               review={{ id: job.id, headSha: job.headSha }}
               markdown={review.prose}
               onAdded={() => onFindingAdded?.()}
+              onAsk={ask}
             />
             {review.findings.length > 0 && (
               <Findings
@@ -206,6 +223,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
                 review={{ id: job.id, headSha: job.headSha }}
                 findings={review.findings}
                 onAdded={() => onFindingAdded?.()}
+                onAsk={ask}
               />
             )}
           </>

@@ -1411,6 +1411,66 @@ body {
   }
 }
 
+/* A ✓ stays in view once added; the question mark beside it only on hover. */
+@media (hover: hover) {
+  .er-addable:not(:hover):not(:focus-within) .er-ask,
+  .er-finding:not(:hover):not(:focus-within) .er-ask {
+    display: none;
+  }
+}
+
+/* The chat about a review (components/ChatPane.tsx), in the review pane's place. */
+.er-chat-question {
+  align-self: flex-end;
+  max-width: 92%;
+  padding: 8px 10px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--er-row-hover);
+  border: 1px solid var(--er-row-border);
+}
+
+.er-chat-quote {
+  margin-bottom: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--mantine-color-indigo-4);
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* In the composer: the part being asked about, rendered, a few lines of it. */
+.er-chat-composer .er-chat-quote {
+  display: flex;
+  white-space: normal;
+  margin-bottom: 0;
+}
+
+.er-chat-quote-text {
+  flex: 1;
+  min-width: 0;
+  max-height: 5.5em;
+  overflow: hidden;
+  font-size: var(--mantine-font-size-xs);
+}
+
+.er-chat-quote-text .er-markdown {
+  font-size: inherit;
+}
+
+.er-chat-quote-text .er-markdown > :first-child {
+  margin-top: 0;
+}
+
+.er-chat-composer {
+  flex: none;
+  padding: 10px;
+  border-top: 1px solid var(--er-row-border);
+}
+
 /* Claude's prose, a block at a time (components/ProseReview.tsx). */
 .er-addable {
   position: relative;

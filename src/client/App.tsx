@@ -37,6 +37,7 @@ import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
+import { ChatPane, type ChatRequest } from "./components/ChatPane.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
@@ -133,8 +134,13 @@ export function App() {
     if (section) setSettingsSection(section);
     setPage("settings");
   }, []);
-  /** The third pane: the review you're putting together. */
-  const [reviewPaneOpen, setReviewPaneOpen] = useState(false);
+  /**
+   * The third pane: the review you're putting together, or a chat with
+   * Claude about one of its reviews — one at a time.
+   */
+  const [side, setSide] = useState<"review" | ChatRequest | null>(null);
+  const reviewPaneOpen = side === "review";
+  const asks = useRef(0);
   /** The pull request whose reviewers are being chosen. */
   const [pickFor, setPickFor] = useState<PullRequest | null>(null);
   const [reviewed, setReviewed] = useState<Record<string, ReviewEvent>>({});
@@ -343,6 +349,17 @@ export function App() {
     });
   });
 
+  /** The review the chat is about — only while its pull request is the one on screen. */
+  const chatJob =
+    side !== null && typeof side === "object" && selected
+      ? ai.jobs.find((job) => job.id === side.jobId && prKey(job) === prKey(selected))
+      : undefined;
+  // Moving on to another pull request, or deleting the review, closes it.
+  const chatOrphaned = side !== null && typeof side === "object" && !chatJob;
+  useEffect(() => {
+    if (chatOrphaned) setSide(null);
+  }, [chatOrphaned]);
+
   const openAiReview = useCallback(
     (pr: PullRequest, reviewerId: string) => {
       select(pr);
@@ -427,7 +444,8 @@ export function App() {
       start: startAiReview,
       cancel: (id) => void ai.cancel(id).catch(() => {}),
       remove: (id) => void ai.remove(id).catch(() => {}),
-      findingAdded: () => setReviewPaneOpen(true),
+      findingAdded: () => setSide("review"),
+      ask: (job, quote) => setSide({ jobId: job.id, quote: quote ?? null, n: ++asks.current }),
       pickingFor: pickFor?.id ?? null,
       reviewers: reviewers.reviewers,
       cancelPick: () => setPickFor(null),
@@ -1004,7 +1022,7 @@ export function App() {
             <ActionIcon
               variant={reviewPaneOpen ? "light" : "subtle"}
               color="gray"
-              onClick={() => setReviewPaneOpen((x) => !x)}
+              onClick={() => setSide((x) => (x === "review" ? null : "review"))}
               aria-label="Your review"
               aria-pressed={reviewPaneOpen}
               style={page ? { visibility: "hidden" } : undefined}
@@ -1094,7 +1112,7 @@ export function App() {
               />
             }
           />
-          {reviewPaneOpen && <ReviewPaneHandle />}
+          {side && <ReviewPaneHandle />}
           {reviewPaneOpen && (
             <ReviewPane
               key={selected?.id ?? "none"}
@@ -1102,7 +1120,18 @@ export function App() {
               ownPr={selected !== null && isOwn(selected)}
               reviewed={selected ? reviewed[selected.id] : undefined}
               onSubmit={handleSubmit}
-              onClose={() => setReviewPaneOpen(false)}
+              onClose={() => setSide(null)}
+            />
+          )}
+          {chatJob && selected && side !== null && typeof side === "object" && (
+            <ChatPane
+              key={chatJob.id}
+              pr={selected}
+              job={chatJob}
+              request={side}
+              onAsk={ai.ask}
+              onStop={(id) => void ai.stopChat(id).catch(() => {})}
+              onClose={() => setSide(null)}
             />
           )}
         </div>

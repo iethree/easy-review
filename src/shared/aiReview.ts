@@ -14,6 +14,11 @@ export function isActive(status: AiReviewStatus): boolean {
   return ACTIVE_STATUSES.includes(status);
 }
 
+/** Reviewing, or answering a question about its review: either way, its checkout is in use. */
+export function isBusy(job: Pick<AiReviewSummary, "status" | "chatPhase">): boolean {
+  return isActive(job.status) || Boolean(job.chatPhase);
+}
+
 export type AiReviewEffort = "" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface AiReviewConfig {
@@ -79,6 +84,8 @@ export interface AiReviewSummary {
   error: string | null;
   costUsd: number | null;
   turns: number | null;
+  /** What Claude is doing to answer a question about the review; null when it isn't. */
+  chatPhase: string | null;
 }
 
 export interface AiReviewActivity {
@@ -87,6 +94,19 @@ export interface AiReviewActivity {
 }
 
 export type CloneSource = "configured" | "detected" | "managed";
+
+/** A question about a finished review, or Claude's answer, in the session that wrote it. */
+export interface AiChatMessage {
+  role: "user" | "assistant";
+  /** Markdown. For an answer that failed, why. */
+  text: string;
+  /** The part of the review a question is about. */
+  quote?: string;
+  /** The answer failed or was stopped: `text` says why. */
+  error?: boolean;
+  costUsd?: number | null;
+  at: string;
+}
 
 export interface AiReviewJob extends AiReviewSummary {
   baseRef: string;
@@ -105,6 +125,8 @@ export interface AiReviewJob extends AiReviewSummary {
   readOnly?: boolean;
   /** The last of whatever the process wrote to stderr, for failures. */
   stderrTail: string | null;
+  /** Follow-up questions and their answers, oldest first. */
+  chat?: AiChatMessage[];
 }
 
 export interface LocalStatus {

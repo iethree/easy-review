@@ -216,17 +216,24 @@ export function proseKey(reviewId: string, index: number): string {
   return `${reviewId}:p${index}`;
 }
 
-/** Puts one piece of Claude's prose into your review, where placeProse says. */
+/** A piece of one of Claude's answers in the chat about a review. */
+export function answerKey(reviewId: string, message: number, index: number): string {
+  return `${reviewId}:c${message}:${index}`;
+}
+
+/**
+ * Puts one piece of Claude's prose into your review, where placeProse says.
+ * `key` is the piece's (see proseKey), for telling it's been added.
+ */
 export function addProse(
   pr: PullRequest,
   review: { id: string; headSha: string },
   text: string,
-  index: number,
+  key: string,
   diff: ParsedDiff | null,
 ): "line" | "summary" {
   const place = placeProse(pr, review, text, diff);
   const a = current()[pr.id] ?? EMPTY;
-  const key = proseKey(review.id, index);
   if (place.kind === "line") {
     const draft = addDraft(pr.id, {
       path: place.path,

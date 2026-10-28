@@ -11,7 +11,7 @@ import {
   type LocalStatus,
 } from "../shared/aiReview.ts";
 import { detectClaude, type ClaudeStatus } from "./claude.ts";
-import type { ReviewJobs } from "./jobs.ts";
+import { ChatError, type ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
 import { screenshotFile } from "./screenshots.ts";
 import {
@@ -24,6 +24,8 @@ import {
 } from "./reviewers.ts";
 
 const NAME = /^[\w.-]+$/;
+/** Long enough for any question, and a quoted section of a review. */
+const MAX_CHAT_TEXT = 20_000;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -152,6 +154,19 @@ export function createLocalApi(jobs: ReviewJobs) {
             return new Response(file, { headers: { "cache-control": "private, max-age=31536000, immutable" } });
           }
           if (parts[2] === "cancel" && method === "POST") return json(jobs.cancel(id));
+          if (parts[2] === "chat" && !parts[3] && method === "POST") {
+            const input = (await request.json().catch(() => null)) as { question?: unknown; quote?: unknown } | null;
+            const question = typeof input?.question === "string" ? input.question : "";
+            const quote = typeof input?.quote === "string" ? input.quote : undefined;
+            if (!question.trim() || question.length > MAX_CHAT_TEXT || (quote?.length ?? 0) > MAX_CHAT_TEXT) {
+              return fail("Ask a question (up to 20,000 characters).", 400);
+            }
+            const asked = await jobs.ask(id, question, quote);
+            return json({ ...asked, resumeCommand: resumeCommand(asked) }, 202);
+          }
+          if (parts[2] === "chat" && parts[3] === "stop" && !parts[4] && method === "POST") {
+            return json(jobs.stopChat(id));
+          }
           if (!parts[2] && method === "DELETE") {
             await jobs.remove(id);
             return json({ ok: true });
@@ -160,6 +175,7 @@ export function createLocalApi(jobs: ReviewJobs) {
       }
     } catch (err) {
       if (err instanceof ReviewerError) return fail(err.message, 400);
+      if (err instanceof ChatError) return fail(err.message, 409);
       return fail(err instanceof Error ? err.message : "Unexpected error", 500);
     }
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { applyEvent, buildArgs, buildPrompt, describeToolUse, EMPTY_STREAM } from "./claude.ts";
+import { applyEvent, buildArgs, buildPrompt, buildQuestion, describeToolUse, EMPTY_STREAM } from "./claude.ts";
 import { childEnv } from "./env.ts";
 
 const CWD = "/wt";
@@ -189,4 +189,23 @@ test("every reviewer, whatever its instructions, is asked for findings the UI ca
   const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
   expect(system).toContain("easy-review-findings");
   expect(system).toContain('"severity"');
+});
+
+test("a question continues the review's session, fenced in the same way", () => {
+  const args = buildArgs("why?", { model: "", effort: "", readOnly: true }, "session-1");
+  expect(args[args.indexOf("--resume") + 1]).toBe("session-1");
+  expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
+  expect(args).toContain("--strict-mcp-config");
+  expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
+  const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
+  expect(system).toContain("follow-up questions");
+  expect(system).not.toContain("easy-review-findings");
+  expect(buildArgs("x", { model: "", effort: "", readOnly: false })).not.toContain("--resume");
+});
+
+test("a question about part of the review quotes it first", () => {
+  expect(buildQuestion("  Why?  ")).toBe("Why?");
+  expect(buildQuestion("Is this real?", "- **Race** in the loader\n\n  more")).toBe(
+    "About this part of your review:\n\n> - **Race** in the loader\n>\n>   more\n\nIs this real?",
+  );
 });
