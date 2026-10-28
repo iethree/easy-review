@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { draw } from "reladraw";
 import pkg from "../../package.json";
-import { BUILT_IN_REVIEWERS, RELADRAW_VERSION } from "./builtInReviewers.ts";
+import { BUILT_IN_REVIEWERS, RELADRAW_VERSION, TULIP_VERSION } from "./builtInReviewers.ts";
+import { placesReport } from "./reports.ts";
 
 const diagrams = BUILT_IN_REVIEWERS.find((r) => r.id === "diagrams")?.instructions ?? "";
 
@@ -33,4 +34,12 @@ test("the screen reviewers save screenshots where the review keeps them, and sho
   const block = /```compare\n([\s\S]*?)```/.exec(comparison)?.[1] ?? "";
   expect(parseCompare(block)).toEqual({ before: "settings-general-before.png", after: "settings-general-after.png" });
   expect(comparison).toContain("$(cat .easy-review/base-commit)");
+});
+
+test("the Tulip reviewer runs a pinned Tulip, and shows its page where the review keeps it", () => {
+  const tulip = BUILT_IN_REVIEWERS.find((r) => r.id === "tulip")?.instructions ?? "";
+  expect(TULIP_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+  expect(tulip).toContain(`@virtuslab/tulip@${TULIP_VERSION} `);
+  expect(tulip).toContain(".easy-review/report/");
+  expect(placesReport(tulip)).toBe(true);
 });

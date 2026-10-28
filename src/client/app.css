@@ -1419,6 +1419,20 @@ body {
   }
 }
 
+/* A review's HTML report (components/Report.tsx), in a sandboxed frame. */
+.er-report {
+  margin: 12px 0;
+}
+
+.er-report-frame {
+  display: block;
+  width: 100%;
+  height: 75vh;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-white);
+}
+
 /* The chat about a review (components/ChatPane.tsx), in the review pane's place. */
 .er-chat-question {
   align-self: flex-end;

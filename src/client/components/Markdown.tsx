@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import { parseCompare, screenshotName, screenshotUrl } from "../screenshots.ts";
 import { Compare } from "./Compare.tsx";
 import { Diagram } from "./Diagram.tsx";
+import { Report } from "./Report.tsx";
 
 /**
  * Inside a Claude review: its id, so its screenshots can be shown. There, an
@@ -46,10 +47,12 @@ export const Markdown = memo(function Markdown({ children, allowHtml = false }: 
             </a>
           ),
           // A ```reladraw block is a diagram, drawn rather than shown as code;
-          // in a review, a ```compare block is a before and an after.
+          // in a review, a ```compare block is a before and an after, and a
+          // ```report block its HTML report.
           pre: ({ node, children: inner, ...rest }) => {
             const block = fencedBlock(node);
             if (block?.lang === "reladraw") return <Diagram source={block.text} />;
+            if (reviewId && block?.lang === "report") return <Report reviewId={reviewId} title={block.text.trim()} />;
             const pair = reviewId && block?.lang === "compare" ? parseCompare(block.text) : null;
             if (reviewId && pair) {
               return <Compare before={screenshotUrl(reviewId, pair.before)} after={screenshotUrl(reviewId, pair.after)} />;

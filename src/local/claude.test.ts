@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { applyEvent, buildArgs, buildPrompt, buildQuestion, describeToolUse, EMPTY_STREAM } from "./claude.ts";
+import {
+  applyEvent,
+  buildArgs,
+  buildPrompt,
+  buildQuestion,
+  describeToolUse,
+  EMPTY_STREAM,
+  fencedClaudeScript,
+} from "./claude.ts";
 import { childEnv } from "./env.ts";
 
 const CWD = "/wt";
@@ -208,4 +216,10 @@ test("a question about part of the review quotes it first", () => {
   expect(buildQuestion("Is this real?", "- **Race** in the loader\n\n  more")).toBe(
     "About this part of your review:\n\n> - **Race** in the loader\n>\n>   more\n\nIs this real?",
   );
+});
+
+test("a Claude a review starts itself is fenced like the review", () => {
+  const script = fencedClaudeScript("/Users/o'neil/.local/bin/claude");
+  expect(script).toStartWith("#!/bin/sh\n");
+  expect(script).toContain(`exec '/Users/o'\\''neil/.local/bin/claude' --setting-sources user --strict-mcp-config "$@"`);
 });

@@ -13,6 +13,7 @@ import {
 import { detectClaude, type ClaudeStatus } from "./claude.ts";
 import { ChatError, type ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
+import { reportCsp, reportFile, servedPage } from "./reports.ts";
 import { screenshotFile } from "./screenshots.ts";
 import {
   createReviewer,
@@ -152,6 +153,26 @@ export function createLocalApi(jobs: ReviewJobs) {
             const file = await screenshotFile(id, decodeURIComponent(parts[3]));
             if (!file) return fail("No such screenshot", 404);
             return new Response(file, { headers: { "cache-control": "private, max-age=31536000, immutable" } });
+          }
+          if (parts[2] === "report" && method === "GET") {
+            const file = await reportFile(id, parts.slice(3).map(decodeURIComponent).join("/"));
+            const headers = {
+              "content-security-policy": reportCsp(url.origin),
+              "x-content-type-options": "nosniff",
+              "cache-control": "no-store",
+            };
+            if (!file) {
+              return new Response("This review's report wasn't kept.", {
+                status: 404,
+                headers: { ...headers, "content-type": "text/plain; charset=utf-8" },
+              });
+            }
+            if (file.type.startsWith("text/html")) {
+              return new Response(await servedPage(file), {
+                headers: { ...headers, "content-type": "text/html; charset=utf-8" },
+              });
+            }
+            return new Response(file, { headers });
           }
           if (parts[2] === "cancel" && method === "POST") return json(jobs.cancel(id));
           if (parts[2] === "chat" && !parts[3] && method === "POST") {

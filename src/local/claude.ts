@@ -17,12 +17,18 @@
  * Nothing confines the tools to the worktree: Read can read any file you
  * can, and a review that can run code runs the pull request's code on this
  * machine. Running none of it is the trade read-only makes.
+ *
+ * A review that runs code may start Claude itself — Tulip drives its own
+ * sessions in a checkout of the pull request. The `claude` first on its PATH
+ * adds the first two fences to those too (see fencedClaudeDir).
  */
 
-import { relative } from "node:path";
+import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
+import { delimiter, join, relative } from "node:path";
 import { reviewTools, type AiReviewConfig } from "../shared/aiReview.ts";
 import { FINDINGS_INSTRUCTIONS } from "../shared/findings.ts";
 import { childEnv } from "./env.ts";
+import { localPaths } from "./paths.ts";
 
 const TOOLS_READ_ONLY = `You have read-only tools (Read, Grep, Glob), in a git worktree checked out at the pull request's head commit. Keep to it.`;
 
@@ -240,6 +246,32 @@ export interface ClaudeRun {
   state: StreamState;
 }
 
+/** The fence every Claude a review starts gets: your settings only, and no MCP servers. */
+export const NESTED_FENCE = ["--setting-sources", "user", "--strict-mcp-config"];
+
+/** The script standing in for `claude` on a review's PATH. */
+export function fencedClaudeScript(realClaude: string): string {
+  const quoted = `'${realClaude.replace(/'/g, `'\\''`)}'`;
+  return `#!/bin/sh
+# Written by easy-review. A review that starts Claude itself gets this one:
+# your settings only, not the pull request's (its hooks would run), and no MCP servers.
+exec ${quoted} ${NESTED_FENCE.join(" ")} "$@"
+`;
+}
+
+/** A folder holding the fenced `claude`, for the front of a review's PATH. */
+export async function fencedClaudeDir(realClaude: string): Promise<string> {
+  const dir = localPaths().bin;
+  const path = join(dir, "claude");
+  const script = fencedClaudeScript(realClaude);
+  if ((await readFile(path, "utf8").catch(() => null)) !== script) {
+    await mkdir(dir, { recursive: true });
+    await writeFile(path, script);
+    await chmod(path, 0o755);
+  }
+  return dir;
+}
+
 export async function runClaude(opts: {
   cwd: string;
   args: string[];
@@ -247,9 +279,12 @@ export async function runClaude(opts: {
   onState: (state: StreamState) => void;
   onSpawn: (proc: { kill: () => void }) => void;
 }): Promise<ClaudeRun> {
-  const proc = Bun.spawn(["claude", ...opts.args], {
+  const env = childEnv();
+  const real = Bun.which("claude", { PATH: env.PATH ?? "" });
+  if (real) env.PATH = [await fencedClaudeDir(real), env.PATH].filter(Boolean).join(delimiter);
+  const proc = Bun.spawn([real ?? "claude", ...opts.args], {
     cwd: opts.cwd,
-    env: childEnv(),
+    env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",

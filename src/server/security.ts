@@ -21,6 +21,24 @@ export function isCrossSite(request: Request): boolean {
   return false;
 }
 
+const REPORT_FILE = /^\/api\/local\/reviews\/[0-9a-f-]{36}\/report\//;
+const PAGE_RESOURCES = new Set(["script", "style", "font", "image"]);
+
+/**
+ * The one exception: a review's HTML report runs in a sandbox with no origin
+ * (see src/local/reports.ts), so its own scripts, styles, fonts and images
+ * reach the server labelled cross-site. Only those are let through — reading
+ * a file, never a fetch or anything that changes state — and another site
+ * gains nothing it couldn't already do: it can load them, but not read them.
+ */
+export function isReportResource(request: Request): boolean {
+  return (
+    request.method === "GET" &&
+    REPORT_FILE.test(new URL(request.url).pathname) &&
+    PAGE_RESOURCES.has(request.headers.get("sec-fetch-dest") ?? "")
+  );
+}
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 /**

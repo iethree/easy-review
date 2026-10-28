@@ -11,7 +11,7 @@ const savedPath = process.env.PATH;
 
 /** A stand-in for the claude CLI: it answers with the arguments it was given. */
 const FAKE_CLAUDE = `#!/usr/bin/env bun
-const args = process.argv.slice(2);
+const args = [...process.argv.slice(2), "PATH0=" + (process.env.PATH ?? "").split(":")[0]];
 const print = (event) => console.log(JSON.stringify(event));
 print({ type: "system", subtype: "init", session_id: "session-1", model: "fake" });
 print({ type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "app.ts" } }] } });
@@ -114,6 +114,8 @@ test("a question is answered in the review's own session, with the part of the r
   expect(args[args.indexOf("-p") + 1]).toContain("> - **Race** in the loader");
   // Read-only, as it reviewed.
   expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
+  // Any claude it runs itself is the fenced one.
+  expect(args.at(-1)).toBe(`PATH0=${join(dir, "home", "bin")}`);
 });
 
 test("with its checkout gone, a review's session can't be continued", async () => {

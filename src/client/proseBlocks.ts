@@ -36,13 +36,16 @@ export function splitProse(markdown: string): ProseBlock[] {
   return blocks;
 }
 
+/** Fenced blocks drawn here as something else: a diagram, a before-and-after, a report. */
+const DRAWN = new Set(["reladraw", "compare", "report"]);
+
 /**
- * A diagram, a screenshot or a before-and-after: shown here, but on GitHub
- * it would be code, or an image of a file it can't see.
+ * A diagram, a screenshot, a before-and-after or a report: shown here, but on
+ * GitHub it would be code, or an image of a file it can't see.
  */
 function showsPicture(node: Node): boolean {
   if (node.type === "image") return true;
-  if (node.type === "code") return (node as Code).lang === "reladraw" || (node as Code).lang === "compare";
+  if (node.type === "code") return DRAWN.has((node as Code).lang ?? "");
   return "children" in node && Array.isArray(node.children) && (node.children as Node[]).some(showsPicture);
 }
 

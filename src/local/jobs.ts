@@ -34,6 +34,7 @@ import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
 import { prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
 import { localPaths } from "./paths.ts";
 import { seedReviewers } from "./reviewers.ts";
+import { keepReport, placesReport } from "./reports.ts";
 import { dropScreenshots, keepScreenshots } from "./screenshots.ts";
 
 type Killable = { kill: () => void };
@@ -572,6 +573,10 @@ export class ReviewJobs {
       const r = result.state.result;
       // Before the worktree can be cleaned up: they're part of the review.
       await keepScreenshots(worktree.path, job.id).catch(() => []);
+      // Only for a review that shows one: reviewers started together share the checkout.
+      if (r?.ok && placesReport(r.text)) {
+        await keepReport(worktree.path, job.id, new Date(job.startedAt ?? job.createdAt)).catch(() => false);
+      }
 
       if (this.cancelled.has(job.id)) {
         this.finish(job, { status: "cancelled", phase: "Cancelled", stderrTail: tail });
