@@ -134,13 +134,13 @@ export function ClaudeSettings({
 
       <Alert color="gray" variant="light" icon={<IconShieldLock size={16} />} p="xs">
         <Text size="xs">
-          The code under review was written by someone else, so each review runs{" "}
-          <Code>--restricted</Code>: no web, no MCP servers, no settings or hooks from the pull
-          request, and its file tools confined to its own worktree. Git runs with hooks switched
-          off.{" "}
+          The code under review was written by someone else, so each review runs in its own
+          worktree with no web tools, no MCP servers, and none of the pull request's settings or
+          hooks (<Code>--setting-sources user</Code>). Git runs with hooks switched off. Its tools
+          aren't confined to the worktree, though: they can reach any file you can.{" "}
           {config.readOnly
             ? "Read-only, it has just Read, Grep and Glob: no shell."
-            : "It can also run commands, and those aren't confined: they run as you."}
+            : "It can also run commands, which run as you."}
         </Text>
         {status && (
           <Text size="10px" c="dimmed" mt={6}>

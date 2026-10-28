@@ -7,7 +7,9 @@ const CWD = "/wt";
 test("every run is fenced in, whatever the settings say", () => {
   for (const readOnly of [true, false]) {
     const args = buildArgs("review it", { model: "", effort: "", readOnly });
-    expect(args).toContain("--restricted");
+    // Your settings, never the pull request's: its .claude/settings.json could hold hooks.
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
+    expect(args).not.toContain("--restricted");
     expect(args).toContain("--strict-mcp-config");
     expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
     expect(args[args.indexOf("--output-format") + 1]).toBe("stream-json");

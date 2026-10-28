@@ -1,21 +1,22 @@
 /**
  * Running Claude Code headlessly against a pull request's worktree.
  *
- * The code under review was written by someone else, so the session is
- * fenced in by the CLI itself, not by asking nicely:
- *   --restricted          ignores the settings files a PR could ship (hooks!);
- *                         file tools confined to the working directory; writes
- *                         to git and settings files refused; no WebFetch
+ * The code under review was written by someone else, so the CLI is told
+ * what not to take from it, rather than asked nicely:
+ *   --setting-sources user  your own settings only: none of the settings
+ *                         files a PR could ship (.claude/settings.json and
+ *                         its hooks, which would run as soon as it starts)
  *   --strict-mcp-config   no MCP servers, including a .mcp.json in the PR
  *   --tools …             Read, Grep and Glob — and, unless the review is
  *                         read-only, Bash, Edit and Write, so Claude can run
- *                         tests and scripts to check what it suspects
- *                         (--restricted removes Bash unless --tools names it)
+ *                         tests and scripts to check what it suspects. No
+ *                         WebFetch or WebSearch.
  *   --allowedTools …      those three, approved up front: nobody is there to ask
  *   --permission-mode dontAsk  anything else needing approval is refused
  *
- * Bash is not confined to the worktree: a review that can run code runs the
- * pull request's code on this machine. That is the trade read-only avoids.
+ * Nothing confines the tools to the worktree: Read can read any file you
+ * can, and a review that can run code runs the pull request's code on this
+ * machine. Running none of it is the trade read-only makes.
  */
 
 import { relative } from "node:path";
@@ -23,7 +24,7 @@ import { reviewTools, type AiReviewConfig } from "../shared/aiReview.ts";
 import { FINDINGS_INSTRUCTIONS } from "../shared/findings.ts";
 import { childEnv } from "./env.ts";
 
-const TOOLS_READ_ONLY = `You have read-only tools (Read, Grep, Glob), confined to a git worktree checked out at the pull request's head commit.`;
+const TOOLS_READ_ONLY = `You have read-only tools (Read, Grep, Glob), in a git worktree checked out at the pull request's head commit. Keep to it.`;
 
 const TOOLS_RUN = `You are working in a git worktree checked out at the pull request's head commit. You can read and search it (Read, Grep, Glob), edit files in it (Edit, Write), and run commands (Bash). Use them to check what you suspect rather than guess: run the relevant tests, a type check, or a small script that exercises the change, and say in your review what you ran and what it showed.
 
@@ -64,7 +65,8 @@ export function buildArgs(prompt: string, config: Pick<AiReviewConfig, "model" |
   const args = [
     "-p",
     prompt,
-    "--restricted",
+    "--setting-sources",
+    "user",
     "--strict-mcp-config",
     "--tools",
     tools.join(","),

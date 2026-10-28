@@ -15,5 +15,5 @@ test("continuing a review in a terminal keeps the tools it ran with", () => {
   expect(resumeCommand({ ...job, readOnly: true })).toEndWith("--tools Read,Grep,Glob");
   // Reviews from before the setting were all read-only.
   expect(resumeCommand(job)).toEndWith("--tools Read,Grep,Glob");
-  expect(resumeCommand({ ...job, readOnly: false })).toContain("--restricted --strict-mcp-config");
+  expect(resumeCommand({ ...job, readOnly: false })).toContain("--setting-sources user --strict-mcp-config");
 });

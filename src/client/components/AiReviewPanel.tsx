@@ -85,7 +85,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
           <Text fw={600}>Review cancelled</Text>
           <Text size="sm" c="dimmed" ta="center">
             Checks out #{pr.number} into its own worktree and has Claude Code review it as{" "}
-            {job.reviewerName}. Claude gets read-only tools, confined to that checkout.
+            {job.reviewerName}.
           </Text>
           <Button leftSection={<IconRobot size={16} />} onClick={onStart}>
             Review again

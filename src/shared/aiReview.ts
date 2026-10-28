@@ -195,5 +195,5 @@ export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId
   if (!job.worktreePath || !job.sessionId) return null;
   const quoted = `'${job.worktreePath.replace(/'/g, `'\\''`)}'`;
   const tools = reviewTools(job.readOnly ?? true).join(",");
-  return `cd ${quoted} && claude --resume ${job.sessionId} --restricted --strict-mcp-config --tools ${tools}`;
+  return `cd ${quoted} && claude --resume ${job.sessionId} --setting-sources user --strict-mcp-config --tools ${tools}`;
 }
