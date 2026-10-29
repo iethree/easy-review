@@ -1043,7 +1043,7 @@ body {
   display: none;
 }
 
-[data-desktop] .er-topbar :is(button, a, input, [role="tab"], [role="progressbar"]) {
+[data-desktop] .er-topbar :is(button, a, input, [role="tab"]) {
   -webkit-app-region: no-drag;
 }
 

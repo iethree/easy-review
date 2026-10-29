@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReviewsResponse, Settings } from "../../shared/types.ts";
-import { prefetchAll, reset as resetDiffs } from "./diffStore.ts";
+import { reset as resetDiffs } from "./diffStore.ts";
 
 interface State {
   data: ReviewsResponse | null;
@@ -42,7 +42,6 @@ export function useReviews(settings: Settings) {
 
         setState({ data: json, loading: false, error: null });
         if (fresh) resetDiffs();
-        prefetchAll(json.pullRequests);
       } catch (err) {
         if (id !== requestId.current) return;
         setState({

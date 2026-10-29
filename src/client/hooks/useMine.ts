@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PullRequest, ReviewsResponse } from "../../shared/types.ts";
-import { prefetchAll } from "./diffStore.ts";
 
 /** One empty list for every render before the first load, so memos keyed on it hold. */
 const NONE: PullRequest[] = [];
@@ -32,7 +31,6 @@ export function useMine(active: boolean) {
         return;
       }
       setState({ data: json, loading: false, error: null });
-      prefetchAll(json.pullRequests);
     } catch (err) {
       if (id !== requestId.current) return;
       setState({ data: null, loading: false, error: err instanceof Error ? err.message : "Network error" });

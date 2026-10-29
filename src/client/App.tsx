@@ -1,9 +1,7 @@
 import {
   ActionIcon,
   Badge,
-  Box,
   Group,
-  Progress,
   Tabs,
   Text,
   Title,
@@ -43,7 +41,7 @@ import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
 import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
 import { ReviewPaneHandle, SplitView, type SplitMode } from "./components/SplitView.tsx";
-import { requestNow, useReadyCount } from "./hooks/diffStore.ts";
+import { requestDiff } from "./hooks/diffStore.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
 import { useReviewed } from "./hooks/useReviewed.ts";
 import { useMine } from "./hooks/useMine.ts";
@@ -99,7 +97,6 @@ export function App() {
   const history = useReviewed(tab === "reviewed");
   const mine = useMine(tab === "mine");
   const { toggleColorScheme } = useMantineColorScheme();
-  const readyCount = useReadyCount();
   const narrow = useMediaQuery("(max-width: 900px)");
   const { hidden, setHiddenFor } = useHidden();
 
@@ -480,18 +477,12 @@ export function App() {
     [ai.available, ai.byPr, ai.reviewsByPr, reviewers.reviewers, quickStart],
   );
 
-  // Make sure the selected diff, and the ones either side of it, are loading
-  // first — `j`/`k` should land on something that is already there.
-  // Keyed on ids rather than the objects: the list array is rebuilt on every
-  // filter keystroke, and that alone shouldn't re-prioritise the fetch queue.
-  const neighbours = `${list[index - 1]?.id ?? ""}|${list[index + 1]?.id ?? ""}`;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on ids on purpose, as above
+  // Fetch the open pull request's diff, and only that one. Again after a
+  // refresh, which brings a new object and may have dropped the old diff;
+  // a diff already here or on its way isn't fetched twice.
   useEffect(() => {
-    if (!selected) return;
-    for (const pr of [list[index + 1], list[index - 1]]) if (pr) requestNow(pr);
-    // Last, so it lands at the front of the queue.
-    requestNow(selected);
-  }, [selectedKey, neighbours]);
+    if (selected) requestDiff(selected);
+  }, [selected]);
 
   // Moving to another pull request closes its boxes for good, rather than
   // leaving them to reappear when you come back to it.
@@ -793,7 +784,6 @@ export function App() {
   /* ---------------------------------------------------------------------- */
 
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
-  const prefetchPct = allPrs.length === 0 ? 0 : (readyCount / allPrs.length) * 100;
 
   const difficultySegments = (q: string, set: (next: string) => void, total: number, c: Record<Difficulty, number>) => ({
     value: readLevel(q) ?? "all",
@@ -993,16 +983,6 @@ export function App() {
         </Group>
 
         <Group gap={6} wrap="nowrap">
-          <Tooltip label={`Diffs prefetched: ${readyCount}/${allPrs.length}`}>
-            <Box w={72} visibleFrom="md">
-              <Progress
-                value={prefetchPct}
-                size="xs"
-                color={prefetchPct >= 100 ? "teal" : "indigo"}
-                transitionDuration={200}
-              />
-            </Box>
-          </Tooltip>
           <Tooltip label="Refresh (Shift+R)">
             <ActionIcon
               variant="subtle"
