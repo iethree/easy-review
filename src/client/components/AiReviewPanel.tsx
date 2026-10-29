@@ -56,11 +56,14 @@ const STATUS = {
   cancelled: { label: "Cancelled", color: "gray" },
 } as const;
 
-function duration(fromIso: string | null, toIso: string | null): string {
+/** How long from one time to another, or to now: "42s", "3m 07s", "1h 02m". */
+export function duration(fromIso: string | null, toIso: string | null): string {
   if (!fromIso) return "";
   const ms = (toIso ? Date.parse(toIso) : Date.now()) - Date.parse(fromIso);
   const s = Math.max(0, Math.round(ms / 1000));
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+  return `${Math.floor(s / 3600)}h ${String(Math.floor(s / 60) % 60).padStart(2, "0")}m`;
 }
 
 /** Re-renders once a second while running, for the elapsed-time counter. */
@@ -272,6 +275,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
               ? ` · ${activity.length} step${activity.length === 1 ? "" : "s"} so far`
               : job.turns !== null && ` · ${job.turns} turns`}
             {job.costUsd !== null && ` · $${job.costUsd.toFixed(2)}`}
+            {!running && job.startedAt && job.finishedAt && ` · took ${duration(job.startedAt, job.finishedAt)}`}
             {detail.clonePath && ` · clone ${detail.clonePath} (${detail.cloneSource})`}
             {detail.worktreePath ? (
               <>
