@@ -38,6 +38,7 @@ import { CiBadge } from "./CiBadge.tsx";
 import type { DiffThreadItem } from "./DiffThread.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
+import { FindBar } from "./FindBar.tsx";
 import { DifficultyBadge } from "./DifficultyBadge.tsx";
 import { PrDescription } from "./PrDescription.tsx";
 import { ReviewActions } from "./ReviewActions.tsx";
@@ -191,42 +192,45 @@ export function PreviewPane(props: Props) {
           )}
         </Tabs.List>
       </Tabs>
-      {deferred && (
-        <div
-          // Keyed so every pull request (and tab) starts at the top, with its
-          // own fresh expand/collapse state.
-          key={`${deferred.id}:${tab}`}
-          className="er-pane-scroll"
-          ref={setScrollEl}
-          tabIndex={-1}
-          data-stale={stale}
-        >
-          <Box p="sm">
-            <ErrorBoundary>
-              {review ? (
-                <AiReviewPanel
-                  key={review.id}
-                  pr={deferred}
-                  job={review}
-                  // Re-run by the same reviewer; one deleted since, or a review
-                  // from before there were reviewers, asks instead.
-                  onStart={() =>
-                    ai.start(deferred, ai.reviewerIds.has(review.reviewerId) ? review.reviewerId : undefined)
-                  }
-                  onCancel={ai.cancel}
-                  onRemove={ai.remove}
-                  onFindingAdded={ai.findingAdded}
-                  onAsk={(quote) => ai.ask(review, quote)}
-                />
-              ) : tab === "description" ? (
-                <PrDescription pr={deferred} viewer={props.viewer} />
-              ) : (
-                <Body pr={deferred} />
-              )}
-            </ErrorBoundary>
-          </Box>
-        </div>
-      )}
+      <div className="er-pane-body">
+        <FindBar scrollRef={scrollRef} />
+        {deferred && (
+          <div
+            // Keyed so every pull request (and tab) starts at the top, with its
+            // own fresh expand/collapse state.
+            key={`${deferred.id}:${tab}`}
+            className="er-pane-scroll"
+            ref={setScrollEl}
+            tabIndex={-1}
+            data-stale={stale}
+          >
+            <Box p="sm">
+              <ErrorBoundary>
+                {review ? (
+                  <AiReviewPanel
+                    key={review.id}
+                    pr={deferred}
+                    job={review}
+                    // Re-run by the same reviewer; one deleted since, or a review
+                    // from before there were reviewers, asks instead.
+                    onStart={() =>
+                      ai.start(deferred, ai.reviewerIds.has(review.reviewerId) ? review.reviewerId : undefined)
+                    }
+                    onCancel={ai.cancel}
+                    onRemove={ai.remove}
+                    onFindingAdded={ai.findingAdded}
+                    onAsk={(quote) => ai.ask(review, quote)}
+                  />
+                ) : tab === "description" ? (
+                  <PrDescription pr={deferred} viewer={props.viewer} />
+                ) : (
+                  <Body pr={deferred} />
+                )}
+              </ErrorBoundary>
+            </Box>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

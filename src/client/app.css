@@ -163,6 +163,31 @@ body {
 }
 
 /* The diff lags the header by a frame while you flick through with j/k. */
+/* Under the tabs: the scroller, and the find box floating over its corner. */
+.er-pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.er-find {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 3;
+}
+
+::highlight(er-find) {
+  background-color: rgba(250, 204, 21, 0.4);
+}
+
+::highlight(er-find-current) {
+  background-color: rgba(249, 115, 22, 0.75);
+  color: #000;
+}
+
 .er-pane-scroll[data-stale="true"] {
   opacity: 0.55;
 }

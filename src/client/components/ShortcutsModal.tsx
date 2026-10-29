@@ -6,6 +6,8 @@ const IN_BOXES: { display: string[]; description: string }[] = [
   { display: ["Enter"], description: "In the approve box: confirm the approval" },
   { display: ["⇧Enter"], description: "In the approve box: new line in the comment" },
   { display: ["⌘Enter"], description: "In the request-changes box: submit" },
+  { display: ["⌘F"], description: "Find text in the current tab" },
+  { display: ["Enter", "⇧Enter"], description: "In find: next match, previous match" },
   { display: ["Esc"], description: "Back out of whatever is open" },
 ];
 
