@@ -14,6 +14,11 @@ export function isActive(status: AiReviewStatus): boolean {
   return ACTIVE_STATUSES.includes(status);
 }
 
+/** Reviewing, or answering a question about its review: either way, its checkout is in use. */
+export function isBusy(job: Pick<AiReviewSummary, "status" | "chatPhase">): boolean {
+  return isActive(job.status) || Boolean(job.chatPhase);
+}
+
 export type AiReviewEffort = "" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface AiReviewConfig {
@@ -32,6 +37,17 @@ export interface AiReviewConfig {
    * (~/projects/<name> and friends) are found without this.
    */
   clones: string;
+  /**
+   * Claude only reads the code, and runs none of it. Off by default: then it
+   * can run commands and edit files in the review's worktree, to check what
+   * it suspects — running the pull request's code on this machine.
+   */
+  readOnly: boolean;
+}
+
+/** The tools a review gets: reading, and unless read-only, running and editing. */
+export function reviewTools(readOnly: boolean): string[] {
+  return readOnly ? ["Read", "Grep", "Glob"] : ["Read", "Grep", "Glob", "Bash", "Edit", "Write"];
 }
 
 /**
@@ -68,6 +84,8 @@ export interface AiReviewSummary {
   error: string | null;
   costUsd: number | null;
   turns: number | null;
+  /** What Claude is doing to answer a question about the review; null when it isn't. */
+  chatPhase: string | null;
 }
 
 export interface AiReviewActivity {
@@ -76,6 +94,19 @@ export interface AiReviewActivity {
 }
 
 export type CloneSource = "configured" | "detected" | "managed";
+
+/** A question about a finished review, or Claude's answer, in the session that wrote it. */
+export interface AiChatMessage {
+  role: "user" | "assistant";
+  /** Markdown. For an answer that failed, why. */
+  text: string;
+  /** The part of the review a question is about. */
+  quote?: string;
+  /** The answer failed or was stopped: `text` says why. */
+  error?: boolean;
+  costUsd?: number | null;
+  at: string;
+}
 
 export interface AiReviewJob extends AiReviewSummary {
   baseRef: string;
@@ -90,8 +121,12 @@ export interface AiReviewJob extends AiReviewSummary {
   worktreePath: string | null;
   sessionId: string | null;
   model: string | null;
+  /** Ran read-only (see AiReviewConfig). Absent until it runs; reviews from before the setting were. */
+  readOnly?: boolean;
   /** The last of whatever the process wrote to stderr, for failures. */
   stderrTail: string | null;
+  /** Follow-up questions and their answers, oldest first. */
+  chat?: AiChatMessage[];
 }
 
 export interface LocalStatus {
@@ -167,6 +202,7 @@ export const DEFAULT_AI_CONFIG: AiReviewConfig = {
   timeoutMinutes: 20,
   maxConcurrent: 2,
   clones: "",
+  readOnly: false,
 };
 
 export function prKey(pr: { owner: string; name: string; number: number }): string {
@@ -174,11 +210,12 @@ export function prKey(pr: { owner: string; name: string; number: number }): stri
 }
 
 /**
- * Continue the review interactively — with the same restrictions, since the
- * directory holds the pull request's code, not yours.
+ * Continue the review interactively — with the same restrictions and tools,
+ * since the directory holds the pull request's code, not yours.
  */
-export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId">): string | null {
+export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId" | "readOnly">): string | null {
   if (!job.worktreePath || !job.sessionId) return null;
   const quoted = `'${job.worktreePath.replace(/'/g, `'\\''`)}'`;
-  return `cd ${quoted} && claude --resume ${job.sessionId} --restricted --strict-mcp-config --tools Read,Grep,Glob`;
+  const tools = reviewTools(job.readOnly ?? true).join(",");
+  return `cd ${quoted} && claude --resume ${job.sessionId} --setting-sources user --strict-mcp-config --tools ${tools}`;
 }

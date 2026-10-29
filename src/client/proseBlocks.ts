@@ -7,11 +7,12 @@
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
+import type { Code, Node } from "mdast";
 
 export interface ProseBlock {
   /** The block's own Markdown. */
   text: string;
-  /** Headings and rules frame the review; they aren't points to add. */
+  /** Headings and rules frame the review; they aren't points to add, and nor are pictures. */
   addable: boolean;
 }
 
@@ -26,12 +27,26 @@ export function splitProse(markdown: string): ProseBlock[] {
   for (const node of tree.children) {
     if (node.type === "list") {
       // Each item on its own: a list of points is the usual shape of a review.
-      for (const item of node.children) blocks.push({ text: slice(item), addable: true });
+      for (const item of node.children) blocks.push({ text: slice(item), addable: !showsPicture(item) });
     } else {
-      blocks.push({ text: slice(node), addable: node.type !== "heading" && node.type !== "thematicBreak" });
+      const framing = node.type === "heading" || node.type === "thematicBreak";
+      blocks.push({ text: slice(node), addable: !framing && !showsPicture(node) });
     }
   }
   return blocks;
+}
+
+/** Fenced blocks drawn here as something else: a diagram, a before-and-after, a report. */
+const DRAWN = new Set(["reladraw", "compare", "report"]);
+
+/**
+ * A diagram, a screenshot, a before-and-after or a report: shown here, but on
+ * GitHub it would be code, or an image of a file it can't see.
+ */
+function showsPicture(node: Node): boolean {
+  if (node.type === "image") return true;
+  if (node.type === "code") return DRAWN.has((node as Code).lang ?? "");
+  return "children" in node && Array.isArray(node.children) && (node.children as Node[]).some(showsPicture);
 }
 
 export interface CodeRef {

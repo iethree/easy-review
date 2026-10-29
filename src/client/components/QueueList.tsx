@@ -1,8 +1,10 @@
 import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
 import { IconAlertCircle, IconEyeOff, IconInbox } from "@tabler/icons-react";
-import { prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { useState } from "react";
+import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { PrRow } from "./PrRow.tsx";
+import { QuickReviewMenu } from "./QuickReviewMenu.tsx";
 import { LoadingScene, MINE_MESSAGES, QUEUE_MESSAGES } from "./Loading.tsx";
 
 interface Props {
@@ -28,9 +30,12 @@ interface Props {
   onUnhide?: (pr: PullRequest) => void;
   /** Present only when local Claude reviews are available. */
   ai?: {
+    /** One review per pull request, standing for all its reviewers (see groupByPr). */
     byPr: Map<string, AiReviewSummary>;
-    onStart: (pr: PullRequest) => void;
-    onOpen: (pr: PullRequest) => void;
+    reviewsByPr: Map<string, AiReviewSummary[]>;
+    reviewers: Reviewer[];
+    /** Start a reviewer on a pull request, without leaving what's on screen. */
+    start: (pr: PullRequest, reviewerId: string) => void;
   };
 }
 
@@ -52,6 +57,7 @@ export function QueueList({
   onUnhide,
   ai,
 }: Props) {
+  const [menuAt, setMenuAt] = useState<{ pr: PullRequest; x: number; y: number } | null>(null);
   if (error) {
     return (
       <Alert
@@ -81,7 +87,7 @@ export function QueueList({
           <IconEyeOff size={38} color="var(--mantine-color-gray-5)" />
           <Text fw={600}>Nothing hidden.</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Press ⇧H on a pull request in Needs review to tuck it away here. It stays hidden
+            Press ⇧H on a pull request in Review to tuck it away here. It stays hidden
             until you unhide it.
           </Text>
         </Stack>
@@ -119,6 +125,16 @@ export function QueueList({
   return (
     <>
       <div
+        // Right-click a row for its reviewers. One handler for the list, so
+        // the rows (memoised) don't each need one.
+        onContextMenu={(e) => {
+          if (!ai) return;
+          const id = (e.target as HTMLElement).closest<HTMLElement>("[data-pr-id]")?.dataset.prId;
+          const pr = id ? rows.find((r) => r.id === id) : undefined;
+          if (!pr) return;
+          e.preventDefault();
+          setMenuAt({ pr, x: e.clientX, y: e.clientY });
+        }}
         role="listbox"
         aria-label={
           variant === "hidden"
@@ -139,12 +155,20 @@ export function QueueList({
             onFilterAuthor={onFilterAuthor}
             showRepo={showRepo}
             aiJob={ai?.byPr.get(prKey(pr))}
-            onAiStart={ai?.onStart}
-            onAiOpen={ai?.onOpen}
+            aiCount={ai?.reviewsByPr.get(prKey(pr))?.length ?? 0}
             onUnhide={variant === "hidden" ? onUnhide : undefined}
           />
         ))}
       </div>
+      {ai && (
+        <QuickReviewMenu
+          at={menuAt}
+          reviewers={ai.reviewers}
+          reviews={(menuAt && ai.reviewsByPr.get(prKey(menuAt.pr))) || []}
+          onStart={ai.start}
+          onClose={() => setMenuAt(null)}
+        />
+      )}
 
       <Group justify="space-between" px="sm" py={8}>
         <Text size="10px" c="dimmed">

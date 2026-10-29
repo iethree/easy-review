@@ -11,13 +11,15 @@
  * review itself is always kept.
  */
 
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { access, mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CHECKOUT_MAX_AGE_DAYS,
   DEFAULT_AI_CONFIG,
   isActive,
+  isBusy,
   prKey,
+  type AiChatMessage,
   type AiReviewConfig,
   type AiReviewJob,
   type AiReviewSummary,
@@ -27,22 +29,27 @@ import {
 } from "../shared/aiReview.ts";
 import { GitHubClient } from "../server/github.ts";
 import { diskUsage, isStale, scanCheckouts } from "./checkouts.ts";
-import { buildArgs, buildPrompt, runClaude, type StreamState } from "./claude.ts";
+import { buildArgs, buildPrompt, buildQuestion, runClaude, type StreamState } from "./claude.ts";
 import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
 import { prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
 import { localPaths } from "./paths.ts";
 import { seedReviewers } from "./reviewers.ts";
+import { keepReport, placesReport } from "./reports.ts";
+import { dropScreenshots, keepScreenshots } from "./screenshots.ts";
 
 type Killable = { kill: () => void };
+
+/** A question that can't be asked now; the message says why. */
+export class ChatError extends Error {}
 
 export function summarize(job: AiReviewJob): AiReviewSummary {
   const {
     id, reviewerId, reviewerName, owner, name, number, title, headSha, status, phase,
-    createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns,
+    createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns, chatPhase,
   } = job;
   return {
     id, reviewerId, reviewerName, owner, name, number, title, headSha, status, phase,
-    createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns,
+    createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns, chatPhase: chatPhase ?? null,
   };
 }
 
@@ -66,12 +73,19 @@ ${pr.body.trim() || "_No description._"}
 `;
 }
 
+function answer(text: string, error = false): AiChatMessage {
+  return { role: "assistant", text, ...(error ? { error: true } : {}), at: new Date().toISOString() };
+}
+
 export class ReviewJobs {
   private jobs = new Map<string, AiReviewJob>();
   /** The git or claude process each running job is waiting on. */
   private procs = new Map<string, Killable>();
   private running = new Set<string>();
   private cancelled = new Set<string>();
+  /** The claude process answering each job's question, and those stopped. */
+  private chats = new Map<string, Killable>();
+  private chatsStopped = new Set<string>();
   /** Serialises clone/fetch/worktree work per repository. */
   private locks = new Map<string, Promise<unknown>>();
   private saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -97,6 +111,12 @@ export class ReviewJobs {
         job.reviewerId ??= "";
         job.reviewerName ??= "Claude";
         job.instructions ??= "";
+        job.chatPhase ??= null;
+        if (job.chatPhase) {
+          job.chat = [...(job.chat ?? []), answer("The server stopped while Claude was answering.", true)];
+          job.chatPhase = null;
+          await this.save(job);
+        }
         if (isActive(job.status)) {
           Object.assign(job, {
             status: "failed",
@@ -219,6 +239,7 @@ export class ReviewJobs {
       error: null,
       costUsd: null,
       turns: null,
+      chatPhase: null,
       review: null,
       activity: [],
       clonePath: null,
@@ -244,6 +265,7 @@ export class ReviewJobs {
     const job = this.jobs.get(id);
     if (!job) return false;
     if (isActive(job.status)) throw new Error("Cancel the review before deleting it.");
+    this.stopChat(id);
 
     const others = [...this.jobs.values()].filter((j) => j.id !== id);
     if (job.clonePath && job.worktreePath) {
@@ -256,7 +278,94 @@ export class ReviewJobs {
     this.jobs.delete(id);
     clearTimeout(this.saveTimers.get(id));
     await rm(join(localPaths().reviews, `${id}.json`), { force: true });
+    await dropScreenshots(id);
     return true;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Follow-up questions                                                     */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Asks a question about a finished review, in the Claude session that
+   * wrote it, in its checkout and with the tools it had. Returns at once; the
+   * answer arrives on the job, with chatPhase saying what Claude is doing.
+   */
+  async ask(id: string, question: string, quote?: string): Promise<AiReviewJob> {
+    const job = this.jobs.get(id);
+    if (!job) throw new ChatError("No such review");
+    if (isActive(job.status)) throw new ChatError("Wait for the review to finish.");
+    if (job.chatPhase) throw new ChatError("Claude is still answering the last question.");
+    if (!job.sessionId) throw new ChatError("This review has no Claude session to continue.");
+    const cwd = job.worktreePath;
+    if (!cwd || !(await access(cwd).then(() => true, () => false))) {
+      throw new ChatError("Its checkout has been removed, so its session can't be continued. Re-run the review to ask about it.");
+    }
+
+    const asked: AiChatMessage = {
+      role: "user",
+      text: question.trim(),
+      ...(quote?.trim() ? { quote: quote.trim() } : {}),
+      at: new Date().toISOString(),
+    };
+    this.update(job, { chat: [...(job.chat ?? []), asked], chatPhase: "Thinking" });
+    void this.answer(job, cwd, job.sessionId, buildQuestion(question, quote)).finally(() => {
+      this.chats.delete(id);
+      this.chatsStopped.delete(id);
+    });
+    return job;
+  }
+
+  stopChat(id: string): AiReviewJob | undefined {
+    const job = this.jobs.get(id);
+    if (!job?.chatPhase) return job;
+    this.chatsStopped.add(id);
+    this.chats.get(id)?.kill();
+    return job;
+  }
+
+  private async answer(job: AiReviewJob, cwd: string, sessionId: string, prompt: string): Promise<void> {
+    const config = this.config;
+    let reply: AiChatMessage;
+    let session = sessionId;
+    try {
+      let seen = 0;
+      const result = await runClaude({
+        cwd,
+        // The tools it reviewed with; reviews from before the setting were read-only.
+        args: buildArgs(prompt, { ...config, readOnly: job.readOnly ?? true }, sessionId),
+        timeoutMs: config.timeoutMinutes * 60_000,
+        onSpawn: (proc) => {
+          this.chats.set(job.id, proc);
+          if (this.chatsStopped.has(job.id)) proc.kill();
+        },
+        onState: (state: StreamState) => {
+          if (state.activity.length === seen) return;
+          seen = state.activity.length;
+          this.update(job, { chatPhase: state.activity.at(-1) ?? job.chatPhase }, { quiet: true });
+        },
+      });
+      session = result.state.sessionId ?? sessionId;
+      await keepScreenshots(cwd, job.id).catch(() => []);
+      const r = result.state.result;
+      reply = this.chatsStopped.has(job.id)
+        ? answer("Stopped.", true)
+        : r?.ok && r.text.trim()
+          ? { ...answer(r.text), costUsd: r.costUsd }
+          : answer(
+              result.timedOut
+                ? `Timed out after ${config.timeoutMinutes} minutes.`
+                : r && !r.ok
+                  ? `Claude stopped with an error${r.text ? `: ${r.text.slice(0, 300)}` : "."}`
+                  : `claude exited with code ${result.exitCode} without an answer.${
+                      result.stderr.trim() ? ` ${result.stderr.trim().split("\n").slice(-3).join(" ")}` : ""
+                    }`,
+              true,
+            );
+    } catch (err) {
+      reply = answer(err instanceof Error ? err.message : String(err), true);
+    }
+    this.update(job, { chat: [...(job.chat ?? []), reply], chatPhase: null, sessionId: session });
   }
 
   /* ---------------------------------------------------------------------- */
@@ -328,7 +437,7 @@ export class ReviewJobs {
     // that `cd`s into nothing, so forget it.
     const onDisk = new Set(all.map((checkout) => checkout.path));
     for (const job of this.jobs.values()) {
-      if (job.worktreePath && !onDisk.has(job.worktreePath) && !isActive(job.status)) {
+      if (job.worktreePath && !onDisk.has(job.worktreePath) && !isBusy(job)) {
         this.update(job, { worktreePath: null });
       }
     }
@@ -340,9 +449,7 @@ export class ReviewJobs {
     // The same lock that preparing a checkout takes, so the two never overlap.
     await this.withLock(`${checkout.owner}/${checkout.name}`.toLowerCase(), async () => {
       // Asked again inside the lock: a review may have started here meanwhile.
-      const busy = [...this.jobs.values()].some(
-        (job) => job.worktreePath === checkout.path && isActive(job.status),
-      );
+      const busy = [...this.jobs.values()].some((job) => job.worktreePath === checkout.path && isBusy(job));
       if (busy) throw new Error("A review is running in this checkout");
 
       if (checkout.clonePath) {
@@ -432,6 +539,8 @@ export class ReviewJobs {
         worktreePath: worktree.path,
         headSha: worktree.headSha,
         clonePath: clone.path,
+        // How it ran, for continuing it in a terminal with the same tools.
+        readOnly: config.readOnly,
       });
 
       let seen = 0;
@@ -462,6 +571,12 @@ export class ReviewJobs {
 
       const tail = result.stderr.trim().split("\n").slice(-15).join("\n") || null;
       const r = result.state.result;
+      // Before the worktree can be cleaned up: they're part of the review.
+      await keepScreenshots(worktree.path, job.id).catch(() => []);
+      // Only for a review that shows one: reviewers started together share the checkout.
+      if (r?.ok && placesReport(r.text)) {
+        await keepReport(worktree.path, job.id, new Date(job.startedAt ?? job.createdAt)).catch(() => false);
+      }
 
       if (this.cancelled.has(job.id)) {
         this.finish(job, { status: "cancelled", phase: "Cancelled", stderrTail: tail });

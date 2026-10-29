@@ -10,7 +10,7 @@ import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import {
   CHECKOUT_MAX_AGE_DAYS,
-  isActive,
+  isBusy,
   type AiReviewJob,
   type Checkout,
 } from "../shared/aiReview.ts";
@@ -95,7 +95,7 @@ export async function scanCheckouts(jobs: Iterable<AiReviewJob>): Promise<Checko
           sha: parsed.sha,
           title: latest?.title ?? null,
           lastUsedAt: latest ? usedAt(latest) : (changed as NonNullable<typeof changed>).mtime.toISOString(),
-          inUse: related.some((job) => isActive(job.status)),
+          inUse: related.some(isBusy),
           reviews: related.length,
           // Resolved, so the same clone reached through a symlink compares equal.
           clonePath: clone ? await realpath(clone).catch(() => clone) : null,

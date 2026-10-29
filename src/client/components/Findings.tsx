@@ -1,11 +1,11 @@
 import { Badge, Button, Code, Group, Stack, Text } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
-import { addFinding, findingKey, useAssembly } from "../assembly.ts";
+import { addFinding, findingKey, useAdded } from "../assembly.ts";
 import { peek } from "../hooks/diffStore.ts";
-import { placeFinding, type Finding, type FindingSeverity } from "../../shared/findings.ts";
+import { placeFinding, summaryItem, type Finding, type FindingSeverity } from "../../shared/findings.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { Markdown } from "./Markdown.tsx";
-import { AddButton } from "./ProseReview.tsx";
+import { AddButton, AskButton } from "./ProseReview.tsx";
 
 const SEVERITY: Record<FindingSeverity, { color: string; label: string }> = {
   blocking: { color: "red", label: "Blocking" },
@@ -20,6 +20,8 @@ interface Props {
   findings: Finding[];
   /** Something went into the review: show it. */
   onAdded: () => void;
+  /** Ask Claude about a finding; absent when its session can't be continued. */
+  onAsk?: (text: string) => void;
 }
 
 /**
@@ -27,9 +29,9 @@ interface Props {
  * one puts it on its lines in the diff — with its suggested change, which the
  * author can apply — when it can, and in the summary when not.
  */
-export function Findings({ pr, review, findings, onAdded }: Props) {
-  const { added } = useAssembly(pr.id);
-  const isAdded = (i: number) => added.includes(findingKey(review.id, i));
+export function Findings({ pr, review, findings, onAdded, onAsk }: Props) {
+  const added = useAdded(pr.id);
+  const isAdded = (i: number) => added.has(findingKey(review.id, i));
   const remaining = findings.map((_, i) => i).filter((i) => !isAdded(i));
 
   const entry = peek(pr);
@@ -70,7 +72,7 @@ export function Findings({ pr, review, findings, onAdded }: Props) {
           // A section per point; its action shows on hover or focus, so the
           // list reads as a review rather than a wall of buttons.
           <section key={findingKey(review.id, i)} className="er-finding" data-added={done} aria-label={finding.title}>
-            <Group gap={6} wrap="nowrap" pr={32}>
+            <Group gap={6} wrap="nowrap" pr={onAsk ? 60 : 32}>
               <Badge size="xs" variant="light" color={severity.color} style={{ flex: "none" }}>
                 {severity.label}
               </Badge>
@@ -97,9 +99,10 @@ export function Findings({ pr, review, findings, onAdded }: Props) {
                 <pre>{finding.suggestion || " "}</pre>
               </div>
             )}
-            <div className="er-finding-action">
+            <Group gap={4} wrap="nowrap" className="er-finding-action">
+              {onAsk && <AskButton onAsk={() => onAsk(summaryItem(finding))} />}
               <AddButton done={done} label={destination(finding)} onAdd={() => add([i])} />
-            </div>
+            </Group>
           </section>
         );
       })}

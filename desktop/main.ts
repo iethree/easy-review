@@ -105,12 +105,14 @@ function createWindow() {
     show: false,
     title: "easy-review",
     // The page's top bar becomes the title bar, with the traffic lights
-    // inset into it and centred on its 52px (see [data-desktop] in app.css).
+    // inset into it, level with its tabs (see [data-desktop] in app.css).
     titleBarStyle: isMac ? "hiddenInset" : "default",
-    trafficLightPosition: { x: 18, y: 18 },
+    trafficLightPosition: { x: 18, y: 20 },
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#242424" : "#ffffff",
     webPreferences: {
-      preload: join(__dirname, "preload.cjs"),
+      // Beside main.cjs, in the app. Not __dirname: Bun's bundler bakes in the
+      // source directory, which the packaged app doesn't have.
+      preload: join(app.getAppPath(), "preload.cjs"),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,

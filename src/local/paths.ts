@@ -21,6 +21,8 @@ export function localPaths() {
     repos: join(root, "repos"),
     /** One Markdown file per reviewer (see reviewers.ts). */
     reviewers: join(root, "reviewers"),
+    /** First on a review's PATH: the fenced `claude` (see claude.ts). */
+    bin: join(root, "bin"),
   };
 }
 

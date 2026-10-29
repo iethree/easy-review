@@ -16,6 +16,7 @@
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Reviewer } from "../shared/aiReview.ts";
+import { BUILT_IN_REVIEWERS } from "./builtInReviewers.ts";
 import { localPaths } from "./paths.ts";
 
 export const REVIEWER_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -123,14 +124,33 @@ export async function deleteReviewer(id: string): Promise<void> {
 /**
  * The first time, there are no reviewers: one called General takes over the
  * instructions from Settings, so whatever was written there carries on.
+ *
+ * And every time, any built-in reviewer not offered before is added — once.
+ * A hidden file remembers which have been, so one you delete stays deleted,
+ * and one you already have a file for is left as you made it.
  */
 export async function seedReviewers(legacyInstructions: string): Promise<void> {
+  let fresh = false;
   try {
     await readdir(dir());
-    return;
   } catch {
-    // Not there yet.
+    fresh = true;
   }
-  await mkdir(dir(), { recursive: true });
-  await Bun.write(fileOf("general"), formatReviewerFile({ name: "General", instructions: legacyInstructions }));
+  if (fresh) {
+    await mkdir(dir(), { recursive: true });
+    await Bun.write(fileOf("general"), formatReviewerFile({ name: "General", instructions: legacyInstructions }));
+  }
+
+  const offeredFile = Bun.file(join(dir(), ".offered"));
+  const offered = new Set(
+    (await offeredFile.exists()) ? (await offeredFile.text()).split("\n").map((l) => l.trim()).filter(Boolean) : [],
+  );
+  const due = BUILT_IN_REVIEWERS.filter((r) => !offered.has(r.id));
+  if (due.length === 0) return;
+  for (const reviewer of due) {
+    const file = Bun.file(fileOf(reviewer.id));
+    if (!(await file.exists())) await Bun.write(file, formatReviewerFile(reviewer));
+    offered.add(reviewer.id);
+  }
+  await Bun.write(offeredFile, `${[...offered].join("\n")}\n`);
 }

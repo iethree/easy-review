@@ -12,11 +12,10 @@ import {
   Text,
   TextInput,
   Textarea,
-  Title,
   Tooltip,
 } from "@mantine/core";
-import { IconAlertTriangle, IconArrowLeft, IconPlus, IconTrash, IconUser } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { IconAlertTriangle, IconPlus, IconTrash, IconUser } from "@tabler/icons-react";
+import { useEffect, useState } from "react";
 import type { Reviewer } from "../../shared/aiReview.ts";
 import type { useReviewers } from "../hooks/useReviewers.ts";
 
@@ -33,10 +32,18 @@ For example:
 Review this pull request for security problems only: injection, missing permission checks, secrets in code, unsafe handling of user input. Start from .easy-review/pr.diff. For each problem give file:line, what is wrong, and a fix.`;
 
 /**
- * Reviewers: named instructions for Claude, one Markdown file each. Pick one
- * or several when you start a review, and each gets its own tab.
+ * Reviewers: named instructions for Claude, one Markdown file each — a
+ * section of Settings. Pick one from the + over a pull request, and its
+ * review gets a tab of its own.
  */
-export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: () => void }) {
+export function ReviewersSettings({
+  store,
+  onDirtyChange,
+}: {
+  store: Reviewers;
+  /** Unsaved changes, so Settings can ask before leaving them. */
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const { reviewers, loaded, dir } = store;
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -60,27 +67,15 @@ export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: (
       ? draft.name.trim() !== "" || draft.instructions.trim() !== ""
       : !saved || saved.name !== draft.name || saved.instructions !== draft.instructions);
 
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
   /** Leaving unsaved changes is a question, not an accident. */
   const leave = (next: () => void) => {
-    if (dirty && !window.confirm("Discard your changes to this reviewer?")) return;
+    if (dirty && !window.confirm(DISCARD)) return;
     setError(null);
     next();
   };
-
-  // Escape goes back to the pull requests — once out of any text box.
-  const leaveRef = useRef(() => leave(onClose));
-  leaveRef.current = () => leave(onClose);
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const typing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
-      if (e.key !== "Escape") return;
-      if (typing) target.blur();
-      else leaveRef.current();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const save = async () => {
     if (!draft) return;
@@ -110,28 +105,14 @@ export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: (
   };
 
   return (
-    <div className="er-reviewers">
-      <div className="er-reviewers-head">
-        <Group gap="xs">
-          <Tooltip label="Back to pull requests (Esc)">
-            <ActionIcon variant="subtle" color="gray" onClick={() => leave(onClose)} aria-label="Back">
-              <IconArrowLeft size={17} />
-            </ActionIcon>
-          </Tooltip>
-          <Title order={2}>Reviewers</Title>
-        </Group>
-        <Text size="xs" c="dimmed">
-          Pick one or more when you start a Claude review; each runs on its own and gets its own tab.
-        </Text>
-      </div>
-
+    <>
       {!loaded ? (
         <Center py="xl">
           <Loader size="sm" />
         </Center>
       ) : (
-        <div className="er-reviewers-body">
-          <div className="er-pane er-reviewers-list">
+        <div className="er-reviewers">
+          <div className="er-reviewers-list">
             <ScrollArea style={{ flex: 1 }}>
               {reviewers.map((r) => (
                 <NavLink
@@ -156,7 +137,7 @@ export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: (
             </Button>
           </div>
 
-          <div className="er-pane er-reviewers-editor">
+          <div>
             {draft && (
               <form
                 onSubmit={(e) => {
@@ -232,9 +213,11 @@ export function ReviewersPage({ store, onClose }: { store: Reviewers; onClose: (
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
+
+export const DISCARD = "Discard your changes to this reviewer?";
 
 function fromReviewer(r: Reviewer): Draft {
   return { id: r.id, name: r.name, instructions: r.instructions };

@@ -1,13 +1,43 @@
 import { expect, test } from "bun:test";
 import { parseDiff } from "../shared/diff.ts";
-import { appendBlock, appendLine, findingKey, parseAssemblies, placeProse, proseKey, withAssembly } from "./assembly.ts";
+import {
+  appendBlock,
+  appendLine,
+  findingKey,
+  parseAssemblies,
+  placeProse,
+  proseKey,
+  stillAdded,
+  withAssembly,
+} from "./assembly.ts";
 
 test("stored reviews-in-progress are read back, and junk is dropped", () => {
-  expect(parseAssemblies(JSON.stringify({ a: { summary: "Hi", added: ["r:0", 3] }, b: "x" }))).toEqual({
-    a: { summary: "Hi", added: ["r:0"] },
+  const stored = { a: { summary: "Hi", added: { "r:0": { draft: "d1" }, "r:1": { text: "Hi" }, "r:2": 3 } }, b: "x" };
+  expect(parseAssemblies(JSON.stringify(stored))).toEqual({
+    a: { summary: "Hi", added: { "r:0": { draft: "d1" }, "r:1": { text: "Hi" } } },
   });
   expect(parseAssemblies("not json")).toEqual({});
   expect(parseAssemblies(null)).toEqual({});
+});
+
+test("pieces stored before they said where they went count as not added", () => {
+  expect(parseAssemblies(JSON.stringify({ a: { summary: "Hi", added: ["r:0"] } }))).toEqual({
+    a: { summary: "Hi", added: {} },
+  });
+});
+
+test("a piece is added while its draft or its summary text is still in the review", () => {
+  const assembly = {
+    summary: "Intro\n- **Race** in the loader",
+    added: {
+      "r:0": { draft: "d1" },
+      "r:1": { draft: "gone" },
+      "r:p2": { text: "- **Race** in the loader" },
+      "r:p3": { text: "Deleted from the summary." },
+    },
+  };
+  expect(stillAdded(assembly, [{ id: "d1" }, { id: "other" }])).toEqual(new Set(["r:0", "r:p2"]));
+  expect(stillAdded({ ...assembly, summary: "" }, [])).toEqual(new Set());
 });
 
 test("summary lines go under what's there", () => {
@@ -16,9 +46,9 @@ test("summary lines go under what's there", () => {
 });
 
 test("an empty review drops out of storage", () => {
-  const map = withAssembly({}, "pr", { summary: "x", added: [] });
-  expect(map).toEqual({ pr: { summary: "x", added: [] } });
-  expect(withAssembly(map, "pr", { summary: "  ", added: [] })).toEqual({});
+  const map = withAssembly({}, "pr", { summary: "x", added: {} });
+  expect(map).toEqual({ pr: { summary: "x", added: {} } });
+  expect(withAssembly(map, "pr", { summary: "  ", added: {} })).toEqual({});
 });
 
 test("a finding is known by its review and position", () => {

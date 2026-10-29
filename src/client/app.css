@@ -591,6 +591,109 @@ body {
   gap: 7px;
 }
 
+/* A ```reladraw diagram in a review (components/Diagram.tsx): its own size, up to the column's. */
+.er-diagram {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.er-diagram img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* A review's screenshots (components/Compare.tsx, and images in Markdown). */
+.er-screenshot {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.er-image-missing {
+  color: var(--mantine-color-dimmed);
+  font-style: italic;
+}
+
+.er-compare {
+  margin: 12px 0;
+}
+
+.er-compare-frame {
+  position: relative;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.er-compare-frame[data-mode="wipe"] {
+  cursor: ew-resize;
+}
+
+.er-compare-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The after sits exactly over the before. */
+.er-compare-after {
+  position: absolute;
+  inset: 0;
+}
+
+.er-compare-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--mantine-color-indigo-5);
+  pointer-events: none;
+}
+
+.er-compare-tag {
+  position: absolute;
+  top: 6px;
+  padding: 1px 6px;
+  border-radius: var(--mantine-radius-sm);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.er-compare-tag[data-side="before"] {
+  left: 6px;
+}
+
+.er-compare-tag[data-side="after"] {
+  right: 6px;
+}
+
+.er-compare-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.er-compare-side figure {
+  margin: 0;
+}
+
+.er-compare-side img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+}
+
 .er-diff-comment .er-markdown {
   font-size: 12.5px;
   line-height: 1.5;
@@ -647,9 +750,16 @@ body {
    Claude reviews
    --------------------------------------------------------------------------- */
 
-/* The robot breathes while Claude works. */
-.er-robot[data-running="true"] {
+/* A review count breathes while Claude works. */
+.er-breathe[data-running="true"] {
   animation: er-breathe 1.4s ease-in-out infinite;
+}
+
+/* A row's count of Claude reviews, in a fixed slot so the rows line up. */
+.er-review-count {
+  display: inline-flex;
+  justify-content: center;
+  width: 22px;
 }
 
 @keyframes er-breathe {
@@ -663,7 +773,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .er-robot[data-running="true"] {
+  .er-breathe[data-running="true"] {
     animation: none;
   }
 }
@@ -883,7 +993,8 @@ body {
 /* ---------------------------------------------------------------------------
    The desktop app (desktop/main.ts). The top bar is the window's title bar:
    it drags the window, makes room for the traffic lights, and dims while the
-   window is in the background, as macOS toolbars do. The page's chrome stops
+   window is in the background, as macOS toolbars do. The lists are tabs in
+   it, as a browser's are, the open one joined to the page below. The page's chrome stops
    behaving like a web page — no text selection, no pointing hand — while the
    code and the conversation stay selectable.
    --------------------------------------------------------------------------- */
@@ -892,20 +1003,31 @@ body {
 :root[data-desktop] {
   --mantine-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --er-titlebar-bg: var(--mantine-color-gray-0);
-  --er-tab-active-bg: rgba(0, 0, 0, 0.07);
+  --er-tab-hover-bg: rgba(0, 0, 0, 0.05);
 }
 
 :root[data-desktop][data-mantine-color-scheme="dark"] {
   --er-titlebar-bg: var(--mantine-color-dark-8);
-  --er-tab-active-bg: rgba(255, 255, 255, 0.09);
+  --er-tab-hover-bg: rgba(255, 255, 255, 0.06);
 }
 
+/*
+ * 44px, its contents in the bottom 34 — the tabs' height, so the traffic
+ * lights (trafficLightPosition in desktop/main.ts) and buttons line up with
+ * the tabs' labels.
+ */
 [data-desktop] .er-topbar {
   -webkit-app-region: drag;
-  min-height: 52px;
-  padding: 8px 12px 8px 16px;
+  align-items: stretch;
+  height: 44px;
+  padding: 0 12px 0 16px;
   background: var(--er-titlebar-bg);
   user-select: none;
+}
+
+[data-desktop] .er-topbar > * {
+  align-self: flex-end;
+  height: 34px;
 }
 
 [data-desktop="darwin"] .er-topbar {
@@ -921,20 +1043,57 @@ body {
   display: none;
 }
 
-[data-desktop] .er-topbar :is(button, a, input, [role="tab"], [role="progressbar"]) {
+[data-desktop] .er-topbar :is(button, a, input, [role="tab"]) {
   -webkit-app-region: no-drag;
 }
 
-/* A quiet segmented control rather than a filled web pill. */
-[data-desktop] .er-topbar .mantine-Tabs-tab {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 13px;
+[data-desktop] .er-main-tabs {
+  align-self: stretch;
 }
 
-[data-desktop] .er-topbar .mantine-Tabs-tab[data-active] {
-  background: var(--er-tab-active-bg);
+[data-desktop] .er-main-tabs .mantine-Tabs-list {
+  height: 100%;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+/* Just the name and a count: no icons, no pills. */
+[data-desktop] .er-main-tabs .mantine-Tabs-tab {
+  height: 32px;
+  /* Over the bar's bottom border, so the open tab runs into the page. */
+  margin-bottom: -1px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--mantine-color-dimmed);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+[data-desktop] .er-main-tabs .mantine-Tabs-tab:not([data-active]):hover {
+  background: var(--er-tab-hover-bg);
   color: var(--mantine-color-text);
+}
+
+[data-desktop] .er-main-tabs .mantine-Tabs-tab[data-active] {
+  background: var(--mantine-color-body);
+  border-color: var(--er-row-border);
+  color: var(--mantine-color-text);
+}
+
+[data-desktop] .er-main-tabs .mantine-Tabs-tabSection {
+  display: none;
+}
+
+[data-desktop] .er-main-tabs .mantine-Badge-root {
+  height: auto;
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 [data-desktop][data-inactive] .er-topbar > * {
@@ -951,11 +1110,11 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   The Reviewers page: the list of reviewers beside the one being edited, in
-   the space the pull request panes usually take.
+   Settings: a page in place of the pull request panes, its sections listed
+   beside the one open.
    --------------------------------------------------------------------------- */
 
-.er-reviewers {
+.er-page {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -964,7 +1123,7 @@ body {
   padding: 10px 16px 14px;
 }
 
-.er-reviewers-head {
+.er-page-head {
   flex: none;
   display: flex;
   align-items: center;
@@ -972,7 +1131,7 @@ body {
   gap: var(--mantine-spacing-md);
 }
 
-.er-reviewers-body {
+.er-page-body {
   flex: 1;
   min-height: 0;
   display: grid;
@@ -980,8 +1139,27 @@ body {
   gap: 12px;
 }
 
-.er-reviewers-editor {
+.er-page-content {
   overflow-y: auto;
+}
+
+/* Settings › Reviewers: the reviewers beside the one being edited. */
+.er-reviewers {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 100%;
+}
+
+.er-reviewers-list {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--er-row-border);
+}
+
+/* Settings read best at a form's width, not the window's. */
+.er-settings {
+  max-width: 680px;
+  padding: var(--mantine-spacing-md);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1162,10 +1340,21 @@ body {
   min-width: 0;
 }
 
+/*
+ * As wide as you've dragged it (ReviewPaneHandle), and never so wide that
+ * the list and the code go below their minimums when the window shrinks.
+ */
 .er-review-pane {
   flex: none;
-  width: 340px;
+  width: clamp(280px, var(--er-review-w, 340px), max(280px, calc(100% - 800px)));
   margin: 10px 16px 14px 0;
+}
+
+/* In the split's right padding, so the gap beside the pane stays as it was. */
+.er-review-pane-handle {
+  flex: none;
+  width: 12px;
+  margin: 10px 2px 14px -14px;
 }
 
 .er-review-pane-comment {
@@ -1220,6 +1409,80 @@ body {
   .er-add-action {
     opacity: 1;
   }
+}
+
+/* A ✓ stays in view once added; the question mark beside it only on hover. */
+@media (hover: hover) {
+  .er-addable:not(:hover):not(:focus-within) .er-ask,
+  .er-finding:not(:hover):not(:focus-within) .er-ask {
+    display: none;
+  }
+}
+
+/* A review's HTML report (components/Report.tsx), in a sandboxed frame. */
+.er-report {
+  margin: 12px 0;
+}
+
+.er-report-frame {
+  display: block;
+  width: 100%;
+  height: 75vh;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-white);
+}
+
+/* The chat about a review (components/ChatPane.tsx), in the review pane's place. */
+.er-chat-question {
+  align-self: flex-end;
+  max-width: 92%;
+  padding: 8px 10px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--er-row-hover);
+  border: 1px solid var(--er-row-border);
+}
+
+.er-chat-quote {
+  margin-bottom: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--mantine-color-indigo-4);
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-xs);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* In the composer: the part being asked about, rendered, a few lines of it. */
+.er-chat-composer .er-chat-quote {
+  display: flex;
+  white-space: normal;
+  margin-bottom: 0;
+}
+
+.er-chat-quote-text {
+  flex: 1;
+  min-width: 0;
+  max-height: 5.5em;
+  overflow: hidden;
+  font-size: var(--mantine-font-size-xs);
+}
+
+.er-chat-quote-text .er-markdown {
+  font-size: inherit;
+}
+
+.er-chat-quote-text .er-markdown > :first-child {
+  margin-top: 0;
+}
+
+.er-chat-composer {
+  flex: none;
+  padding: 10px;
+  border-top: 1px solid var(--er-row-border);
 }
 
 /* Claude's prose, a block at a time (components/ProseReview.tsx). */

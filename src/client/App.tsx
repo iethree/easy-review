@@ -1,9 +1,7 @@
 import {
   ActionIcon,
   Badge,
-  Box,
   Group,
-  Progress,
   Tabs,
   Text,
   Title,
@@ -21,12 +19,9 @@ import {
   IconKeyboard,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
-  IconMoon,
   IconRefresh,
   IconSettings,
-  IconSun,
   IconUser,
-  IconUsers,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficulty.ts";
@@ -40,13 +35,13 @@ import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
-import { ReviewersPage } from "./components/ReviewersPage.tsx";
+import { ChatPane, type ChatRequest } from "./components/ChatPane.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
-import { SettingsModal } from "./components/SettingsModal.tsx";
+import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
 import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
-import { SplitView, type SplitMode } from "./components/SplitView.tsx";
-import { requestNow, useReadyCount } from "./hooks/diffStore.ts";
+import { ReviewPaneHandle, SplitView, type SplitMode } from "./components/SplitView.tsx";
+import { requestDiff } from "./hooks/diffStore.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
 import { useReviewed } from "./hooks/useReviewed.ts";
 import { useMine } from "./hooks/useMine.ts";
@@ -57,6 +52,7 @@ import { useHidden } from "./hooks/useHidden.ts";
 import { invalidateConversation } from "./hooks/useConversation.ts";
 import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
+import { resolveTab, reviewTab, tabOrder } from "./previewTabs.ts";
 import { isReviewed } from "./reviewMeta.ts";
 import { DIFFICULTY_COLOR } from "./theme.ts";
 
@@ -100,8 +96,7 @@ export function App() {
   // The history hook only fetches once its tab has been opened.
   const history = useReviewed(tab === "reviewed");
   const mine = useMine(tab === "mine");
-  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
-  const readyCount = useReadyCount();
+  const { toggleColorScheme } = useMantineColorScheme();
   const narrow = useMediaQuery("(max-width: 900px)");
   const { hidden, setHiddenFor } = useHidden();
 
@@ -128,12 +123,21 @@ export function App() {
   const [approveFor, setApproveFor] = useState<string | null>(null);
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  /** The Reviewers page, in place of the lists. */
-  const [page, setPage] = useState<"reviewers" | null>(null);
-  /** The third pane: the review you're putting together. */
-  const [reviewPaneOpen, setReviewPaneOpen] = useState(false);
+  /** Settings, as a page in place of the lists; and which of its sections. */
+  const [page, setPage] = useState<"settings" | null>(null);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("queue");
+  const openSettings = useCallback((section?: SettingsSection) => {
+    if (section) setSettingsSection(section);
+    setPage("settings");
+  }, []);
+  /**
+   * The third pane: the review you're putting together, or a chat with
+   * Claude about one of its reviews — one at a time.
+   */
+  const [side, setSide] = useState<"review" | ChatRequest | null>(null);
+  const reviewPaneOpen = side === "review";
+  const asks = useRef(0);
   /** The pull request whose reviewers are being chosen. */
   const [pickFor, setPickFor] = useState<PullRequest | null>(null);
   const [reviewed, setReviewed] = useState<Record<string, ReviewEvent>>({});
@@ -287,7 +291,7 @@ export function App() {
       notifications.show({
         id,
         color: "gray",
-        title: `${willHide ? "Hidden" : "Back in Needs review"} · ${pr.repo}#${pr.number}`,
+        title: `${willHide ? "Hidden" : "Back in Review"} · ${pr.repo}#${pr.number}`,
         message: (
           <Text
             size="xs"
@@ -342,10 +346,21 @@ export function App() {
     });
   });
 
+  /** The review the chat is about — only while its pull request is the one on screen. */
+  const chatJob =
+    side !== null && typeof side === "object" && selected
+      ? ai.jobs.find((job) => job.id === side.jobId && prKey(job) === prKey(selected))
+      : undefined;
+  // Moving on to another pull request, or deleting the review, closes it.
+  const chatOrphaned = side !== null && typeof side === "object" && !chatJob;
+  useEffect(() => {
+    if (chatOrphaned) setSide(null);
+  }, [chatOrphaned]);
+
   const openAiReview = useCallback(
-    (pr: PullRequest) => {
+    (pr: PullRequest, reviewerId: string) => {
       select(pr);
-      setPreviewTab("claude");
+      setPreviewTab(reviewTab(reviewerId));
     },
     [select],
   );
@@ -365,9 +380,10 @@ export function App() {
   const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
 
   const runAiReview = useCallback(
-    (pr: PullRequest, ids: string[] | undefined) => {
-      openAiReview(pr);
-      ai.start(pr, ids).catch((err: unknown) =>
+    (pr: PullRequest, reviewerId: string) => {
+      setPickFor(null);
+      openAiReview(pr, reviewerId);
+      ai.start(pr, [reviewerId]).catch((err: unknown) =>
         notifications.show({
           color: "red",
           title: "Couldn't start the review",
@@ -379,19 +395,19 @@ export function App() {
     [openAiReview, ai.start],
   );
 
-  /** With no reviewers named: the only one, or a choice of them. */
+  /** With no reviewer named: open the + over the pull request, to choose one. */
   const startAiReview = useCallback(
-    (pr: PullRequest, ids?: string[]) => {
-      if (ids || reviewers.reviewers.length <= 1) {
-        runAiReview(pr, ids ?? reviewers.reviewers.map((r) => r.id).slice(0, 1));
+    (pr: PullRequest, reviewerId?: string) => {
+      if (reviewerId !== undefined) {
+        runAiReview(pr, reviewerId);
         return;
       }
-      openAiReview(pr);
+      select(pr);
       setPickFor(pr);
       // The files may have been edited elsewhere since they were read.
       void reviewers.refresh().catch(() => {});
     },
-    [runAiReview, openAiReview, reviewers.reviewers, reviewers.refresh],
+    [runAiReview, select, reviewers.refresh],
   );
 
   openRef.current = (job) => {
@@ -412,7 +428,7 @@ export function App() {
     })[where](
       target.id,
     );
-    setPreviewTab("claude");
+    setPreviewTab(reviewTab(job.reviewerId));
     setExpanded(narrow);
     return true;
   };
@@ -420,45 +436,53 @@ export function App() {
   const aiControls = useMemo<AiControls>(
     () => ({
       available: ai.available,
-      byPr: ai.byPr,
       reviewsByPr: ai.reviewsByPr,
       reviewerIds,
       start: startAiReview,
       cancel: (id) => void ai.cancel(id).catch(() => {}),
       remove: (id) => void ai.remove(id).catch(() => {}),
-      findingAdded: () => setReviewPaneOpen(true),
+      findingAdded: () => setSide("review"),
+      ask: (job, quote) => setSide({ jobId: job.id, quote: quote ?? null, n: ++asks.current }),
       pickingFor: pickFor?.id ?? null,
       reviewers: reviewers.reviewers,
-      pick: (pr, ids) => {
-        setPickFor(null);
-        runAiReview(pr, ids);
-      },
       cancelPick: () => setPickFor(null),
       manageReviewers: () => {
         setPickFor(null);
-        setPage("reviewers");
+        openSettings("reviewers");
       },
     }),
-    [ai.available, ai.byPr, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, runAiReview],
+    [ai.available, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, openSettings],
+  );
+
+  /** From a row's context menu: start it where it is, without opening it. */
+  const quickStart = useCallback(
+    (pr: PullRequest, reviewerId: string) => {
+      ai.start(pr, [reviewerId]).catch((err: unknown) =>
+        notifications.show({
+          color: "red",
+          title: "Couldn't start the review",
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 8000,
+        }),
+      );
+    },
+    [ai.start],
   );
 
   const queueAi = useMemo(
-    () => (ai.available ? { byPr: ai.byPr, onStart: startAiReview, onOpen: openAiReview } : undefined),
-    [ai.available, ai.byPr, startAiReview, openAiReview],
+    () =>
+      ai.available
+        ? { byPr: ai.byPr, reviewsByPr: ai.reviewsByPr, reviewers: reviewers.reviewers, start: quickStart }
+        : undefined,
+    [ai.available, ai.byPr, ai.reviewsByPr, reviewers.reviewers, quickStart],
   );
 
-  // Make sure the selected diff, and the ones either side of it, are loading
-  // first — `j`/`k` should land on something that is already there.
-  // Keyed on ids rather than the objects: the list array is rebuilt on every
-  // filter keystroke, and that alone shouldn't re-prioritise the fetch queue.
-  const neighbours = `${list[index - 1]?.id ?? ""}|${list[index + 1]?.id ?? ""}`;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on ids on purpose, as above
+  // Fetch the open pull request's diff, and only that one. Again after a
+  // refresh, which brings a new object and may have dropped the old diff;
+  // a diff already here or on its way isn't fetched twice.
   useEffect(() => {
-    if (!selected) return;
-    for (const pr of [list[index + 1], list[index - 1]]) if (pr) requestNow(pr);
-    // Last, so it lands at the front of the queue.
-    requestNow(selected);
-  }, [selectedKey, neighbours]);
+    if (selected) requestDiff(selected);
+  }, [selected]);
 
   // Moving to another pull request closes its boxes for good, rather than
   // leaving them to reappear when you come back to it.
@@ -479,7 +503,7 @@ export function App() {
     const active = document.activeElement;
     const lost = !active || active === document.body;
     if (el && (lost || (other?.contains(active) ?? false))) el.focus({ preventScroll: true });
-  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, settingsOpen, shortcutsOpen]);
+  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, page, shortcutsOpen]);
 
   // Keep the selected row visible when moving by keyboard — and after the
   // list is swapped (tab) or shown again (expanded).
@@ -598,7 +622,7 @@ export function App() {
     }
 
     function onKeyDown(e: KeyboardEvent) {
-      // The Reviewers page has keys of its own.
+      // The pages have keys of their own.
       if (page) return;
       const target = e.target as HTMLElement | null;
       const typing =
@@ -613,8 +637,7 @@ export function App() {
           target?.blur();
           return;
         }
-        if (settingsOpen || shortcutsOpen) {
-          setSettingsOpen(false);
+        if (shortcutsOpen) {
           setShortcutsOpen(false);
           return;
         }
@@ -629,7 +652,7 @@ export function App() {
 
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       // While a box or dialog is up, let it own the keyboard.
-      if (settingsOpen || shortcutsOpen || changesOpen || approveOpen) return;
+      if (shortcutsOpen || changesOpen || approveOpen) return;
 
       const action = actionForKey(e.key, e.repeat);
       if (!action || (action.type === "approve" && onControl)) return;
@@ -650,11 +673,10 @@ export function App() {
           previewScrollRef.current?.scrollBy({ top: action.direction * 80 });
           return;
         case "cycleTab": {
-          const tabs: PreviewTab[] = ai.available
-            ? ["description", "diff", "claude"]
-            : ["description", "diff"];
+          const reviews = (ai.available && selected && ai.reviewsByPr.get(prKey(selected))) || [];
+          const tabs = tabOrder(reviews);
           setPreviewTab((t) => {
-            const i = Math.max(tabs.indexOf(t), 0);
+            const i = Math.max(tabs.indexOf(resolveTab(t, reviews).tab), 0);
             return tabs[(i + action.direction + tabs.length) % tabs.length] ?? "diff";
           });
           return;
@@ -673,11 +695,12 @@ export function App() {
           }
           return;
         case "claude": {
-          // Start a Claude review, or flip between it and the diff.
+          // Flip between Claude's review and the diff — or, with none yet,
+          // choose a reviewer from the +.
           if (!ai.available || !selected) return;
           const job = ai.byPr.get(prKey(selected));
-          if (!job || job.status === "cancelled") startAiReview(selected);
-          else setPreviewTab((t) => (t === "claude" ? "diff" : "claude"));
+          if (!job) startAiReview(selected);
+          else setPreviewTab((t) => (t.startsWith("review:") ? "diff" : reviewTab(job.reviewerId)));
           if (narrow) setExpanded(true);
           return;
         }
@@ -695,7 +718,7 @@ export function App() {
           searchRef.current?.focus();
           return;
         case "settings":
-          setSettingsOpen(true);
+          setPage("settings");
           return;
         case "theme":
           toggleColorScheme();
@@ -723,7 +746,6 @@ export function App() {
     canReviewSelected,
     narrow,
     expanded,
-    settingsOpen,
     shortcutsOpen,
     changesOpen,
     approveOpen,
@@ -734,6 +756,7 @@ export function App() {
     toggleColorScheme,
     ai.available,
     ai.byPr,
+    ai.reviewsByPr,
     startAiReview,
     askApprove,
     toggleHidden,
@@ -744,17 +767,16 @@ export function App() {
     switch (name) {
       case "settings":
         setShortcutsOpen(false);
-        setSettingsOpen(true);
+        setPage("settings");
         return;
       case "refresh":
         refreshTab();
         return;
       case "help":
-        setSettingsOpen(false);
         setShortcutsOpen(true);
         return;
       case "reviewers":
-        if (ai.supported) setPage("reviewers");
+        if (ai.supported) openSettings("reviewers");
         return;
     }
   });
@@ -762,7 +784,6 @@ export function App() {
   /* ---------------------------------------------------------------------- */
 
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
-  const prefetchPct = allPrs.length === 0 ? 0 : (readyCount / allPrs.length) * 100;
 
   const difficultySegments = (q: string, set: (next: string) => void, total: number, c: Record<Difficulty, number>) => ({
     value: readLevel(q) ?? "all",
@@ -782,7 +803,7 @@ export function App() {
         onQueryChange={() => {}}
         placeholder=""
         inputRef={searchRef}
-        note="Hidden pull requests stay out of Needs review until you unhide them — ⇧H, or the eye on a row."
+        note="Hidden pull requests stay out of Review until you unhide them — ⇧H, or the eye on a row."
       />
     ) : tab === "reviewed" ? (
       <ListFilter
@@ -911,6 +932,7 @@ export function App() {
 
           {/* The Reviewers page has its own way back; it isn't left by accident. */}
           <Tabs
+            className="er-main-tabs"
             style={page ? { visibility: "hidden" } : undefined}
             value={tab}
             onChange={(v) => setTab((v as Tab) ?? "queue")}
@@ -920,7 +942,7 @@ export function App() {
             <Tabs.List>
               <Tabs.Tab value="queue" leftSection={<IconInbox size={14} />}>
                 <Group gap={6} wrap="nowrap">
-                  Needs review
+                  Review
                   <Badge size="xs" variant="light" color={prs.length > 0 ? "indigo" : "gray"}>
                     {prs.length}
                   </Badge>
@@ -928,7 +950,7 @@ export function App() {
               </Tabs.Tab>
               <Tabs.Tab value="mine" leftSection={<IconUser size={14} />}>
                 <Group gap={6} wrap="nowrap">
-                  My PRs
+                  Mine
                   {mine.data && mine.pullRequests.length > 0 && (
                     <Badge size="xs" variant="light" color="gray">
                       {mine.pullRequests.length}
@@ -961,16 +983,6 @@ export function App() {
         </Group>
 
         <Group gap={6} wrap="nowrap">
-          <Tooltip label={`Diffs prefetched: ${readyCount}/${allPrs.length}`}>
-            <Box w={72} visibleFrom="md">
-              <Progress
-                value={prefetchPct}
-                size="xs"
-                color={prefetchPct >= 100 ? "teal" : "indigo"}
-                transitionDuration={200}
-              />
-            </Box>
-          </Tooltip>
           <Tooltip label="Refresh (Shift+R)">
             <ActionIcon
               variant="subtle"
@@ -990,7 +1002,7 @@ export function App() {
             <ActionIcon
               variant={reviewPaneOpen ? "light" : "subtle"}
               color="gray"
-              onClick={() => setReviewPaneOpen((x) => !x)}
+              onClick={() => setSide((x) => (x === "review" ? null : "review"))}
               aria-label="Your review"
               aria-pressed={reviewPaneOpen}
               style={page ? { visibility: "hidden" } : undefined}
@@ -998,18 +1010,6 @@ export function App() {
               <IconClipboardText size={17} />
             </ActionIcon>
           </Tooltip>
-          {ai.supported && (
-            <Tooltip label="Reviewers">
-              <ActionIcon
-                variant={page === "reviewers" ? "light" : "subtle"}
-                color="gray"
-                onClick={() => setPage((p) => (p === "reviewers" ? p : "reviewers"))}
-                aria-label="Reviewers"
-              >
-                <IconUsers size={17} />
-              </ActionIcon>
-            </Tooltip>
-          )}
           <Tooltip label="Shortcuts (?)">
             <ActionIcon
               variant="subtle"
@@ -1022,28 +1022,30 @@ export function App() {
           </Tooltip>
           <Tooltip label="Settings (,)">
             <ActionIcon
-              variant="subtle"
+              variant={page === "settings" ? "light" : "subtle"}
               color="gray"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => setPage("settings")}
               aria-label="Settings"
             >
               <IconSettings size={17} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Toggle theme (t)">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={toggleColorScheme}
-              aria-label={colorScheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {colorScheme === "dark" ? <IconSun size={17} /> : <IconMoon size={17} />}
-            </ActionIcon>
-          </Tooltip>
         </Group>
       </header>
 
-      {page === "reviewers" && <ReviewersPage store={reviewers} onClose={() => setPage(null)} />}
+      {page === "settings" && (
+        <SettingsPage
+          onClose={() => setPage(null)}
+          section={settingsSection}
+          onSectionChange={setSettingsSection}
+          reviewers={reviewers}
+          settings={settings}
+          onChange={update}
+          onReset={reset}
+          prs={prs}
+          local={{ supported: ai.supported, status: ai.status }}
+        />
+      )}
 
       {!page && (
         <div className="er-workspace">
@@ -1090,6 +1092,7 @@ export function App() {
               />
             }
           />
+          {side && <ReviewPaneHandle />}
           {reviewPaneOpen && (
             <ReviewPane
               key={selected?.id ?? "none"}
@@ -1097,25 +1100,23 @@ export function App() {
               ownPr={selected !== null && isOwn(selected)}
               reviewed={selected ? reviewed[selected.id] : undefined}
               onSubmit={handleSubmit}
-              onClose={() => setReviewPaneOpen(false)}
+              onClose={() => setSide(null)}
+            />
+          )}
+          {chatJob && selected && side !== null && typeof side === "object" && (
+            <ChatPane
+              key={chatJob.id}
+              pr={selected}
+              job={chatJob}
+              request={side}
+              onAsk={ai.ask}
+              onStop={(id) => void ai.stopChat(id).catch(() => {})}
+              onClose={() => setSide(null)}
             />
           )}
         </div>
       )}
 
-      <SettingsModal
-        onOpenReviewers={() => {
-          setSettingsOpen(false);
-          setPage("reviewers");
-        }}
-        opened={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        settings={settings}
-        onChange={update}
-        onReset={reset}
-        prs={prs}
-        local={{ supported: ai.supported, status: ai.status }}
-      />
       <ShortcutsModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );

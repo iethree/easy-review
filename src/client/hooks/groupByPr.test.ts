@@ -23,6 +23,7 @@ function job(over: Partial<AiReviewSummary>): AiReviewSummary {
     error: null,
     costUsd: null,
     turns: null,
+    chatPhase: null,
     ...over,
   };
 }

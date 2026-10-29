@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   isActive,
+  isBusy,
   prKey,
   type AiReviewConfig,
   type AiReviewJob,
@@ -72,7 +73,8 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     );
   }, []);
 
-  const anyActive = jobs.some((j) => isActive(j.status));
+  // Answering a question counts: its answer is polled for like a review.
+  const anyActive = jobs.some(isBusy);
 
   useEffect(() => {
     if (!supported) return;
@@ -111,6 +113,23 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     [refresh],
   );
 
+  /** A follow-up question, in the session that wrote the review. */
+  const ask = useCallback(
+    async (id: string, question: string, quote?: string) => {
+      await call(`/api/local/reviews/${id}/chat`, { method: "POST", body: JSON.stringify({ question, quote }) });
+      await refresh();
+    },
+    [refresh],
+  );
+
+  const stopChat = useCallback(
+    async (id: string) => {
+      await call(`/api/local/reviews/${id}/chat/stop`, { method: "POST" });
+      await refresh();
+    },
+    [refresh],
+  );
+
   return {
     /** The server can run reviews, and the claude CLI was found. */
     available: supported && status?.claude.available === true,
@@ -123,6 +142,8 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     start,
     cancel,
     remove,
+    ask,
+    stopChat,
   };
 }
 

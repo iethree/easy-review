@@ -8,6 +8,7 @@ import {
   NumberInput,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
   Textarea,
@@ -111,6 +112,14 @@ export function ClaudeSettings({
         />
       </Group>
 
+      <Switch
+        size="sm"
+        label="Read-only"
+        description="Claude reads the code but runs none of it. Off, it can run the pull request's tests and scripts, and edit files in its checkout, to check what it finds — which runs someone else's code on this computer. Applies to reviews started from now on."
+        checked={config.readOnly}
+        onChange={(e) => set({ readOnly: e.currentTarget.checked })}
+      />
+
       <Textarea
         size="xs"
         label="Local clones (optional)"
@@ -125,10 +134,13 @@ export function ClaudeSettings({
 
       <Alert color="gray" variant="light" icon={<IconShieldLock size={16} />} p="xs">
         <Text size="xs">
-          The code under review was written by someone else, so each review runs{" "}
-          <Code>--restricted</Code> with only Read, Grep and Glob: no shell, no web, no MCP
-          servers, no settings or hooks from the pull request, and no files outside its own
-          worktree. Git runs with hooks switched off.
+          The code under review was written by someone else, so each review runs in its own
+          worktree with no web tools, no MCP servers, and none of the pull request's settings or
+          hooks (<Code>--setting-sources user</Code>). Git runs with hooks switched off. Its tools
+          aren't confined to the worktree, though: they can reach any file you can.{" "}
+          {config.readOnly
+            ? "Read-only, it has just Read, Grep and Glob: no shell."
+            : "It can also run commands, which run as you."}
         </Text>
         {status && (
           <Text size="10px" c="dimmed" mt={6}>

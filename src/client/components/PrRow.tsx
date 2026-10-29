@@ -1,12 +1,11 @@
 import { ActionIcon, Avatar, Badge, Group, Tooltip, VisuallyHidden } from "@mantine/core";
 import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { memo } from "react";
-import type { AiReviewSummary } from "../../shared/aiReview.ts";
+import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
 import { rateDifficulty } from "../../shared/difficulty.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { DIFFICULTY_COLOR } from "../theme.ts";
 import { relativeTime } from "../time.ts";
-import { AiReviewButton } from "./AiReviewButton.tsx";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
 
@@ -21,11 +20,9 @@ interface Props {
   /** False when every row shares a repo, so it isn't repeated on each one. */
   showRepo: boolean;
   // Flat, not an object, so the memoised row only re-renders when its own
-  // review changes. The callbacks are absent when local reviews aren't
-  // available (no claude CLI), which hides the robot.
+  // reviews change: the one standing for them all, and how many there are.
   aiJob?: AiReviewSummary;
-  onAiStart?: (pr: PullRequest) => void;
-  onAiOpen?: (pr: PullRequest) => void;
+  aiCount?: number;
   /** In the Hidden tab: brings the PR back. */
   onUnhide?: (pr: PullRequest) => void;
 }
@@ -47,8 +44,7 @@ export const PrRow = memo(function PrRow({
   onFilterAuthor,
   showRepo,
   aiJob,
-  onAiStart,
-  onAiOpen,
+  aiCount = 0,
   onUnhide,
 }: Props) {
   const rating = rateDifficulty(pr, settings);
@@ -58,6 +54,7 @@ export const PrRow = memo(function PrRow({
     // biome-ignore lint/a11y: rows are chosen with the keyboard through the app's keymap (j/k), not focus
     <div
       className="er-item"
+      data-pr-id={pr.id}
       data-selected={selected}
       data-row-id={pr.id}
       style={{ "--er-accent": accent } as React.CSSProperties}
@@ -133,15 +130,7 @@ export const PrRow = memo(function PrRow({
       </div>
 
       <Group gap={4} wrap="nowrap">
-        {onAiStart && onAiOpen && (
-          <AiReviewButton
-            job={aiJob}
-            headSha={pr.headSha}
-            label={`${pr.repo}#${pr.number}`}
-            onStart={() => onAiStart(pr)}
-            onOpen={() => onAiOpen(pr)}
-          />
-        )}
+        <ReviewCount job={aiJob} count={aiCount} headSha={pr.headSha} />
         {/* No approve button here: approving is done from the preview, with the pull request in view. */}
         {onUnhide && (
           <Tooltip label="Unhide (⇧H)">
@@ -164,3 +153,31 @@ export const PrRow = memo(function PrRow({
   );
 });
 
+/**
+ * How many Claude reviews the pull request has, coloured by how they stand.
+ * Always takes its place, so rows line up whether or not they have any.
+ */
+function ReviewCount({ job, count, headSha }: { job: AiReviewSummary | undefined; count: number; headSha: string }) {
+  if (!job || count === 0) return <span className="er-review-count" />;
+  const running = isActive(job.status);
+  const stale = job.status === "done" && headSha !== "" && job.headSha !== headSha;
+  const [color, state] = running
+    ? ["indigo", job.phase]
+    : job.status === "failed"
+      ? ["red", "the latest failed"]
+      : stale
+        ? ["yellow", "of an older commit"]
+        : job.status === "cancelled"
+          ? ["gray", "cancelled"]
+          : ["teal", "ready"];
+  const label = `${count} Claude review${count === 1 ? "" : "s"} — ${state}`;
+  return (
+    <span className="er-review-count">
+      <Tooltip label={label} openDelay={250}>
+        <Badge size="sm" circle variant="light" color={color} className="er-breathe" data-running={running} aria-label={label}>
+          {count}
+        </Badge>
+      </Tooltip>
+    </span>
+  );
+}

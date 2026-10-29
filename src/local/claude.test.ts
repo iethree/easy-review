@@ -1,22 +1,52 @@
 import { expect, test } from "bun:test";
-import { applyEvent, buildArgs, buildPrompt, describeToolUse, EMPTY_STREAM } from "./claude.ts";
+import {
+  applyEvent,
+  buildArgs,
+  buildPrompt,
+  buildQuestion,
+  describeToolUse,
+  EMPTY_STREAM,
+  fencedClaudeScript,
+} from "./claude.ts";
 import { childEnv } from "./env.ts";
 
 const CWD = "/wt";
 
-test("every run is sandboxed, whatever the settings say", () => {
-  const args = buildArgs("review it", { model: "", effort: "" });
-  expect(args).toContain("--restricted");
-  expect(args).toContain("--strict-mcp-config");
+test("every run is fenced in, whatever the settings say", () => {
+  for (const readOnly of [true, false]) {
+    const args = buildArgs("review it", { model: "", effort: "", readOnly });
+    // Your settings, never the pull request's: its .claude/settings.json could hold hooks.
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
+    expect(args).not.toContain("--restricted");
+    expect(args).toContain("--strict-mcp-config");
+    expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
+    expect(args[args.indexOf("--output-format") + 1]).toBe("stream-json");
+    expect(args).not.toContain("--model");
+    expect(args).not.toContain("--effort");
+    expect(args.join(" ")).not.toContain("bypassPermissions");
+    expect(args.join(" ")).not.toContain("dangerously");
+  }
+});
+
+test("a read-only review reads, and nothing else", () => {
+  const args = buildArgs("x", { model: "", effort: "", readOnly: true });
   expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
-  expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
-  expect(args[args.indexOf("--output-format") + 1]).toBe("stream-json");
-  expect(args).not.toContain("--model");
-  expect(args).not.toContain("--effort");
+  expect(args).not.toContain("--allowedTools");
+  const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
+  expect(system).toContain("read-only tools");
+});
+
+test("otherwise Claude can run commands and edit files, approved up front", () => {
+  const args = buildArgs("x", { model: "", effort: "", readOnly: false });
+  expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob,Bash,Edit,Write");
+  expect(args[args.indexOf("--allowedTools") + 1]).toBe("Bash,Edit,Write");
+  const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
+  expect(system).toContain("run commands (Bash)");
+  expect(system).not.toContain("read-only tools");
 });
 
 test("model and effort are passed only when set", () => {
-  const args = buildArgs("x", { model: "sonnet", effort: "high" });
+  const args = buildArgs("x", { model: "sonnet", effort: "high", readOnly: false });
   expect(args[args.indexOf("--model") + 1]).toBe("sonnet");
   expect(args[args.indexOf("--effort") + 1]).toBe("high");
 });
@@ -38,6 +68,10 @@ test("tool calls read like a log", () => {
     "Searched for “useEffect” in src",
   );
   expect(describeToolUse("Glob", { pattern: "**/*.test.ts" }, CWD)).toBe("Listed **/*.test.ts");
+  expect(describeToolUse("Bash", { command: "bun test src", description: "Run the tests" }, CWD)).toBe("Run the tests");
+  expect(describeToolUse("Bash", { command: "bun test src\necho done" }, CWD)).toBe("Ran `bun test src`");
+  expect(describeToolUse("Edit", { file_path: "/wt/src/app.ts" }, CWD)).toBe("Edited src/app.ts");
+  expect(describeToolUse("Write", { file_path: "/wt/scratch.ts" }, CWD)).toBe("Wrote scratch.ts");
 });
 
 // Shapes captured from a real `claude -p --output-format stream-json --verbose` run.
@@ -159,8 +193,33 @@ test("several events for one turn don't inflate anything", () => {
 });
 
 test("every reviewer, whatever its instructions, is asked for findings the UI can use", () => {
-  const args = buildArgs("x", { model: "", effort: "" });
+  const args = buildArgs("x", { model: "", effort: "", readOnly: false });
   const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
   expect(system).toContain("easy-review-findings");
   expect(system).toContain('"severity"');
+});
+
+test("a question continues the review's session, fenced in the same way", () => {
+  const args = buildArgs("why?", { model: "", effort: "", readOnly: true }, "session-1");
+  expect(args[args.indexOf("--resume") + 1]).toBe("session-1");
+  expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
+  expect(args).toContain("--strict-mcp-config");
+  expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
+  const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
+  expect(system).toContain("follow-up questions");
+  expect(system).not.toContain("easy-review-findings");
+  expect(buildArgs("x", { model: "", effort: "", readOnly: false })).not.toContain("--resume");
+});
+
+test("a question about part of the review quotes it first", () => {
+  expect(buildQuestion("  Why?  ")).toBe("Why?");
+  expect(buildQuestion("Is this real?", "- **Race** in the loader\n\n  more")).toBe(
+    "About this part of your review:\n\n> - **Race** in the loader\n>\n>   more\n\nIs this real?",
+  );
+});
+
+test("a Claude a review starts itself is fenced like the review", () => {
+  const script = fencedClaudeScript("/Users/o'neil/.local/bin/claude");
+  expect(script).toStartWith("#!/bin/sh\n");
+  expect(script).toContain(`exec '/Users/o'\\''neil/.local/bin/claude' --setting-sources user --strict-mcp-config "$@"`);
 });

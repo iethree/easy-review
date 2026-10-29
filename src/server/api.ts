@@ -56,7 +56,7 @@ export function createApi({ getToken, onReviewSubmitted }: ApiOptions) {
   const reviewedCache = new TtlCache<ReviewedResponse>(20, 60 * 1000);
   // Keyed by the PR's updatedAt, which moves whenever someone comments.
   const conversationCache = new TtlCache<Conversation>(100, 30 * 1000);
-  // Collapses the burst of prefetches the client fires on load.
+  // Collapses requests for a diff that is already being fetched.
   const inFlight = new Map<string, Promise<DiffResponse>>();
 
   async function handle(request: Request): Promise<Response> {

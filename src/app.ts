@@ -12,7 +12,7 @@ import { createLocalApi } from "./local/api.ts";
 import { ReviewJobs } from "./local/jobs.ts";
 import { createApi } from "./server/api.ts";
 import { describeSignIn, ignoredTokenVars, resolveLocalToken } from "./server/localToken.ts";
-import { forbidden, isCrossSite, isLoopbackHost } from "./server/security.ts";
+import { forbidden, isCrossSite, isLoopbackHost, isReportResource } from "./server/security.ts";
 
 export async function startServer({ development }: { development: boolean }): Promise<void> {
   const getToken = async () => (await resolveLocalToken()).token;
@@ -49,7 +49,7 @@ export async function startServer({ development }: { development: boolean }): Pr
     // This server can approve pull requests and start Claude sessions, so it
     // answers only to this machine, and only to its own pages.
     if (!isLoopbackHost(req)) return forbidden("This server only answers on localhost");
-    if (isCrossSite(req)) return forbidden("Cross-site requests are not allowed");
+    if (isCrossSite(req) && !isReportResource(req)) return forbidden("Cross-site requests are not allowed");
 
     const { pathname } = new URL(req.url);
     return pathname.startsWith("/api/local/") ? local.handle(req) : api.handle(req);

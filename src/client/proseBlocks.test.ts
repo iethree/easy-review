@@ -46,3 +46,18 @@ test("a list item loses its bullet when it becomes a comment", () => {
   expect(withoutMarker("2. Second")).toBe("Second");
   expect(withoutMarker("Plain")).toBe("Plain");
 });
+
+test("pictures are shown in the review but not offered for yours, where GitHub couldn't show them", () => {
+  const blocks = splitProse(
+    [
+      "Before.",
+      "```reladraw\nnode a\n```",
+      "```compare\nbefore: screenshots/a.png\nafter: screenshots/b.png\n```",
+      "![Settings](screenshots/settings.png)",
+      "- ![a screen](screenshots/x.png) in a list",
+      "- plain point",
+      "```ts\nconst x = 1;\n```",
+    ].join("\n\n"),
+  );
+  expect(blocks.map((b) => b.addable)).toEqual([true, false, false, false, false, true, true]);
+});

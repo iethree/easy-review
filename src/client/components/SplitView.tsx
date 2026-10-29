@@ -129,3 +129,106 @@ export function SplitView({ left, right, mode }: Props) {
     </div>
   );
 }
+
+/** The handle sits in the workspace, beside the pane it resizes. */
+const workspaceOf = (handle: HTMLElement | null) => handle?.parentElement ?? null;
+
+const REVIEW_PANE_KEY = "easy-review.review-pane.v1";
+const MIN_REVIEW_PANE = 280;
+/**
+ * What the pull request panes keep: the list (320) and the code (420) at their
+ * minimums, the handle between them (12), the split's padding (32) and the
+ * review pane's own right margin (16). The same sum is in app.css.
+ */
+const KEEP_FOR_SPLIT = 800;
+
+/**
+ * The divider on the review pane's left edge: drag it to make the pane wider
+ * or narrower, double-click to put it back. Like SplitView's, it writes a CSS
+ * variable (--er-review-w, on the workspace) rather than re-rendering.
+ */
+export function ReviewPaneHandle() {
+  const handleRef = useRef<HTMLDivElement>(null);
+
+  const clamp = useCallback((px: number) => {
+    const max = Math.max(MIN_REVIEW_PANE, (workspaceOf(handleRef.current)?.clientWidth ?? 0) - KEEP_FOR_SPLIT);
+    return Math.round(Math.min(Math.max(px, MIN_REVIEW_PANE), max));
+  }, []);
+  const apply = useCallback((px: number | null) => {
+    const root = workspaceOf(handleRef.current);
+    if (!root) return;
+    if (px === null) root.style.removeProperty("--er-review-w");
+    else root.style.setProperty("--er-review-w", `${px}px`);
+  }, []);
+
+  useEffect(() => {
+    let stored: number | null = null;
+    try {
+      const raw = localStorage.getItem(REVIEW_PANE_KEY);
+      stored = raw ? Number(raw) : null;
+    } catch {
+      /* storage disabled */
+    }
+    if (stored !== null && Number.isFinite(stored)) apply(clamp(stored));
+  }, [apply, clamp]);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const handle = handleRef.current;
+    const pane = handle?.nextElementSibling;
+    if (!handle || !pane) return;
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    handle.dataset.dragging = "true";
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    // The pane grows leftwards from its right edge, which stays put.
+    const edge = pane.getBoundingClientRect().right;
+    let latest = pane.getBoundingClientRect().width;
+
+    const move = (ev: PointerEvent) => {
+      latest = clamp(edge - ev.clientX);
+      apply(latest);
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      delete handle.dataset.dragging;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      try {
+        localStorage.setItem(REVIEW_PANE_KEY, String(latest));
+      } catch {
+        /* storage disabled — the width just won't persist */
+      }
+    };
+
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  };
+
+  const onDoubleClick = () => {
+    apply(null);
+    try {
+      localStorage.removeItem(REVIEW_PANE_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a draggable handle; an <hr> can't be one
+    <div
+      className="er-split-handle er-review-pane-handle"
+      ref={handleRef}
+      onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize your review (double-click to reset)"
+      title="Drag to resize · double-click to reset"
+    />
+  );
+}
