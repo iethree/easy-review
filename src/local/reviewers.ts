@@ -149,7 +149,7 @@ export async function seedReviewers(legacyInstructions: string): Promise<void> {
   if (due.length === 0) return;
   for (const reviewer of due) {
     const file = Bun.file(fileOf(reviewer.id));
-    if (!(await file.exists())) await Bun.write(file, formatReviewerFile(reviewer));
+    if (!(await file.exists())) await Bun.write(file, reviewer.file);
     offered.add(reviewer.id);
   }
   await Bun.write(offeredFile, `${[...offered].join("\n")}\n`);

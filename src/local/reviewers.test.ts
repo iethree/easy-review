@@ -89,6 +89,9 @@ test("built-in reviewers are offered once, to new and existing setups alike", as
   const layers = (await listReviewers()).find((r) => r.id === "layers");
   expect(layers?.name).toBe("Layers");
   expect(layers?.instructions).toContain("layers");
+  // Copied as it is in the app's reviewers/ folder.
+  const shipped = await Bun.file(new URL("../../reviewers/layers.md", import.meta.url)).text();
+  expect(await Bun.file(join(home, "reviewers", "layers.md")).text()).toBe(shipped);
 
   // Deleted, it stays deleted.
   await deleteReviewer("layers");
