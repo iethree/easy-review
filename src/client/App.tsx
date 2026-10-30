@@ -19,7 +19,6 @@ import {
   IconKeyboard,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
-  IconRefresh,
   IconSettings,
   IconUser,
 } from "@tabler/icons-react";
@@ -796,6 +795,12 @@ export function App() {
     ],
   });
 
+  // Hidden pull requests come from the queue, so its tab refreshes that.
+  const listRefresh = {
+    onRefresh: refreshTab,
+    loading: tab === "reviewed" ? history.loading : tab === "mine" ? mine.loading : loading,
+  };
+
   const listFilter =
     tab === "hidden" ? (
       <ListFilter
@@ -803,6 +808,7 @@ export function App() {
         onQueryChange={() => {}}
         placeholder=""
         inputRef={searchRef}
+        refresh={listRefresh}
         note="Hidden pull requests stay out of Review until you unhide them — ⇧H, or the eye on a row."
       />
     ) : tab === "reviewed" ? (
@@ -811,6 +817,7 @@ export function App() {
         onQueryChange={setHistoryQuery}
         placeholder="Search your reviews"
         inputRef={searchRef}
+        refresh={listRefresh}
         segments={{
           value: verdict,
           onChange: (v) => setVerdict(v as VerdictFilter),
@@ -828,6 +835,7 @@ export function App() {
         onQueryChange={setMineQuery}
         placeholder="Search your pull requests"
         inputRef={searchRef}
+        refresh={listRefresh}
         sort={sort}
         onSortChange={setSort}
         segments={difficultySegments(mineQuery, setMineQuery, mine.pullRequests.length, mineCounts)}
@@ -838,6 +846,7 @@ export function App() {
         onQueryChange={setQuery}
         placeholder="Search title, repo, author, number…"
         inputRef={searchRef}
+        refresh={listRefresh}
         sort={sort}
         onSortChange={setSort}
         segments={difficultySegments(query, setQuery, prs.length, counts)}
@@ -983,21 +992,6 @@ export function App() {
         </Group>
 
         <Group gap={6} wrap="nowrap">
-          <Tooltip label="Refresh (Shift+R)">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={refreshTab}
-              aria-label="Refresh"
-            >
-              <IconRefresh
-                size={17}
-                className={
-                  (tab === "reviewed" ? history.loading : tab === "mine" ? mine.loading : loading) ? "er-spin" : undefined
-                }
-              />
-            </ActionIcon>
-          </Tooltip>
           <Tooltip label={reviewPaneOpen ? "Hide your review" : "Your review: summary, comments, submit"}>
             <ActionIcon
               variant={reviewPaneOpen ? "light" : "subtle"}

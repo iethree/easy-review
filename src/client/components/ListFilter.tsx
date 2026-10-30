@@ -1,5 +1,5 @@
 import { ActionIcon, Badge, Group, Menu, SegmentedControl, Text, TextInput, Tooltip } from "@mantine/core";
-import { IconArrowsSort, IconCheck, IconSearch, IconX } from "@tabler/icons-react";
+import { IconArrowsSort, IconCheck, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
 import { useMemo, type ReactNode, type RefObject } from "react";
 import { describeFilters, removeTerm } from "../../shared/filter.ts";
 
@@ -23,6 +23,18 @@ interface Props {
   segments?: { value: string; data: { label: ReactNode; value: string }[]; onChange: (value: string) => void };
   /** Shown in place of the box, for lists with nothing to search. */
   note?: ReactNode;
+  /** Fetch the list again (Shift+R), spinning while it loads. */
+  refresh: { onRefresh: () => void; loading: boolean };
+}
+
+function RefreshButton({ refresh }: { refresh: Props["refresh"] }) {
+  return (
+    <Tooltip label="Refresh (Shift+R)">
+      <ActionIcon variant="subtle" color="gray" size="md" onClick={refresh.onRefresh} aria-label="Refresh">
+        <IconRefresh size={16} className={refresh.loading ? "er-spin" : undefined} />
+      </ActionIcon>
+    </Tooltip>
+  );
 }
 
 /**
@@ -32,15 +44,28 @@ interface Props {
  * an author's name on a row write into the same text, so what you see in the
  * box is always the whole filter.
  */
-export function ListFilter({ query, onQueryChange, placeholder, inputRef, sort, onSortChange, segments, note }: Props) {
+export function ListFilter({
+  query,
+  onQueryChange,
+  placeholder,
+  inputRef,
+  sort,
+  onSortChange,
+  segments,
+  note,
+  refresh,
+}: Props) {
   const chips = useMemo(() => describeFilters(query), [query]);
 
   if (note) {
     return (
       <div className="er-pane-head er-list-filter">
-        <Text size="xs" c="dimmed">
-          {note}
-        </Text>
+        <Group gap={6} wrap="nowrap" justify="space-between">
+          <Text size="xs" c="dimmed">
+            {note}
+          </Text>
+          <RefreshButton refresh={refresh} />
+        </Group>
       </div>
     );
   }
@@ -91,6 +116,7 @@ export function ListFilter({ query, onQueryChange, placeholder, inputRef, sort, 
             </Menu.Dropdown>
           </Menu>
         )}
+        <RefreshButton refresh={refresh} />
       </Group>
 
       {segments && (
