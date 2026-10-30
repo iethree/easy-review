@@ -1,5 +1,7 @@
 /** Types shared by the server and the client. */
 
+import type { ReviewerLooks } from "./reviewerLook.ts";
+
 export type CheckState =
   | "SUCCESS"
   | "FAILURE"
@@ -165,6 +167,8 @@ export interface Settings {
   includeTeamRequests: boolean;
   /** Hide draft pull requests from the queue. */
   hideDrafts: boolean;
+  /** Each reviewer's icon and colour, by reviewer id. */
+  reviewerLooks: ReviewerLooks;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -172,6 +176,7 @@ export const DEFAULT_SETTINGS: Settings = {
   medium: { maxFiles: 10, maxLines: 300 },
   includeTeamRequests: true,
   hideDrafts: false,
+  reviewerLooks: {},
 };
 
 /* -------------------------------------------------------------------------- */

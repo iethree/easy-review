@@ -1,7 +1,8 @@
 import { Loader, Menu, Text } from "@mantine/core";
-import { IconAlertTriangle, IconCheck, IconRobot } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { isActive, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
+import { ReviewerIcon } from "./ReviewerIcon.tsx";
 
 interface Props {
   /** The pull request right-clicked, and where: null when closed. */
@@ -39,7 +40,7 @@ export function QuickReviewMenu({ at, reviewers, reviews, onStart, onClose }: Pr
             return (
               <Menu.Item
                 key={r.id}
-                leftSection={<StatusMark review={review} headSha={at.pr.headSha} />}
+                leftSection={<StatusMark id={r.id} review={review} headSha={at.pr.headSha} />}
                 rightSection={
                   running ? (
                     <Text size="10px" c="dimmed">
@@ -59,7 +60,7 @@ export function QuickReviewMenu({ at, reviewers, reviews, onStart, onClose }: Pr
   );
 }
 
-function StatusMark({ review, headSha }: { review: AiReviewSummary | undefined; headSha: string }) {
+function StatusMark({ id, review, headSha }: { id: string; review: AiReviewSummary | undefined; headSha: string }) {
   if (review && isActive(review.status)) return <Loader size={14} />;
   if (review?.status === "done") {
     // Yellow when it was of an older commit, as on the row's count.
@@ -67,5 +68,5 @@ function StatusMark({ review, headSha }: { review: AiReviewSummary | undefined; 
     return <IconCheck size={14} color={`var(--mantine-color-${stale ? "yellow" : "teal"}-6)`} />;
   }
   if (review?.status === "failed") return <IconAlertTriangle size={14} color="var(--mantine-color-red-6)" />;
-  return <IconRobot size={14} color="var(--mantine-color-dimmed)" />;
+  return <ReviewerIcon id={id} fallback="var(--mantine-color-dimmed)" />;
 }

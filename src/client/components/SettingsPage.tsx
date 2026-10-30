@@ -30,6 +30,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { LocalStatus } from "../../shared/aiReview.ts";
 import { rateDifficulty, type Difficulty } from "../../shared/difficulty.ts";
+import { withLook } from "../../shared/reviewerLook.ts";
 import type { PullRequest, Settings } from "../../shared/types.ts";
 import { DIFFICULTY_COLOR } from "../theme.ts";
 import { CheckoutSettings } from "./CheckoutSettings.tsx";
@@ -157,7 +158,12 @@ export function SettingsPage({
         </nav>
         <div className="er-pane er-page-content">
           {section === "reviewers" ? (
-            <ReviewersSettings store={reviewers} onDirtyChange={onDirtyChange} />
+            <ReviewersSettings
+              store={reviewers}
+              onDirtyChange={onDirtyChange}
+              looks={settings.reviewerLooks}
+              onLookChange={(id, look) => set({ reviewerLooks: withLook(settings.reviewerLooks, id, look) })}
+            />
           ) : (
             <div className="er-settings">
               {section === "appearance" ? (

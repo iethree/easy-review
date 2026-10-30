@@ -33,6 +33,7 @@ import { splitReview } from "../../shared/findings.ts";
 import { Findings } from "./Findings.tsx";
 import { ReviewScreenshots } from "./Markdown.tsx";
 import { ProseReview } from "./ProseReview.tsx";
+import { ReviewerIcon } from "./ReviewerIcon.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -332,14 +333,16 @@ function ResumeButton({ command }: { command: string }) {
 }
 
 /** A review's state, as the icon on its tab. */
-export function StatusIcon({ job }: { job: AiReviewSummary | undefined }) {
+/** A review's reviewer, by its icon and colour (see ReviewerIcon) — or how the review stands. */
+export function StatusIcon({ job }: { job: AiReviewSummary }) {
   // The tab's own text colour: an indigo loader vanished on the selected tab, which is indigo too.
-  if (job && isActive(job.status)) return <Loader size={14} color="currentColor" />;
-  const color =
-    job?.status === "done"
-      ? "var(--mantine-color-teal-6)"
-      : job?.status === "failed"
-        ? "var(--mantine-color-red-6)"
-        : undefined; // currentColor
-  return <IconRobot size={14} color={color} />;
+  if (isActive(job.status)) return <Loader size={14} color="currentColor" />;
+  return (
+    <ReviewerIcon
+      id={job.reviewerId}
+      // Failed is red, whoever's it is. Done is the reviewer's colour, or teal without one.
+      color={job.status === "failed" ? "var(--mantine-color-red-6)" : undefined}
+      fallback={job.status === "done" ? "var(--mantine-color-teal-6)" : undefined}
+    />
+  );
 }

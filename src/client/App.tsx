@@ -34,6 +34,7 @@ import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
+import { ReviewerLooksContext } from "./components/ReviewerIcon.tsx";
 import { ChatPane, type ChatRequest } from "./components/ChatPane.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
@@ -914,7 +915,7 @@ export function App() {
     />
   );
 
-  return (
+  const shell = (
     <div className="er-shell">
       <header className="er-topbar">
         <Group gap="lg" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -1106,6 +1107,9 @@ export function App() {
 
     </div>
   );
+
+  // Every reviewer's icon and colour, for wherever a reviewer is drawn.
+  return <ReviewerLooksContext value={settings.reviewerLooks}>{shell}</ReviewerLooksContext>;
 }
 
 /** A difficulty in the filter, with the dot that matches its rows' stripe. */
