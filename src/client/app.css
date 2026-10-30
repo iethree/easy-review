@@ -1541,6 +1541,15 @@ body {
   box-shadow: inset 2px 0 0 var(--mantine-color-teal-5);
 }
 
+/* A Claude review's verdict, as wide as the review under it. Its colour (the left edge) is set inline. */
+.er-ai-verdict {
+  max-width: 900px;
+  padding: 8px 12px;
+  border: 1px solid var(--er-row-border);
+  border-left-width: 3px;
+  border-radius: var(--mantine-radius-md);
+}
+
 /* One block per Markdown render: the spacing between them is the blocks'. */
 .er-prose .er-markdown > :first-child {
   margin-top: 0;

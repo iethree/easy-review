@@ -1,4 +1,4 @@
-import { Alert, Text } from "@mantine/core";
+import { Group, Text } from "@mantine/core";
 import { type Icon, IconCircleCheck, IconCircleX, IconMessageCircle } from "@tabler/icons-react";
 import type { AiVerdict, ReviewVerdict } from "../../shared/findings.ts";
 
@@ -9,19 +9,30 @@ export const VERDICT_LOOK: Record<AiVerdict, { label: string; color: string; Ico
   "request-changes": { label: "Request changes", color: "red", Icon: IconCircleX },
 };
 
-/** The verdict at the top of a review, with the reviewer's reason under it. */
+/**
+ * The verdict at the top of a review, with the reviewer's reason under it:
+ * framed like a finding, with the verdict's colour only on its edge and label.
+ */
 export function VerdictBlock({ verdict, reviewerName }: { verdict: ReviewVerdict; reviewerName: string }) {
   const look = VERDICT_LOOK[verdict.verdict];
+  const color = `var(--mantine-color-${look.color}-filled)`;
   return (
-    <Alert
-      className="er-verdict"
-      color={look.color}
-      variant="light"
-      icon={<look.Icon size={20} />}
-      title={look.label}
+    <section
+      className="er-ai-verdict"
+      style={{ borderLeftColor: color }}
       aria-label={`${reviewerName}'s verdict: ${look.label}`}
     >
-      {verdict.summary && <Text size="sm">{verdict.summary}</Text>}
-    </Alert>
+      <Group gap={6} wrap="nowrap">
+        <look.Icon size={16} color={color} />
+        <Text size="sm" fw={600} c={color}>
+          {look.label}
+        </Text>
+      </Group>
+      {verdict.summary && (
+        <Text size="sm" c="dimmed" mt={2}>
+          {verdict.summary}
+        </Text>
+      )}
+    </section>
   );
 }
