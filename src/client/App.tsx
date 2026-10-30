@@ -459,6 +459,7 @@ export function App() {
       remove: (id) => void ai.remove(id).catch(() => {}),
       findingAdded: () => setSide("review"),
       ask: (job, quote) => setSide({ jobId: job.id, quote: quote ?? null, n: ++asks.current }),
+      question: ai.question,
       pickingFor: pickFor?.id ?? null,
       reviewers: reviewers.reviewers,
       cancelPick: () => setPickFor(null),
@@ -467,7 +468,7 @@ export function App() {
         openSettings("reviewers");
       },
     }),
-    [ai.available, reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, openSettings],
+    [ai.available, reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, ai.question, pickFor, reviewers.reviewers, openSettings],
   );
 
   /** From a row's context menu: start it where it is, without opening it. */

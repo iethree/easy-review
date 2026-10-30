@@ -92,6 +92,8 @@ export interface AiControls {
   findingAdded: () => void;
   /** Open the chat about a review: about one part of it, if quoted. */
   ask: (job: AiReviewSummary, quote?: string) => void;
+  /** Send a question to a review while it runs; rejects with why it couldn't be. */
+  question: (id: string, text: string) => Promise<void>;
   /** The pull request whose + is open, if any. */
   pickingFor: string | null;
   reviewers: Reviewer[];
@@ -220,6 +222,7 @@ export function PreviewPane(props: Props) {
                     onRemove={ai.remove}
                     onFindingAdded={ai.findingAdded}
                     onAsk={(quote) => ai.ask(review, quote)}
+                    onQuestion={(text) => ai.question(review.id, text)}
                   />
                 ) : tab === "description" ? (
                   <PrDescription pr={deferred} viewer={props.viewer} />

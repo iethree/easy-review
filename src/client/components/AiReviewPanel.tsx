@@ -33,6 +33,7 @@ import { splitReview } from "../../shared/findings.ts";
 import { Findings } from "./Findings.tsx";
 import { ReviewScreenshots } from "./Markdown.tsx";
 import { ProseReview } from "./ProseReview.tsx";
+import { ReviewQuestions } from "./ReviewQuestions.tsx";
 import { ReviewerIcon } from "./ReviewerIcon.tsx";
 import { VerdictBlock } from "./Verdict.tsx";
 
@@ -47,6 +48,8 @@ interface Props {
   onFindingAdded?: () => void;
   /** Open the chat about this review: about one part of it, if quoted. */
   onAsk?: (quote?: string) => void;
+  /** Send a question to the review while it runs. */
+  onQuestion?: (text: string) => Promise<void>;
 }
 
 const STATUS = {
@@ -78,7 +81,7 @@ function useTick(active: boolean) {
   }, [active]);
 }
 
-export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded, onAsk }: Props) {
+export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded, onAsk, onQuestion }: Props) {
   const detail = useReviewDetail(job);
   // The prose, and the findings block the review ends with, apart.
   const review = useMemo(() => (detail?.review ? splitReview(detail.review) : null), [detail?.review]);
@@ -239,6 +242,8 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
             <Loader size="sm" />
           </Center>
         )}
+
+        {running && onQuestion && <ReviewQuestions questions={detail?.questions ?? []} onSend={onQuestion} />}
 
         {(running || (job.status !== "done" && activity.length > 0)) && (
           <Stack gap={2} className="er-activity">

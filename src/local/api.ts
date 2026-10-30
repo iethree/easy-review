@@ -190,6 +190,14 @@ export function createLocalApi(jobs: ReviewJobs) {
             const asked = await jobs.ask(id, question, quote);
             return json({ ...asked, resumeCommand: resumeCommand(asked) }, 202);
           }
+          if (parts[2] === "questions" && !parts[3] && method === "POST") {
+            const input = (await request.json().catch(() => null)) as { question?: unknown } | null;
+            const question = typeof input?.question === "string" ? input.question : "";
+            if (!question.trim() || question.length > MAX_CHAT_TEXT) {
+              return fail("Ask a question (up to 20,000 characters).", 400);
+            }
+            return json(jobs.question(id, question), 202);
+          }
           if (parts[2] === "chat" && parts[3] === "stop" && !parts[4] && method === "POST") {
             return json(jobs.stopChat(id));
           }

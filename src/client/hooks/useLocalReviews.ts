@@ -122,6 +122,15 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     [refresh],
   );
 
+  /** A question for a review under way, to address before it finishes. */
+  const question = useCallback(
+    async (id: string, text: string) => {
+      await call(`/api/local/reviews/${id}/questions`, { method: "POST", body: JSON.stringify({ question: text }) });
+      await refresh();
+    },
+    [refresh],
+  );
+
   const stopChat = useCallback(
     async (id: string) => {
       await call(`/api/local/reviews/${id}/chat/stop`, { method: "POST" });
@@ -143,6 +152,7 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     cancel,
     remove,
     ask,
+    question,
     stopChat,
   };
 }

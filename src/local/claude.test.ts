@@ -7,6 +7,8 @@ import {
   describeToolUse,
   EMPTY_STREAM,
   fencedClaudeScript,
+  QUESTION_HEADER,
+  questionMessage,
 } from "./claude.ts";
 import { childEnv } from "./env.ts";
 
@@ -222,4 +224,36 @@ test("a Claude a review starts itself is fenced like the review", () => {
   const script = fencedClaudeScript("/Users/o'neil/.local/bin/claude");
   expect(script).toStartWith("#!/bin/sh\n");
   expect(script).toContain(`exec '/Users/o'\\''neil/.local/bin/claude' --setting-sources user --strict-mcp-config "$@"`);
+});
+
+test("a review takes its messages on stdin, so questions can follow its prompt", () => {
+  const args = buildArgs(null, { model: "", effort: "", readOnly: true });
+  expect(args[0]).toBe("-p");
+  expect(args[args.indexOf("--input-format") + 1]).toBe("stream-json");
+  expect(args).toContain("--replay-user-messages");
+  // Still fenced in.
+  expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
+  expect(buildArgs("why?", { model: "", effort: "", readOnly: true }, "s")).not.toContain("--input-format");
+  const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
+  expect(system).toContain(QUESTION_HEADER);
+  expect(system).toContain("Your questions");
+});
+
+test("questions asked before it starts go in the prompt, after the instructions, as they would have arrived", () => {
+  const prompt = buildPrompt({ owner: "o", name: "n", number: 1, title: "t" }, "Look closely.", [" Will this slow down CI? "]);
+  expect(prompt.indexOf("Look closely.")).toBeLessThan(prompt.indexOf(QUESTION_HEADER));
+  expect(prompt).toContain(questionMessage("Will this slow down CI?"));
+  expect(questionMessage(" x ")).toStartWith(`${QUESTION_HEADER}\n\nx\n\n`);
+  // It may land after the review is written: then the whole review comes again.
+  expect(questionMessage("x")).toContain("write it again in full");
+  expect(buildPrompt({ owner: "o", name: "n", number: 1, title: "t" }, "Look closely.")).not.toContain(QUESTION_HEADER);
+});
+
+test("each message echoed back counts as delivered; a tool result doesn't", () => {
+  const state = [
+    { type: "user", isReplay: true, message: { role: "user", content: "Review it." } },
+    { type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "ok" }] } },
+    { type: "user", isReplay: true, message: { role: "user", content: "And CI?" } },
+  ].reduce((s, e) => applyEvent(s, e, CWD), EMPTY_STREAM);
+  expect(state.delivered).toBe(2);
 });

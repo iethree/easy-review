@@ -87,7 +87,8 @@ export interface AiReviewSummary {
   costUsd: number | null;
   turns: number | null;
   /** What Claude is doing to answer a question about the review; null when it isn't. */
-  chatPhase: string | null;  /** What the finished review would do with the pull request; null when it doesn't say. */
+  chatPhase: string | null;
+  /** What the finished review would do with the pull request; null when it doesn't say. */
   verdict: AiVerdict | null;
 }
 
@@ -97,6 +98,14 @@ export interface AiReviewActivity {
 }
 
 export type CloneSource = "configured" | "detected" | "managed";
+
+/** A question or instruction sent to a review while it runs, for the review to address. */
+export interface AiQuestion {
+  text: string;
+  at: string;
+  /** Claude has it: it was in the prompt, or reached the session mid-run. */
+  delivered: boolean;
+}
 
 /** A question about a finished review, or Claude's answer, in the session that wrote it. */
 export interface AiChatMessage {
@@ -130,6 +139,8 @@ export interface AiReviewJob extends AiReviewSummary {
   stderrTail: string | null;
   /** Follow-up questions and their answers, oldest first. */
   chat?: AiChatMessage[];
+  /** Questions sent while it ran, for it to address in the review; oldest first. */
+  questions?: AiQuestion[];
 }
 
 export interface LocalStatus {

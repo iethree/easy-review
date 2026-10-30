@@ -20,6 +20,7 @@ import {
   isBusy,
   prKey,
   type AiChatMessage,
+  type AiQuestion,
   type AiReviewConfig,
   type AiReviewJob,
   type AiReviewSummary,
@@ -30,7 +31,15 @@ import {
 import { GitHubClient } from "../server/github.ts";
 import { verdictOf } from "../shared/findings.ts";
 import { diskUsage, isStale, scanCheckouts } from "./checkouts.ts";
-import { buildArgs, buildPrompt, buildQuestion, runClaude, type StreamState } from "./claude.ts";
+import {
+  buildArgs,
+  buildPrompt,
+  buildQuestion,
+  questionMessage,
+  runClaude,
+  type ClaudeProcess,
+  type StreamState,
+} from "./claude.ts";
 import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
 import { prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
 import { localPaths } from "./paths.ts";
@@ -84,6 +93,8 @@ export class ReviewJobs {
   private jobs = new Map<string, AiReviewJob>();
   /** The git or claude process each running job is waiting on. */
   private procs = new Map<string, Killable>();
+  /** Sends a question to each review Claude is running. */
+  private inputs = new Map<string, ClaudeProcess["send"]>();
   private running = new Set<string>();
   private cancelled = new Set<string>();
   /** The claude process answering each job's question, and those stopped. */
@@ -320,6 +331,28 @@ export class ReviewJobs {
     return job;
   }
 
+  /* ---------------------------------------------------------------------- */
+  /* Questions while it runs                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * A question or instruction for a review under way, which it addresses
+   * before it finishes. Before Claude has started, it goes in the prompt;
+   * after, straight into the session.
+   */
+  question(id: string, text: string): AiReviewJob {
+    const job = this.jobs.get(id);
+    if (!job) throw new ChatError("No such review");
+    if (!isActive(job.status)) throw new ChatError("The review has finished. Ask about it in its chat instead.");
+    const send = this.inputs.get(id);
+    if (send && !send(questionMessage(text))) {
+      throw new ChatError("The review is finishing, so it can't take a question now. Ask in its chat once it's done.");
+    }
+    const asked: AiQuestion = { text: text.trim(), at: new Date().toISOString(), delivered: false };
+    this.update(job, { questions: [...(job.questions ?? []), asked] });
+    return job;
+  }
+
   stopChat(id: string): AiReviewJob | undefined {
     const job = this.jobs.get(id);
     if (!job?.chatPhase) return job;
@@ -493,6 +526,7 @@ export class ReviewJobs {
       void this.run(job).finally(() => {
         this.running.delete(job.id);
         this.procs.delete(job.id);
+        this.inputs.delete(job.id);
         this.cancelled.delete(job.id);
         this.descriptions.delete(job.id);
         this.pump();
@@ -548,18 +582,33 @@ export class ReviewJobs {
       });
 
       let seen = 0;
+      // Questions asked before now go in the prompt; any asked after are sent
+      // as messages, in order, so the nth is message n + 1 (the prompt is the first).
+      const early = job.questions?.length ?? 0;
       const result = await runClaude({
         cwd: worktree.path,
+        args: buildArgs(null, config),
         // Legacy jobs, from before reviewers, re-run with the old setting.
-        args: buildArgs(buildPrompt(job, job.instructions || config.instructions), config),
+        prompt: buildPrompt(
+          job,
+          job.instructions || config.instructions,
+          (job.questions ?? []).map((q) => q.text),
+        ),
         timeoutMs: config.timeoutMinutes * 60_000,
-        onSpawn,
+        onSpawn: (proc) => {
+          onSpawn(proc);
+          // Asked while it was starting: too late for the prompt, too early to have been sent.
+          for (const q of job.questions?.slice(early) ?? []) proc.send(questionMessage(q.text));
+          this.inputs.set(job.id, proc.send);
+        },
         onState: (state: StreamState) => {
           const fresh = state.activity.slice(seen).map((text) => ({
             at: new Date().toISOString(),
             text,
           }));
           seen = state.activity.length;
+          const questions = job.questions ?? [];
+          const reached = state.delivered > 0 ? early + state.delivered - 1 : 0;
           this.update(
             job,
             {
@@ -567,6 +616,9 @@ export class ReviewJobs {
               model: state.model,
               activity: fresh.length ? [...job.activity, ...fresh].slice(-200) : job.activity,
               phase: fresh.at(-1)?.text ?? job.phase,
+              ...(questions.some((q, i) => i < reached && !q.delivered) && {
+                questions: questions.map((q, i) => (i < reached ? { ...q, delivered: true } : q)),
+              }),
             },
             { quiet: true },
           );

@@ -1550,6 +1550,11 @@ body {
   border-radius: var(--mantine-radius-md);
 }
 
+/* Questions sent to a review while it runs. */
+.er-review-questions {
+  max-width: 900px;
+}
+
 /* One block per Markdown render: the spacing between them is the blocks'. */
 .er-prose .er-markdown > :first-child {
   margin-top: 0;
