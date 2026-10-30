@@ -78,25 +78,38 @@ function clean(f: Finding): Finding {
   return finding;
 }
 
-const FENCE = new RegExp(`\`\`\`${FINDINGS_FENCE}[^\\n]*\\n([\\s\\S]*?)\\n?\`\`\``, "g");
+const OPENING = new RegExp(`\`\`\`${FINDINGS_FENCE}[^\\n]*\\n`, "g");
+const CLOSING = "```";
+
+/**
+ * The findings block the review ends with: where it starts and ends, and its
+ * JSON. A finding's body is Markdown and may hold a code block of its own, so
+ * the block ends not at the first ``` after it opens but at the first one that
+ * closes valid JSON.
+ */
+function findingsBlock(text: string): { start: number; end: number; parsed: unknown } | null {
+  const opening = [...text.matchAll(OPENING)].at(-1);
+  if (!opening || opening.index === undefined) return null;
+  const from = opening.index + opening[0].length;
+  for (let close = text.indexOf(CLOSING, from); close >= 0; close = text.indexOf(CLOSING, close + 1)) {
+    try {
+      return { start: opening.index, end: close + CLOSING.length, parsed: JSON.parse(text.slice(from, close)) };
+    } catch {
+      // Not the end yet: this ``` is inside a string.
+    }
+  }
+  return null;
+}
 
 /**
  * The review's prose, without the findings block, and the findings in it. A
  * review with no block (or one that isn't valid JSON) is all prose.
  */
 export function splitReview(text: string): { prose: string; findings: Finding[] } {
-  const blocks = [...text.matchAll(FENCE)];
-  const last = blocks.at(-1);
-  if (!last || last.index === undefined) return { prose: text, findings: [] };
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(last[1] ?? "");
-  } catch {
-    return { prose: text, findings: [] };
-  }
-  const findings = Array.isArray(parsed) ? parsed.filter(isFinding).map(clean) : [];
-  const prose = (text.slice(0, last.index) + text.slice(last.index + last[0].length)).trim();
+  const block = findingsBlock(text);
+  if (!block) return { prose: text, findings: [] };
+  const findings = Array.isArray(block.parsed) ? block.parsed.filter(isFinding).map(clean) : [];
+  const prose = (text.slice(0, block.start) + text.slice(block.end)).trim();
   return { prose, findings };
 }
 

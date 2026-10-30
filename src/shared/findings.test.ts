@@ -33,6 +33,16 @@ test("a review without the block, or with a broken one, is all prose", () => {
   expect(splitReview(broken)).toEqual({ prose: broken, findings: [] });
 });
 
+test("a finding whose body holds a code block of its own is still read", () => {
+  const items = [
+    { severity: "suggestion", title: "Every argument", body: "These slip through:\n\n```js\nel.classList.add(\"a\", b);\n```\n\nCheck them all." },
+    { severity: "nit", title: "Also", body: "And ``` inline." },
+  ];
+  const { prose, findings } = splitReview(review(JSON.stringify(items, null, 2)));
+  expect(prose).toBe("## Summary\n\nLooks mostly fine.");
+  expect(findings).toEqual(items as Finding[]);
+});
+
 test("malformed items are dropped, and a partial location is no location", () => {
   const { findings } = splitReview(
     review(
