@@ -1025,7 +1025,7 @@ export function App() {
             left={
               // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
               <div
-                className="er-pane"
+                className="er-pane er-pane-list"
                 data-focused={focusedPane === "list"}
                 onFocus={() => setFocusedPane("list")}
               >

@@ -203,7 +203,7 @@ export function PreviewPane(props: Props) {
             tabIndex={-1}
             data-stale={stale}
           >
-            <Box p="sm">
+            <Box px={24} py="md">
               <ErrorBoundary>
                 {review ? (
                   <AiReviewPanel
@@ -257,7 +257,7 @@ function Header({
   const canReview = !history || history.state === "OPEN";
 
   return (
-    <div className="er-pane-head">
+    <div className="er-pane-head er-preview-head">
       <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
         <Group gap={8} wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
           {narrow && (

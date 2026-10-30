@@ -137,10 +137,10 @@ const REVIEW_PANE_KEY = "easy-review.review-pane.v1";
 const MIN_REVIEW_PANE = 280;
 /**
  * What the pull request panes keep: the list (320) and the code (420) at their
- * minimums, the handle between them (12), the split's padding (32) and the
- * review pane's own right margin (16). The same sum is in app.css.
+ * minimums, and the hairline handles beside them (1 each). The same sum is in
+ * app.css.
  */
-const KEEP_FOR_SPLIT = 800;
+const KEEP_FOR_SPLIT = 742;
 
 /**
  * The divider on the review pane's left edge: drag it to make the pane wider
