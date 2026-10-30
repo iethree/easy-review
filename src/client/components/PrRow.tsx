@@ -1,13 +1,15 @@
-import { ActionIcon, Avatar, Badge, Group, Tooltip, VisuallyHidden } from "@mantine/core";
+import { ActionIcon, Avatar, Badge, Group, ThemeIcon, Tooltip, VisuallyHidden } from "@mantine/core";
 import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { memo } from "react";
 import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
 import { rateDifficulty } from "../../shared/difficulty.ts";
+import type { AiVerdict } from "../../shared/findings.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { DIFFICULTY_COLOR } from "../theme.ts";
 import { relativeTime } from "../time.ts";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
+import { VERDICT_LOOK } from "./Verdict.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -23,6 +25,8 @@ interface Props {
   // reviews change: the one standing for them all, and how many there are.
   aiJob?: AiReviewSummary;
   aiCount?: number;
+  /** The finished reviews' verdict on the current commit, the most severe of them. */
+  aiVerdict?: AiVerdict | null;
   /** In the Hidden tab: brings the PR back. */
   onUnhide?: (pr: PullRequest) => void;
 }
@@ -45,6 +49,7 @@ export const PrRow = memo(function PrRow({
   showRepo,
   aiJob,
   aiCount = 0,
+  aiVerdict = null,
   onUnhide,
 }: Props) {
   const rating = rateDifficulty(pr, settings);
@@ -130,7 +135,7 @@ export const PrRow = memo(function PrRow({
       </div>
 
       <Group gap={4} wrap="nowrap">
-        <ReviewCount job={aiJob} count={aiCount} headSha={pr.headSha} />
+        <ReviewCount job={aiJob} count={aiCount} headSha={pr.headSha} verdict={aiVerdict} />
         {/* No approve button here: approving is done from the preview, with the pull request in view. */}
         {onUnhide && (
           <Tooltip label="Unhide (⇧H)">
@@ -157,10 +162,39 @@ export const PrRow = memo(function PrRow({
  * How many Claude reviews the pull request has, coloured by how they stand.
  * Always takes its place, so rows line up whether or not they have any.
  */
-function ReviewCount({ job, count, headSha }: { job: AiReviewSummary | undefined; count: number; headSha: string }) {
+/**
+ * The row's Claude reviews: how many, coloured by how the latest is doing.
+ * Once they're done, of this commit, and say what they'd do, the verdict's
+ * icon in place of the count.
+ */
+function ReviewCount({
+  job,
+  count,
+  headSha,
+  verdict,
+}: {
+  job: AiReviewSummary | undefined;
+  count: number;
+  headSha: string;
+  verdict: AiVerdict | null;
+}) {
   if (!job || count === 0) return <span className="er-review-count" />;
   const running = isActive(job.status);
   const stale = job.status === "done" && headSha !== "" && job.headSha !== headSha;
+  const reviews = `${count} Claude review${count === 1 ? "" : "s"}`;
+  if (verdict && job.status === "done" && !stale) {
+    const look = VERDICT_LOOK[verdict];
+    const label = `${reviews} — ${look.label.toLowerCase()}`;
+    return (
+      <span className="er-review-count">
+        <Tooltip label={label} openDelay={250}>
+          <ThemeIcon size={18} radius="xl" variant="light" color={look.color} aria-label={label}>
+            <look.Icon size={14} />
+          </ThemeIcon>
+        </Tooltip>
+      </span>
+    );
+  }
   const [color, state] = running
     ? ["indigo", job.phase]
     : job.status === "failed"
@@ -170,7 +204,7 @@ function ReviewCount({ job, count, headSha }: { job: AiReviewSummary | undefined
         : job.status === "cancelled"
           ? ["gray", "cancelled"]
           : ["teal", "ready"];
-  const label = `${count} Claude review${count === 1 ? "" : "s"} — ${state}`;
+  const label = `${reviews} — ${state}`;
   return (
     <span className="er-review-count">
       <Tooltip label={label} openDelay={250}>

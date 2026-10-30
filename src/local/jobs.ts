@@ -28,6 +28,7 @@ import {
   type Reviewer,
 } from "../shared/aiReview.ts";
 import { GitHubClient } from "../server/github.ts";
+import { verdictOf } from "../shared/findings.ts";
 import { diskUsage, isStale, scanCheckouts } from "./checkouts.ts";
 import { buildArgs, buildPrompt, buildQuestion, runClaude, type StreamState } from "./claude.ts";
 import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
@@ -50,6 +51,8 @@ export function summarize(job: AiReviewJob): AiReviewSummary {
   return {
     id, reviewerId, reviewerName, owner, name, number, title, headSha, status, phase,
     createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns, chatPhase: chatPhase ?? null,
+    // Kept when the review is finished; reviews saved before verdicts have none.
+    verdict: job.verdict ?? null,
   };
 }
 
@@ -240,6 +243,7 @@ export class ReviewJobs {
       costUsd: null,
       turns: null,
       chatPhase: null,
+      verdict: null,
       review: null,
       activity: [],
       clonePath: null,
@@ -585,6 +589,7 @@ export class ReviewJobs {
           status: "done",
           phase: "Review ready",
           review: r.text,
+          verdict: verdictOf(r.text),
           costUsd: r.costUsd,
           turns: r.turns ?? job.turns,
           sessionId: result.state.sessionId ?? job.sessionId,

@@ -1,7 +1,7 @@
 import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
 import { IconAlertCircle, IconEyeOff, IconInbox } from "@tabler/icons-react";
 import { useState } from "react";
-import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
+import { prKey, verdictFor, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
 import { PrRow } from "./PrRow.tsx";
 import { QuickReviewMenu } from "./QuickReviewMenu.tsx";
@@ -156,6 +156,7 @@ export function QueueList({
             showRepo={showRepo}
             aiJob={ai?.byPr.get(prKey(pr))}
             aiCount={ai?.reviewsByPr.get(prKey(pr))?.length ?? 0}
+            aiVerdict={verdictFor(ai?.reviewsByPr.get(prKey(pr)) ?? [], pr.headSha)}
             onUnhide={variant === "hidden" ? onUnhide : undefined}
           />
         ))}

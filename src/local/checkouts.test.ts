@@ -84,6 +84,7 @@ function savedReview(over: Partial<AiReviewJob>): AiReviewJob {
     costUsd: null,
     turns: null,
     chatPhase: null,
+    verdict: null,
     review: "Looks good.",
     activity: [],
     clonePath: null,

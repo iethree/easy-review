@@ -3,6 +3,7 @@ import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import { isActive, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { ReviewerIcon } from "./ReviewerIcon.tsx";
+import { VERDICT_LOOK } from "./Verdict.tsx";
 
 interface Props {
   /** The pull request right-clicked, and where: null when closed. */
@@ -65,6 +66,11 @@ function StatusMark({ id, review, headSha }: { id: string; review: AiReviewSumma
   if (review?.status === "done") {
     // Yellow when it was of an older commit, as on the row's count.
     const stale = headSha !== "" && review.headSha !== headSha;
+    // Its verdict, once it gives one, of this commit.
+    if (review.verdict && !stale) {
+      const look = VERDICT_LOOK[review.verdict];
+      return <look.Icon size={14} color={`var(--mantine-color-${look.color}-6)`} aria-label={look.label} />;
+    }
     return <IconCheck size={14} color={`var(--mantine-color-${stale ? "yellow" : "teal"}-6)`} />;
   }
   if (review?.status === "failed") return <IconAlertTriangle size={14} color="var(--mantine-color-red-6)" />;

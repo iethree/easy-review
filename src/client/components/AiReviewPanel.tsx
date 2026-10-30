@@ -34,6 +34,7 @@ import { Findings } from "./Findings.tsx";
 import { ReviewScreenshots } from "./Markdown.tsx";
 import { ProseReview } from "./ProseReview.tsx";
 import { ReviewerIcon } from "./ReviewerIcon.tsx";
+import { VerdictBlock } from "./Verdict.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -214,6 +215,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
 
         {job.status === "done" && review && (
           <>
+            {review.verdict && <VerdictBlock verdict={review.verdict} reviewerName={job.reviewerName} />}
             <ProseReview
               pr={pr}
               review={{ id: job.id, headSha: job.headSha }}

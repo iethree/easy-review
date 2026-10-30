@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AiReviewSummary } from "../../shared/aiReview.ts";
+import { verdictFor, type AiReviewSummary } from "../../shared/aiReview.ts";
 import { groupByPr } from "./useLocalReviews.ts";
 
 let n = 0;
@@ -24,6 +24,7 @@ function job(over: Partial<AiReviewSummary>): AiReviewSummary {
     costUsd: null,
     turns: null,
     chatPhase: null,
+    verdict: null,
     ...over,
   };
 }
@@ -53,4 +54,17 @@ test("a cancelled review doesn't hide a finished one", () => {
   const cancelled = job({ reviewerId: "b", reviewerName: "B", status: "cancelled" });
   expect(groupByPr([done, cancelled]).byPr.get("acme/app#7")?.id).toBe(done.id);
   expect(groupByPr([cancelled]).byPr.get("acme/app#7")?.id).toBe(cancelled.id);
+});
+
+test("a pull request's verdict is its finished reviews' of the current commit, the most severe", () => {
+  const reviews = [
+    job({ reviewerId: "a", verdict: "approve" }),
+    job({ reviewerId: "b", verdict: "comment" }),
+    job({ reviewerId: "c", verdict: "request-changes", headSha: "old" }),
+    job({ reviewerId: "d", verdict: "request-changes", status: "failed" }),
+  ];
+  expect(verdictFor(reviews, "abc")).toBe("comment");
+  expect(verdictFor(reviews, "")).toBe("request-changes");
+  expect(verdictFor(reviews.slice(0, 1), "new")).toBeNull();
+  expect(verdictFor([], "abc")).toBeNull();
 });

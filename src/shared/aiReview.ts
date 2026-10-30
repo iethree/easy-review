@@ -1,5 +1,7 @@
 /** Types for local Claude Code reviews, shared by the local server and the client. */
 
+import { overallVerdict, type AiVerdict } from "./findings.ts";
+
 export type AiReviewStatus =
   | "queued"
   | "preparing"
@@ -85,7 +87,8 @@ export interface AiReviewSummary {
   costUsd: number | null;
   turns: number | null;
   /** What Claude is doing to answer a question about the review; null when it isn't. */
-  chatPhase: string | null;
+  chatPhase: string | null;  /** What the finished review would do with the pull request; null when it doesn't say. */
+  verdict: AiVerdict | null;
 }
 
 export interface AiReviewActivity {
@@ -207,6 +210,17 @@ export const DEFAULT_AI_CONFIG: AiReviewConfig = {
 
 export function prKey(pr: { owner: string; name: string; number: number }): string {
   return `${pr.owner}/${pr.name}#${pr.number}`.toLowerCase();
+}
+
+/**
+ * What a pull request's reviews, the latest by each reviewer, would do with it
+ * now: the finished ones of its current commit, the most severe of them. An
+ * empty headSha is a pull request whose commit isn't known; every review counts.
+ */
+export function verdictFor(reviews: readonly AiReviewSummary[], headSha: string): AiVerdict | null {
+  return overallVerdict(
+    reviews.filter((j) => j.status === "done" && (headSha === "" || j.headSha === headSha)).map((j) => j.verdict),
+  );
 }
 
 /**

@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { commentBody, placeFinding, splitReview, summaryItem, type Finding } from "./findings.ts";
+import {
+  commentBody,
+  overallVerdict,
+  placeFinding,
+  splitReview,
+  summaryItem,
+  verdictOf,
+  type Finding,
+} from "./findings.ts";
 import { parseDiff } from "./diff.ts";
 
 const review = (json: string) => `## Summary
@@ -27,10 +35,45 @@ test("the findings block comes out of the prose, and its findings are read", () 
   ]);
 });
 
+test("the block's verdict and summary are read beside its findings", () => {
+  const { prose, findings, verdict } = splitReview(
+    review(
+      JSON.stringify({
+        verdict: "request-changes",
+        summary: " A null user crashes the login page. ",
+        findings: [{ severity: "blocking", title: "Null check", body: "`user` can be null." }],
+      }),
+    ),
+  );
+  expect(prose).toBe("## Summary\n\nLooks mostly fine.");
+  expect(verdict).toEqual({ verdict: "request-changes", summary: "A null user crashes the login page." });
+  expect(findings).toEqual([{ severity: "blocking", title: "Null check", body: "`user` can be null." }]);
+});
+
+test("a verdict written loosely is still read; one that isn't a verdict is none", () => {
+  const verdict = (v: unknown) => splitReview(review(JSON.stringify({ verdict: v, findings: [] }))).verdict?.verdict ?? null;
+  expect(verdict("Request_Changes")).toBe("request-changes");
+  expect(verdict("request changes")).toBe("request-changes");
+  expect(verdict("APPROVE")).toBe("approve");
+  expect(verdict("lgtm")).toBeNull();
+  expect(verdict(undefined)).toBeNull();
+  // Before verdicts: the findings alone, as an array.
+  expect(splitReview(review("[]")).verdict).toBeNull();
+  expect(verdictOf(review(JSON.stringify({ verdict: "comment", findings: [] })))).toBe("comment");
+  expect(verdictOf(null)).toBeNull();
+});
+
+test("several reviewers' verdicts come to the most severe", () => {
+  expect(overallVerdict(["approve", "comment", null])).toBe("comment");
+  expect(overallVerdict(["approve", "request-changes", "comment"])).toBe("request-changes");
+  expect(overallVerdict(["approve"])).toBe("approve");
+  expect(overallVerdict([null, undefined])).toBeNull();
+});
+
 test("a review without the block, or with a broken one, is all prose", () => {
-  expect(splitReview("Just prose.")).toEqual({ prose: "Just prose.", findings: [] });
+  expect(splitReview("Just prose.")).toEqual({ prose: "Just prose.", findings: [], verdict: null });
   const broken = review("[{ not json");
-  expect(splitReview(broken)).toEqual({ prose: broken, findings: [] });
+  expect(splitReview(broken)).toEqual({ prose: broken, findings: [], verdict: null });
 });
 
 test("a finding whose body holds a code block of its own is still read", () => {
