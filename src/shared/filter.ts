@@ -2,32 +2,26 @@
  * Query parsing for the filter box.
  *
  * Free text matches the title, repo, author or number. Structured tokens narrow
- * further: `author:kim`, `repo:api`, `is:easy`, `is:draft`, `is:failing`,
+ * further: `author:kim`, `repo:api`, `is:draft`, `is:failing`,
  * `is:ai-reviewed` (a Claude review of it has finished).
  * Every term must match, and unknown `is:` values fall back to free text so a
  * stray colon never silently hides the whole queue.
  */
 
-import type { Difficulty } from "./difficulty.ts";
-
 export interface ParsedQuery {
   words: string[];
   authors: string[];
   repos: string[];
-  levels: Difficulty[];
   draft: boolean | null;
   failing: boolean;
   approvedByMe: boolean;
   aiReviewed: boolean;
 }
 
-const LEVELS: Difficulty[] = ["easy", "medium", "hard"];
-
 export const EMPTY_QUERY: ParsedQuery = {
   words: [],
   authors: [],
   repos: [],
-  levels: [],
   draft: null,
   failing: false,
   approvedByMe: false,
@@ -61,7 +55,7 @@ export function splitTerms(input: string): string[] {
 }
 
 export function parseQuery(input: string): ParsedQuery {
-  const result: ParsedQuery = { ...EMPTY_QUERY, words: [], authors: [], repos: [], levels: [] };
+  const result: ParsedQuery = { ...EMPTY_QUERY, words: [], authors: [], repos: [] };
 
   for (const token of splitTerms(input)) {
     const lower = token.toLowerCase();
@@ -80,10 +74,6 @@ export function parseQuery(input: string): ParsedQuery {
         continue;
       }
       if (key === "is") {
-        if ((LEVELS as string[]).includes(value)) {
-          result.levels.push(value as Difficulty);
-          continue;
-        }
         if (value === "draft") {
           result.draft = true;
           continue;
@@ -120,14 +110,12 @@ export interface MatchInput {
   number: number;
   isDraft: boolean;
   ciFailed: number;
-  level: Difficulty;
   reviewedByMe: boolean;
   /** A Claude review of it has finished. */
   aiReviewed: boolean;
 }
 
 export function matchesQuery(pr: MatchInput, q: ParsedQuery): boolean {
-  if (q.levels.length > 0 && !q.levels.includes(pr.level)) return false;
   if (q.draft !== null && pr.isDraft !== q.draft) return false;
   if (q.failing && pr.ciFailed === 0) return false;
   if (q.approvedByMe && !pr.reviewedByMe) return false;
@@ -163,7 +151,6 @@ export function isEmptyQuery(q: ParsedQuery): boolean {
     q.words.length === 0 &&
     q.authors.length === 0 &&
     q.repos.length === 0 &&
-    q.levels.length === 0 &&
     q.draft === null &&
     !q.failing &&
     !q.approvedByMe &&
@@ -174,8 +161,8 @@ export function isEmptyQuery(q: ParsedQuery): boolean {
 /* -------------------------------------------------------------------------- */
 /* Query editing                                                              */
 /*                                                                            */
-/* The filter box is the single source of truth: the difficulty control, the   */
-/* author picker and the removable chips all rewrite this one string, so the   */
+/* The filter box is the single source of truth: the toggles, the author       */
+/* picker and the removable chips all rewrite this one string, so the          */
 /* UI can never disagree with what is actually being filtered.                 */
 /* -------------------------------------------------------------------------- */
 
@@ -211,7 +198,7 @@ export function readToken(input: string, key: string): string | null {
 /**
  * Replaces every `key:` term with a single `key:value`, or removes them all
  * when `value` is null. `only` restricts which values count as this token —
- * needed for `is:`, which carries both difficulty and draft/failing states.
+ * needed for `is:`, which carries several independent states (draft, failing…).
  */
 export function upsertToken(
   input: string,
@@ -225,19 +212,6 @@ export function upsertToken(
   });
   if (value) kept.push(`${key}:${value}`);
   return joinTerms(kept);
-}
-
-export function readLevel(input: string): Difficulty | null {
-  for (const term of splitTerms(input)) {
-    if (keyOf(term) !== "is") continue;
-    const value = termValue(term);
-    if ((LEVELS as string[]).includes(value)) return value as Difficulty;
-  }
-  return null;
-}
-
-export function setLevel(input: string, level: Difficulty | null): string {
-  return upsertToken(input, "is", level, LEVELS);
 }
 
 export function readAiReviewed(input: string): boolean {
@@ -265,8 +239,6 @@ export function describeFilters(input: string): FilterChip[] {
       chips.push({ term, label: `by ${value}`, color: "grape" });
     } else if (key === "repo" || key === "in") {
       chips.push({ term, label: `in ${value}`, color: "blue" });
-    } else if (key === "is" && (LEVELS as string[]).includes(value)) {
-      chips.push({ term, label: value, color: DIFFICULTY_CHIP[value] ?? "gray" });
     } else if (key === "is" && AI_REVIEWED_VALUES.includes(value)) {
       chips.push({ term, label: "AI reviewed", color: "violet" });
     } else if (key === "is") {
@@ -277,9 +249,3 @@ export function describeFilters(input: string): FilterChip[] {
   }
   return chips;
 }
-
-const DIFFICULTY_CHIP: Record<string, string> = {
-  easy: "teal",
-  medium: "yellow",
-  hard: "red",
-};

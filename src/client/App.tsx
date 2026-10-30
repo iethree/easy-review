@@ -22,12 +22,11 @@ import {
   IconUser,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficulty.ts";
 import { prKey, type AiReviewSummary } from "../shared/aiReview.ts";
 import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { leadingEmoji } from "../shared/approval.ts";
-import { matchesQuery, parseQuery, readLevel, setLevel, upsertToken } from "../shared/filter.ts";
-import type { PullRequest, ReviewEvent, ReviewVerdict, Settings } from "../shared/types.ts";
+import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
+import type { PullRequest, ReviewEvent, ReviewVerdict } from "../shared/types.ts";
 import { EVENT_LABEL, submitReview } from "./api.ts";
 import { notifyDesktop, useDesktopCommands, useNotificationClicks } from "./desktop.ts";
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
@@ -53,17 +52,20 @@ import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
 import { resolveTab, reviewTab, tabOrder } from "./previewTabs.ts";
 import { isReviewed } from "./reviewMeta.ts";
-import { DIFFICULTY_COLOR } from "./theme.ts";
 
 type Tab = "queue" | "reviewed" | "hidden" | "mine";
 type VerdictFilter = ReviewVerdict | "all";
+
+/** Sort key that puts the quickest wins first. */
+function reviewCost(pr: PullRequest): number {
+  return pr.additions + pr.deletions + pr.changedFiles * 12;
+}
 
 /** The queue's filter and sort, for any list of open pull requests. */
 function filterAndSort(
   prs: PullRequest[],
   parsed: ReturnType<typeof parseQuery>,
   sort: SortKey,
-  settings: Settings,
   reviewed: Record<string, ReviewEvent>,
   aiReviewed: ReadonlySet<string>,
 ): PullRequest[] {
@@ -76,7 +78,6 @@ function filterAndSort(
         number: pr.number,
         isDraft: pr.isDraft,
         ciFailed: pr.ci.failed,
-        level: rateDifficulty(pr, settings).level,
         reviewedByMe: reviewed[pr.id] === "APPROVE",
         aiReviewed: aiReviewed.has(prKey(pr)),
       },
@@ -200,26 +201,13 @@ export function App() {
   );
 
   const visible = useMemo(
-    () => filterAndSort(prs, parsed, sort, settings, reviewed, aiReviewed),
-    [prs, parsed, sort, settings, reviewed, aiReviewed],
+    () => filterAndSort(prs, parsed, sort, reviewed, aiReviewed),
+    [prs, parsed, sort, reviewed, aiReviewed],
   );
   const visibleMine = useMemo(
-    () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, settings, reviewed, aiReviewed),
-    [mine.pullRequests, mineQuery, sort, settings, reviewed, aiReviewed],
+    () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, reviewed, aiReviewed),
+    [mine.pullRequests, mineQuery, sort, reviewed, aiReviewed],
   );
-  const mineCounts = useMemo(() => {
-    const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
-    for (const pr of mine.pullRequests) tally[rateDifficulty(pr, settings).level]++;
-    return tally;
-  }, [mine.pullRequests, settings]);
-
-
-  const counts = useMemo(() => {
-    const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
-    for (const pr of prs) tally[rateDifficulty(pr, settings).level]++;
-    return tally;
-  }, [prs, settings]);
-
   const visibleHistory = useMemo(() => {
     const parsedHistory = parseQuery(historyQuery);
     return history.pullRequests.filter((pr) => {
@@ -232,14 +220,13 @@ export function App() {
           number: pr.number,
           isDraft: pr.isDraft,
           ciFailed: pr.ci.failed,
-          level: rateDifficulty(pr, settings).level,
-          reviewedByMe: true,
+            reviewedByMe: true,
           aiReviewed: aiReviewed.has(prKey(pr)),
         },
         parsedHistory,
       );
     });
-  }, [history.pullRequests, historyQuery, verdict, settings, aiReviewed]);
+  }, [history.pullRequests, historyQuery, verdict, aiReviewed]);
 
   const verdictCounts = useMemo(() => {
     const tally = new Map<ReviewVerdict, number>();
@@ -797,17 +784,6 @@ export function App() {
 
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
 
-  const difficultySegments = (q: string, set: (next: string) => void, total: number, c: Record<Difficulty, number>) => ({
-    value: readLevel(q) ?? "all",
-    onChange: (v: string) => set(setLevel(q, v === "all" ? null : (v as Difficulty))),
-    data: [
-      { label: `All ${total}`, value: "all" },
-      { label: <LevelLabel level="easy" text={`Easy ${c.easy}`} />, value: "easy" },
-      { label: <LevelLabel level="medium" text={`Med ${c.medium}`} />, value: "medium" },
-      { label: <LevelLabel level="hard" text={`Hard ${c.hard}`} />, value: "hard" },
-    ],
-  });
-
   // Hidden pull requests come from the queue, so its tab refreshes that.
   const listRefresh = {
     onRefresh: refreshTab,
@@ -853,7 +829,6 @@ export function App() {
         aiFilter={ai.available}
         sort={sort}
         onSortChange={setSort}
-        segments={difficultySegments(mineQuery, setMineQuery, mine.pullRequests.length, mineCounts)}
       />
     ) : (
       <ListFilter
@@ -865,7 +840,6 @@ export function App() {
         aiFilter={ai.available}
         sort={sort}
         onSortChange={setSort}
-        segments={difficultySegments(query, setQuery, prs.length, counts)}
       />
     );
 
@@ -878,7 +852,6 @@ export function App() {
       loading={mine.loading}
       error={mine.error}
       fetchedAt={mine.data?.fetchedAt ?? null}
-      settings={settings}
       selectedId={selectedKey}
       reviewed={reviewed}
       onSelect={select}
@@ -896,7 +869,6 @@ export function App() {
       loading={loading}
       error={error}
       fetchedAt={data?.fetchedAt ?? null}
-      settings={settings}
       selectedId={selectedKey}
       reviewed={reviewed}
       onSelect={select}
@@ -1042,7 +1014,6 @@ export function App() {
           settings={settings}
           onChange={update}
           onReset={reset}
-          prs={prs}
           local={{ supported: ai.supported, status: ai.status }}
         />
       )}
@@ -1067,7 +1038,6 @@ export function App() {
             right={
               <PreviewPane
                 pr={selected}
-                settings={settings}
                 reviewed={selected ? reviewed[selected.id] : undefined}
                 onSubmit={handleSubmit}
                 changesOpen={changesOpen}
@@ -1122,14 +1092,4 @@ export function App() {
 
   // Every reviewer's icon and colour, for wherever a reviewer is drawn.
   return <ReviewerLooksContext value={settings.reviewerLooks}>{shell}</ReviewerLooksContext>;
-}
-
-/** A difficulty in the filter, with the dot that matches its rows' stripe. */
-function LevelLabel({ level, text }: { level: Difficulty; text: string }) {
-  return (
-    <>
-      <span className="er-level-dot" style={{ "--er-level": `var(--mantine-color-${DIFFICULTY_COLOR[level]}-5)` } as React.CSSProperties} />
-      {text}
-    </>
-  );
 }

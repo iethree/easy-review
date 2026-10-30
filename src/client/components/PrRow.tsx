@@ -1,11 +1,9 @@
-import { ActionIcon, Avatar, Badge, Group, ThemeIcon, Tooltip, VisuallyHidden } from "@mantine/core";
+import { ActionIcon, Avatar, Badge, Group, ThemeIcon, Tooltip } from "@mantine/core";
 import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { memo } from "react";
 import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
-import { rateDifficulty } from "../../shared/difficulty.ts";
 import type { AiVerdict } from "../../shared/findings.ts";
-import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
-import { DIFFICULTY_COLOR } from "../theme.ts";
+import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { relativeTime } from "../time.ts";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
@@ -13,7 +11,6 @@ import { VERDICT_LOOK } from "./Verdict.tsx";
 
 interface Props {
   pr: PullRequest;
-  settings: Settings;
   selected: boolean;
   reviewed: ReviewEvent | undefined;
   onSelect: (pr: PullRequest) => void;
@@ -31,8 +28,6 @@ interface Props {
   onUnhide?: (pr: PullRequest) => void;
 }
 
-const LEVEL_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard" } as const;
-
 const REVIEWED_LABEL: Record<ReviewEvent, string> = {
   APPROVE: "approved",
   REQUEST_CHANGES: "changes requested",
@@ -41,7 +36,6 @@ const REVIEWED_LABEL: Record<ReviewEvent, string> = {
 
 export const PrRow = memo(function PrRow({
   pr,
-  settings,
   selected,
   reviewed,
   onSelect,
@@ -52,9 +46,6 @@ export const PrRow = memo(function PrRow({
   aiVerdict = null,
   onUnhide,
 }: Props) {
-  const rating = rateDifficulty(pr, settings);
-  const accent = `var(--mantine-color-${DIFFICULTY_COLOR[rating.level]}-5)`;
-
   return (
     // biome-ignore lint/a11y: rows are chosen with the keyboard through the app's keymap (j/k), not focus
     <div
@@ -62,17 +53,13 @@ export const PrRow = memo(function PrRow({
       data-pr-id={pr.id}
       data-selected={selected}
       data-row-id={pr.id}
-      style={{ "--er-accent": accent } as React.CSSProperties}
       onClick={() => onSelect(pr)}
       role="option"
       aria-selected={selected}
       tabIndex={-1}
     >
-      {/* Difficulty is the stripe's colour alone; the tooltip and screen readers say it in words. */}
-      <Tooltip label={`${LEVEL_LABEL[rating.level]} review — ${rating.reason}`} position="right" openDelay={400} multiline w={240}>
-        <div className="er-item-accent" />
-      </Tooltip>
-      <VisuallyHidden>{LEVEL_LABEL[rating.level]} review</VisuallyHidden>
+      {/* Uncoloured here: it keeps these rows in line with the Reviewed tab's, where it is the verdict. */}
+      <div className="er-item-accent" />
 
       <div className="er-item-main">
         <div className="er-item-title">

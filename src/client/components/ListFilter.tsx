@@ -19,7 +19,7 @@ interface Props {
   /** Absent for lists that keep their own order (history). */
   sort?: SortKey;
   onSortChange?: (next: SortKey) => void;
-  /** A segmented control under the box: difficulty, or verdict. */
+  /** A segmented control under the box, such as the verdict. */
   segments?: { value: string; data: { label: ReactNode; value: string }[]; onChange: (value: string) => void };
   /** Shown in place of the box, for lists with nothing to search. */
   note?: ReactNode;
@@ -42,8 +42,8 @@ function RefreshButton({ refresh }: { refresh: Props["refresh"] }) {
 /**
  * The one search box, at the top of the list it searches. Free text matches
  * the title, repo, author and number; `author:`, `repo:` and `is:` narrow it
- * further, and each shows as a chip you can remove. The difficulty control and
- * an author's name on a row write into the same text, so what you see in the
+ * further, and each shows as a chip you can remove. The toggles and an
+ * author's name on a row write into the same text, so what you see in the
  * box is always the whole filter.
  */
 export function ListFilter({

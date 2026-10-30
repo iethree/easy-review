@@ -23,8 +23,7 @@ import {
 } from "@tabler/icons-react";
 import { useCallback, useDeferredValue, useMemo, type RefObject } from "react";
 import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
-import { rateDifficulty } from "../../shared/difficulty.ts";
-import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
+import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { useDiff } from "../hooks/diffStore.ts";
 import { useConversation } from "../hooks/useConversation.ts";
 import { useDrafts } from "../drafts.ts";
@@ -39,13 +38,11 @@ import type { DiffThreadItem } from "./DiffThread.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { FindBar } from "./FindBar.tsx";
-import { DifficultyBadge } from "./DifficultyBadge.tsx";
 import { PrDescription } from "./PrDescription.tsx";
 import { ReviewActions } from "./ReviewActions.tsx";
 
 interface Props {
   pr: PullRequest | null;
-  settings: Settings;
   /** Set once this pull request has been reviewed in this session. */
   reviewed: ReviewEvent | undefined;
   onSubmit: (pr: PullRequest, event: ReviewEvent, body?: string) => Promise<void>;
@@ -240,7 +237,6 @@ export function PreviewPane(props: Props) {
 
 function Header({
   pr,
-  settings,
   reviewed,
   onSubmit,
   changesOpen,
@@ -277,8 +273,8 @@ function Header({
               </ActionIcon>
             </Tooltip>
           )}
-          <Box w={78} style={{ flex: "none" }} mt={2}>
-            {verdict ? (
+          {verdict && (
+            <Box w={78} style={{ flex: "none" }} mt={2}>
               <Badge
                 color={verdict.color}
                 variant="light"
@@ -287,10 +283,8 @@ function Header({
               >
                 {verdict.label}
               </Badge>
-            ) : (
-              <DifficultyBadge rating={rateDifficulty(pr, settings)} />
-            )}
-          </Box>
+            </Box>
+          )}
           <Text fw={650} size="md" lh={1.3} lineClamp={2} style={{ minWidth: 0 }}>
             {pr.title}
           </Text>

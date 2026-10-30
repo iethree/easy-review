@@ -153,16 +153,7 @@ export interface DiffResponse {
 /* Settings                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export interface DifficultyTier {
-  maxFiles: number;
-  maxLines: number;
-}
-
 export interface Settings {
-  /** A PR is "easy" when it fits inside this tier. */
-  easy: DifficultyTier;
-  /** ...otherwise "medium" when it fits inside this one, else "hard". */
-  medium: DifficultyTier;
   /** Include PRs requested from teams you belong to, not just you directly. */
   includeTeamRequests: boolean;
   /** Hide draft pull requests from the queue. */
@@ -172,8 +163,6 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  easy: { maxFiles: 3, maxLines: 50 },
-  medium: { maxFiles: 10, maxLines: 300 },
   includeTeamRequests: true,
   hideDrafts: false,
   reviewerLooks: {},

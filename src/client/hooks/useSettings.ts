@@ -8,15 +8,12 @@ function load(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<Settings>;
-    // Merge tier-by-tier so a stored file from an older version still loads.
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      easy: { ...DEFAULT_SETTINGS.easy, ...parsed.easy },
-      medium: { ...DEFAULT_SETTINGS.medium, ...parsed.medium },
-      reviewerLooks: cleanLooks(parsed.reviewerLooks),
+    // Saved by an older version, it may hold settings since removed (the difficulty thresholds).
+    const { easy: _easy, medium: _medium, ...parsed } = JSON.parse(raw) as Partial<Settings> & {
+      easy?: unknown;
+      medium?: unknown;
     };
+    return { ...DEFAULT_SETTINGS, ...parsed, reviewerLooks: cleanLooks(parsed.reviewerLooks) };
   } catch {
     return DEFAULT_SETTINGS;
   }
