@@ -1,7 +1,7 @@
 import { ActionIcon, Badge, Group, Menu, SegmentedControl, Text, TextInput, Tooltip } from "@mantine/core";
-import { IconArrowsSort, IconCheck, IconRefresh, IconSearch, IconX } from "@tabler/icons-react";
+import { IconArrowsSort, IconCheck, IconRefresh, IconRobot, IconSearch, IconX } from "@tabler/icons-react";
 import { useMemo, type ReactNode, type RefObject } from "react";
-import { describeFilters, removeTerm } from "../../shared/filter.ts";
+import { AI_REVIEWED, describeFilters, readAiReviewed, removeTerm, setAiReviewed } from "../../shared/filter.ts";
 
 export type SortKey = "quickest" | "newest" | "oldest";
 
@@ -25,6 +25,8 @@ interface Props {
   note?: ReactNode;
   /** Fetch the list again (Shift+R), spinning while it loads. */
   refresh: { onRefresh: () => void; loading: boolean };
+  /** Offer the toggle for `is:ai-reviewed`: only where Claude reviews can run. */
+  aiFilter?: boolean;
 }
 
 function RefreshButton({ refresh }: { refresh: Props["refresh"] }) {
@@ -54,8 +56,10 @@ export function ListFilter({
   segments,
   note,
   refresh,
+  aiFilter,
 }: Props) {
   const chips = useMemo(() => describeFilters(query), [query]);
+  const aiOnly = useMemo(() => readAiReviewed(query), [query]);
 
   if (note) {
     return (
@@ -94,6 +98,20 @@ export function ListFilter({
           style={{ flex: 1, minWidth: 0 }}
           aria-label="Search the list"
         />
+        {aiFilter && (
+          <Tooltip label={aiOnly ? "Showing only AI-reviewed pull requests" : `Only AI-reviewed pull requests (${AI_REVIEWED})`}>
+            <ActionIcon
+              variant={aiOnly ? "light" : "subtle"}
+              color={aiOnly ? "violet" : "gray"}
+              size="md"
+              onClick={() => onQueryChange(setAiReviewed(query, !aiOnly))}
+              aria-label="Only AI-reviewed pull requests"
+              aria-pressed={aiOnly}
+            >
+              <IconRobot size={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         {sort && onSortChange && (
           <Menu position="bottom-end" shadow="md" width={200}>
             <Menu.Target>

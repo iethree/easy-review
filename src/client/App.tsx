@@ -65,6 +65,7 @@ function filterAndSort(
   sort: SortKey,
   settings: Settings,
   reviewed: Record<string, ReviewEvent>,
+  aiReviewed: ReadonlySet<string>,
 ): PullRequest[] {
   const filtered = prs.filter((pr) =>
     matchesQuery(
@@ -77,6 +78,7 @@ function filterAndSort(
         ciFailed: pr.ci.failed,
         level: rateDifficulty(pr, settings).level,
         reviewedByMe: reviewed[pr.id] === "APPROVE",
+        aiReviewed: aiReviewed.has(prKey(pr)),
       },
       parsed,
     ),
@@ -148,6 +150,39 @@ export function App() {
   historyRef.current = history;
 
   /* ---------------------------------------------------------------------- */
+  /* Local Claude reviews                                                    */
+  /* ---------------------------------------------------------------------- */
+
+  // Read from the notification's Open button, which outlives this render.
+  /** Shows a review's pull request on its Claude tab; false if that PR isn't loaded. */
+  const openRef = useRef<(job: AiReviewSummary) => boolean>(() => false);
+
+  const ai = useLocalReviews((job) => {
+    const ok = job.status === "done";
+    const title = ok
+      ? `${job.reviewerName} finished reviewing #${job.number}`
+      : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`;
+    // In the background, macOS says so too. Not for a review you cancelled.
+    if (job.status !== "cancelled") notifyDesktop({ id: job.id, title, body: job.title });
+    notifications.show({
+      color: ok ? "teal" : job.status === "failed" ? "red" : "gray",
+      title,
+      message: (
+        <Text
+          size="xs"
+          c="dimmed"
+          td="underline"
+          style={{ cursor: "pointer" }}
+          onClick={() => openRef.current(job)}
+        >
+          {job.title} — open
+        </Text>
+      ),
+      autoClose: ok ? 8000 : 10000,
+    });
+  });
+
+  /* ---------------------------------------------------------------------- */
   /* Lists                                                                  */
   /* ---------------------------------------------------------------------- */
 
@@ -158,14 +193,19 @@ export function App() {
     [allPrs, hidden],
   );
   const parsed = useMemo(() => parseQuery(query), [query]);
+  /** Pull requests a Claude review has finished for, by prKey: what `is:ai-reviewed` keeps. */
+  const aiReviewed = useMemo(
+    () => new Set(ai.jobs.filter((job) => job.status === "done").map(prKey)),
+    [ai.jobs],
+  );
 
   const visible = useMemo(
-    () => filterAndSort(prs, parsed, sort, settings, reviewed),
-    [prs, parsed, sort, settings, reviewed],
+    () => filterAndSort(prs, parsed, sort, settings, reviewed, aiReviewed),
+    [prs, parsed, sort, settings, reviewed, aiReviewed],
   );
   const visibleMine = useMemo(
-    () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, settings, reviewed),
-    [mine.pullRequests, mineQuery, sort, settings, reviewed],
+    () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, settings, reviewed, aiReviewed),
+    [mine.pullRequests, mineQuery, sort, settings, reviewed, aiReviewed],
   );
   const mineCounts = useMemo(() => {
     const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
@@ -194,11 +234,12 @@ export function App() {
           ciFailed: pr.ci.failed,
           level: rateDifficulty(pr, settings).level,
           reviewedByMe: true,
+          aiReviewed: aiReviewed.has(prKey(pr)),
         },
         parsedHistory,
       );
     });
-  }, [history.pullRequests, historyQuery, verdict, settings]);
+  }, [history.pullRequests, historyQuery, verdict, settings, aiReviewed]);
 
   const verdictCounts = useMemo(() => {
     const tally = new Map<ReviewVerdict, number>();
@@ -310,39 +351,6 @@ export function App() {
     },
     [hidden, list, selectedKey, setSelectedId, setHiddenFor],
   );
-
-  /* ---------------------------------------------------------------------- */
-  /* Local Claude reviews                                                    */
-  /* ---------------------------------------------------------------------- */
-
-  // Read from the notification's Open button, which outlives this render.
-  /** Shows a review's pull request on its Claude tab; false if that PR isn't loaded. */
-  const openRef = useRef<(job: AiReviewSummary) => boolean>(() => false);
-
-  const ai = useLocalReviews((job) => {
-    const ok = job.status === "done";
-    const title = ok
-      ? `${job.reviewerName} finished reviewing #${job.number}`
-      : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`;
-    // In the background, macOS says so too. Not for a review you cancelled.
-    if (job.status !== "cancelled") notifyDesktop({ id: job.id, title, body: job.title });
-    notifications.show({
-      color: ok ? "teal" : job.status === "failed" ? "red" : "gray",
-      title,
-      message: (
-        <Text
-          size="xs"
-          c="dimmed"
-          td="underline"
-          style={{ cursor: "pointer" }}
-          onClick={() => openRef.current(job)}
-        >
-          {job.title} — open
-        </Text>
-      ),
-      autoClose: ok ? 8000 : 10000,
-    });
-  });
 
   /** The review the chat is about — only while its pull request is the one on screen. */
   const chatJob =
@@ -822,6 +830,7 @@ export function App() {
         placeholder="Search your reviews"
         inputRef={searchRef}
         refresh={listRefresh}
+        aiFilter={ai.available}
         segments={{
           value: verdict,
           onChange: (v) => setVerdict(v as VerdictFilter),
@@ -840,6 +849,7 @@ export function App() {
         placeholder="Search your pull requests"
         inputRef={searchRef}
         refresh={listRefresh}
+        aiFilter={ai.available}
         sort={sort}
         onSortChange={setSort}
         segments={difficultySegments(mineQuery, setMineQuery, mine.pullRequests.length, mineCounts)}
@@ -851,6 +861,7 @@ export function App() {
         placeholder="Search title, repo, author, number…"
         inputRef={searchRef}
         refresh={listRefresh}
+        aiFilter={ai.available}
         sort={sort}
         onSortChange={setSort}
         segments={difficultySegments(query, setQuery, prs.length, counts)}

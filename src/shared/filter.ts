@@ -2,7 +2,8 @@
  * Query parsing for the filter box.
  *
  * Free text matches the title, repo, author or number. Structured tokens narrow
- * further: `author:kim`, `repo:api`, `is:easy`, `is:draft`, `is:failing`.
+ * further: `author:kim`, `repo:api`, `is:easy`, `is:draft`, `is:failing`,
+ * `is:ai-reviewed` (a Claude review of it has finished).
  * Every term must match, and unknown `is:` values fall back to free text so a
  * stray colon never silently hides the whole queue.
  */
@@ -17,6 +18,7 @@ export interface ParsedQuery {
   draft: boolean | null;
   failing: boolean;
   approvedByMe: boolean;
+  aiReviewed: boolean;
 }
 
 const LEVELS: Difficulty[] = ["easy", "medium", "hard"];
@@ -29,7 +31,12 @@ export const EMPTY_QUERY: ParsedQuery = {
   draft: null,
   failing: false,
   approvedByMe: false,
+  aiReviewed: false,
 };
+
+/** The term for pull requests a Claude review has finished; `is:ai` is short for it. */
+export const AI_REVIEWED = "is:ai-reviewed";
+const AI_REVIEWED_VALUES = ["ai-reviewed", "ai"];
 
 /** Splits on whitespace but keeps "quoted phrases" together. */
 export function splitTerms(input: string): string[] {
@@ -93,6 +100,10 @@ export function parseQuery(input: string): ParsedQuery {
           result.approvedByMe = true;
           continue;
         }
+        if (AI_REVIEWED_VALUES.includes(value)) {
+          result.aiReviewed = true;
+          continue;
+        }
       }
     }
 
@@ -111,6 +122,8 @@ export interface MatchInput {
   ciFailed: number;
   level: Difficulty;
   reviewedByMe: boolean;
+  /** A Claude review of it has finished. */
+  aiReviewed: boolean;
 }
 
 export function matchesQuery(pr: MatchInput, q: ParsedQuery): boolean {
@@ -118,6 +131,7 @@ export function matchesQuery(pr: MatchInput, q: ParsedQuery): boolean {
   if (q.draft !== null && pr.isDraft !== q.draft) return false;
   if (q.failing && pr.ciFailed === 0) return false;
   if (q.approvedByMe && !pr.reviewedByMe) return false;
+  if (q.aiReviewed && !pr.aiReviewed) return false;
 
   const author = pr.author.toLowerCase();
   if (q.authors.length > 0 && !q.authors.some((a) => author.includes(a))) return false;
@@ -152,7 +166,8 @@ export function isEmptyQuery(q: ParsedQuery): boolean {
     q.levels.length === 0 &&
     q.draft === null &&
     !q.failing &&
-    !q.approvedByMe
+    !q.approvedByMe &&
+    !q.aiReviewed
   );
 }
 
@@ -225,6 +240,15 @@ export function setLevel(input: string, level: Difficulty | null): string {
   return upsertToken(input, "is", level, LEVELS);
 }
 
+export function readAiReviewed(input: string): boolean {
+  return parseQuery(input).aiReviewed;
+}
+
+/** Adds `is:ai-reviewed`, or takes it (and `is:ai`) out. */
+export function setAiReviewed(input: string, on: boolean): string {
+  return upsertToken(input, "is", on ? "ai-reviewed" : null, AI_REVIEWED_VALUES);
+}
+
 /** Human-readable chips for everything currently narrowing the queue. */
 export interface FilterChip {
   term: string;
@@ -243,6 +267,8 @@ export function describeFilters(input: string): FilterChip[] {
       chips.push({ term, label: `in ${value}`, color: "blue" });
     } else if (key === "is" && (LEVELS as string[]).includes(value)) {
       chips.push({ term, label: value, color: DIFFICULTY_CHIP[value] ?? "gray" });
+    } else if (key === "is" && AI_REVIEWED_VALUES.includes(value)) {
+      chips.push({ term, label: "AI reviewed", color: "violet" });
     } else if (key === "is") {
       chips.push({ term, label: value, color: "gray" });
     } else {

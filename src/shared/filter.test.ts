@@ -1,5 +1,12 @@
 import { test, expect } from "bun:test";
-import { parseQuery, matchesQuery, isEmptyQuery, type MatchInput } from "./filter.ts";
+import {
+  parseQuery,
+  matchesQuery,
+  isEmptyQuery,
+  readAiReviewed,
+  setAiReviewed,
+  type MatchInput,
+} from "./filter.ts";
 
 const base: MatchInput = {
   title: "Fix flaky login redirect",
@@ -10,6 +17,7 @@ const base: MatchInput = {
   ciFailed: 0,
   level: "easy",
   reviewedByMe: false,
+  aiReviewed: false,
 };
 
 const match = (query: string, pr: Partial<MatchInput> = {}) =>
@@ -48,6 +56,23 @@ test("draft and failing tokens", () => {
   expect(match("is:ready")).toBe(true);
   expect(match("is:failing")).toBe(false);
   expect(match("is:failing", { ciFailed: 2 })).toBe(true);
+});
+
+test("is:ai-reviewed keeps pull requests a Claude review has finished; is:ai is short for it", () => {
+  expect(match("is:ai-reviewed")).toBe(false);
+  expect(match("is:ai-reviewed", { aiReviewed: true })).toBe(true);
+  expect(match("is:ai", { aiReviewed: true })).toBe(true);
+  expect(match("is:ai")).toBe(false);
+  expect(isEmptyQuery(parseQuery("is:ai-reviewed"))).toBe(false);
+  expect(describeFilters("is:ai")).toEqual([{ term: "is:ai", label: "AI reviewed", color: "violet" }]);
+});
+
+test("the AI-reviewed toggle adds the term, and takes either spelling out", () => {
+  expect(setAiReviewed("kim is:easy", true)).toBe("kim is:easy is:ai-reviewed");
+  expect(setAiReviewed("kim is:ai-reviewed", true)).toBe("kim is:ai-reviewed");
+  expect(setAiReviewed("is:ai kim is:easy", false)).toBe("kim is:easy");
+  expect(readAiReviewed("kim is:ai")).toBe(true);
+  expect(readAiReviewed("kim is:easy")).toBe(false);
 });
 
 test("tokens combine with free text", () => {
