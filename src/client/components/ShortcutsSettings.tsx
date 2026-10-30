@@ -1,4 +1,4 @@
-import { Divider, Group, Kbd, Modal, Stack, Text, Title } from "@mantine/core";
+import { Box, Divider, Group, Kbd, Stack, Text, Title } from "@mantine/core";
 import { KEYMAP } from "../keymap.ts";
 
 /** Keys that live inside a box rather than in the keymap. */
@@ -33,15 +33,25 @@ function Rows({ rows }: { rows: { display: string[]; description: string }[] }) 
   );
 }
 
-/** Drawn from the same table the key handler uses, so it can't go stale. */
-export function ShortcutsModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
+/**
+ * Settings' list of keyboard shortcuts — `?` from anywhere. Drawn from the
+ * same table the key handler uses, so it can't go stale.
+ */
+export function ShortcutsSettings() {
   return (
-    <Modal opened={opened} onClose={onClose} title="Keyboard shortcuts" size="md" radius="md">
-      <Rows rows={KEYMAP} />
-      <Title order={3} mt="md" mb={4}>
-        Inside the boxes
-      </Title>
-      <Rows rows={IN_BOXES} />
-    </Modal>
+    <Stack gap="lg">
+      <Box>
+        <Title order={3} mb={4}>
+          Keyboard shortcuts
+        </Title>
+        <Rows rows={KEYMAP} />
+      </Box>
+      <Box>
+        <Title order={3} mb={4}>
+          Inside the boxes
+        </Title>
+        <Rows rows={IN_BOXES} />
+      </Box>
+    </Stack>
   );
 }

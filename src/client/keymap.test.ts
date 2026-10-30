@@ -47,7 +47,7 @@ test("no key is bound twice", () => {
   expect(new Set(all).size).toBe(all.length);
 });
 
-test("every binding can be shown in the shortcuts dialog", () => {
+test("every binding can be shown in the list of shortcuts", () => {
   for (const binding of KEYMAP) {
     expect(binding.display.length).toBeGreaterThan(0);
     expect(binding.description.length).toBeGreaterThan(0);

@@ -21,6 +21,7 @@ import {
   IconAlertCircle,
   IconArrowLeft,
   IconFolder,
+  IconKeyboard,
   IconListCheck,
   IconPalette,
   IconRobot,
@@ -34,6 +35,7 @@ import { DIFFICULTY_COLOR } from "../theme.ts";
 import { CheckoutSettings } from "./CheckoutSettings.tsx";
 import { ClaudeSettings } from "./ClaudeSettings.tsx";
 import { DISCARD, ReviewersSettings } from "./ReviewersSettings.tsx";
+import { ShortcutsSettings } from "./ShortcutsSettings.tsx";
 import type { useReviewers } from "../hooks/useReviewers.ts";
 
 interface Props {
@@ -50,7 +52,7 @@ interface Props {
   onSectionChange: (section: SettingsSection) => void;
 }
 
-export type SettingsSection = "queue" | "appearance" | "claude" | "reviewers" | "checkouts";
+export type SettingsSection = "queue" | "appearance" | "shortcuts" | "claude" | "reviewers" | "checkouts";
 
 /**
  * Settings: a page of its own, in place of the pull requests. Changes apply
@@ -69,7 +71,8 @@ export function SettingsPage({
   onSectionChange,
 }: Props) {
   // The Claude sections exist only where reviews can run.
-  const section = local.supported || wanted === "queue" || wanted === "appearance" ? wanted : "queue";
+  const section =
+    local.supported || wanted === "queue" || wanted === "appearance" || wanted === "shortcuts" ? wanted : "queue";
 
   // A reviewer being edited isn't left behind unsaved without asking.
   const dirty = useRef(false);
@@ -117,6 +120,7 @@ export function SettingsPage({
   const sections: { value: SettingsSection; label: string; icon: React.ReactNode }[] = [
     { value: "queue", label: "Queue", icon: <IconListCheck size={16} /> },
     { value: "appearance", label: "Appearance", icon: <IconPalette size={16} /> },
+    { value: "shortcuts", label: "Keyboard shortcuts", icon: <IconKeyboard size={16} /> },
     ...(local.supported
       ? [
           { value: "claude" as const, label: "Claude review", icon: <IconRobot size={16} /> },
@@ -158,6 +162,8 @@ export function SettingsPage({
             <div className="er-settings">
               {section === "appearance" ? (
                 <AppearanceSettings />
+              ) : section === "shortcuts" ? (
+                <ShortcutsSettings />
               ) : section === "checkouts" && local.supported ? (
                 // Mounted only while it's showing, so opening Settings doesn't run `du`.
                 <CheckoutSettings active />

@@ -16,7 +16,6 @@ import {
   IconHistory,
   IconInbox,
   IconClipboardText,
-  IconKeyboard,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconSettings,
@@ -38,7 +37,6 @@ import { ChatPane, type ChatRequest } from "./components/ChatPane.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
-import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
 import { ReviewPaneHandle, SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestDiff } from "./hooks/diffStore.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
@@ -122,7 +120,6 @@ export function App() {
   const [approveFor, setApproveFor] = useState<string | null>(null);
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** Settings, as a page in place of the lists; and which of its sections. */
   const [page, setPage] = useState<"settings" | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("queue");
@@ -502,7 +499,7 @@ export function App() {
     const active = document.activeElement;
     const lost = !active || active === document.body;
     if (el && (lost || (other?.contains(active) ?? false))) el.focus({ preventScroll: true });
-  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, page, shortcutsOpen]);
+  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, page]);
 
   // Keep the selected row visible when moving by keyboard — and after the
   // list is swapped (tab) or shown again (expanded).
@@ -636,10 +633,6 @@ export function App() {
           target?.blur();
           return;
         }
-        if (shortcutsOpen) {
-          setShortcutsOpen(false);
-          return;
-        }
         if (changesOpen || approveOpen) {
           setChangesFor(null);
           setApproveFor(null);
@@ -651,7 +644,7 @@ export function App() {
 
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       // While a box or dialog is up, let it own the keyboard.
-      if (shortcutsOpen || changesOpen || approveOpen) return;
+      if (changesOpen || approveOpen) return;
 
       const action = actionForKey(e.key, e.repeat);
       if (!action || (action.type === "approve" && onControl)) return;
@@ -730,7 +723,7 @@ export function App() {
           if (selected && (tab === "queue" || tab === "hidden")) toggleHidden(selected);
           return;
         case "help":
-          setShortcutsOpen(true);
+          openSettings("shortcuts");
           return;
       }
     }
@@ -745,7 +738,6 @@ export function App() {
     canReviewSelected,
     narrow,
     expanded,
-    shortcutsOpen,
     changesOpen,
     approveOpen,
     page,
@@ -759,20 +751,20 @@ export function App() {
     startAiReview,
     askApprove,
     toggleHidden,
+    openSettings,
   ]);
 
   // The desktop app's menus: the same actions as ",", Shift+R and "?".
   useDesktopCommands((name) => {
     switch (name) {
       case "settings":
-        setShortcutsOpen(false);
         setPage("settings");
         return;
       case "refresh":
         refreshTab();
         return;
       case "help":
-        setShortcutsOpen(true);
+        openSettings("shortcuts");
         return;
       case "reviewers":
         if (ai.supported) openSettings("reviewers");
@@ -1004,16 +996,6 @@ export function App() {
               <IconClipboardText size={17} />
             </ActionIcon>
           </Tooltip>
-          <Tooltip label="Shortcuts (?)">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => setShortcutsOpen(true)}
-              aria-label="Keyboard shortcuts"
-            >
-              <IconKeyboard size={17} />
-            </ActionIcon>
-          </Tooltip>
           <Tooltip label="Settings (,)">
             <ActionIcon
               variant={page === "settings" ? "light" : "subtle"}
@@ -1111,7 +1093,6 @@ export function App() {
         </div>
       )}
 
-      <ShortcutsModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }
