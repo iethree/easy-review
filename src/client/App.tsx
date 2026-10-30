@@ -24,6 +24,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficulty.ts";
 import { prKey, type AiReviewSummary } from "../shared/aiReview.ts";
+import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { leadingEmoji } from "../shared/approval.ts";
 import { matchesQuery, parseQuery, readLevel, setLevel, upsertToken } from "../shared/filter.ts";
 import type { PullRequest, ReviewEvent, ReviewVerdict, Settings } from "../shared/types.ts";
@@ -374,6 +375,16 @@ export function App() {
 
   const reviewers = useReviewers(ai.supported);
   const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
+  // Each pull request's reviews — its tabs, the badges on its row — in your
+  // order of reviewers, as set in Settings.
+  const reviewsByPr = useMemo(() => {
+    const order = reviewers.reviewers.map((r) => r.id);
+    const sorted = new Map<string, AiReviewSummary[]>();
+    for (const [key, list] of ai.reviewsByPr) {
+      sorted.set(key, inReviewerOrder(list, order, (j) => ({ id: j.reviewerId, name: j.reviewerName })));
+    }
+    return sorted;
+  }, [ai.reviewsByPr, reviewers.reviewers]);
 
   const runAiReview = useCallback(
     (pr: PullRequest, reviewerId: string) => {
@@ -432,7 +443,7 @@ export function App() {
   const aiControls = useMemo<AiControls>(
     () => ({
       available: ai.available,
-      reviewsByPr: ai.reviewsByPr,
+      reviewsByPr,
       reviewerIds,
       start: startAiReview,
       cancel: (id) => void ai.cancel(id).catch(() => {}),
@@ -447,7 +458,7 @@ export function App() {
         openSettings("reviewers");
       },
     }),
-    [ai.available, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, openSettings],
+    [ai.available, reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, openSettings],
   );
 
   /** From a row's context menu: start it where it is, without opening it. */
@@ -468,9 +479,9 @@ export function App() {
   const queueAi = useMemo(
     () =>
       ai.available
-        ? { byPr: ai.byPr, reviewsByPr: ai.reviewsByPr, reviewers: reviewers.reviewers, start: quickStart }
+        ? { byPr: ai.byPr, reviewsByPr, reviewers: reviewers.reviewers, start: quickStart }
         : undefined,
-    [ai.available, ai.byPr, ai.reviewsByPr, reviewers.reviewers, quickStart],
+    [ai.available, ai.byPr, reviewsByPr, reviewers.reviewers, quickStart],
   );
 
   // Fetch the open pull request's diff, and only that one. Again after a
@@ -665,7 +676,7 @@ export function App() {
           previewScrollRef.current?.scrollBy({ top: action.direction * 80 });
           return;
         case "cycleTab": {
-          const reviews = (ai.available && selected && ai.reviewsByPr.get(prKey(selected))) || [];
+          const reviews = (ai.available && selected && reviewsByPr.get(prKey(selected))) || [];
           const tabs = tabOrder(reviews);
           setPreviewTab((t) => {
             const i = Math.max(tabs.indexOf(resolveTab(t, reviews).tab), 0);
@@ -747,7 +758,7 @@ export function App() {
     toggleColorScheme,
     ai.available,
     ai.byPr,
-    ai.reviewsByPr,
+    reviewsByPr,
     startAiReview,
     askApprove,
     toggleHidden,

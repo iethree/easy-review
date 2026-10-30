@@ -14,9 +14,10 @@ import {
   Textarea,
   Tooltip,
 } from "@mantine/core";
-import { IconAlertTriangle, IconPlus, IconTrash, IconUser } from "@tabler/icons-react";
+import { IconAlertTriangle, IconGripVertical, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import type { Reviewer } from "../../shared/aiReview.ts";
+import { moveId } from "../../shared/reviewerOrder.ts";
 import type { useReviewers } from "../hooks/useReviewers.ts";
 
 type Reviewers = ReturnType<typeof useReviewers>;
@@ -34,7 +35,8 @@ Review this pull request for security problems only: injection, missing permissi
 /**
  * Reviewers: named instructions for Claude, one Markdown file each — a
  * section of Settings. Pick one from the + over a pull request, and its
- * review gets a tab of its own.
+ * review gets a tab of its own. Drag them (or Alt+↑/↓) into the order they
+ * should have everywhere.
  */
 export function ReviewersSettings({
   store,
@@ -92,6 +94,18 @@ export function ReviewersSettings({
     }
   };
 
+  // While dragging: the order on screen, saved when the reviewer is dropped.
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [arranged, setArranged] = useState<string[] | null>(null);
+  const byId = new Map(reviewers.map((r) => [r.id, r]));
+  const shown = arranged ? arranged.flatMap((id) => byId.get(id) ?? []) : reviewers;
+
+  const reorder = (ids: string[]) => {
+    if (ids.join() === reviewers.map((r) => r.id).join()) return;
+    setError(null);
+    store.reorder(ids).catch((err) => setError(err instanceof Error ? err.message : String(err)));
+  };
+
   const remove = async () => {
     if (!draft?.id || !saved) return;
     if (!window.confirm(`Delete the reviewer “${saved.name}”? Its past reviews are kept.`)) return;
@@ -114,14 +128,50 @@ export function ReviewersSettings({
         <div className="er-reviewers">
           <div className="er-reviewers-list">
             <ScrollArea style={{ flex: 1 }}>
-              {reviewers.map((r) => (
-                <NavLink
+              {shown.map((r, i) => (
+                // biome-ignore lint/a11y/noStaticElementInteractions: the drag is a shortcut for Alt+↑/↓ on the link
+                <div
                   key={r.id}
-                  active={draft?.id === r.id}
-                  label={r.name}
-                  leftSection={<IconUser size={15} />}
-                  onClick={() => leave(() => setDraft(fromReviewer(r)))}
-                />
+                  draggable
+                  className="er-reviewer-row"
+                  data-dragged={dragged === r.id || undefined}
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    // Firefox starts no drag without data.
+                    e.dataTransfer.setData("text/plain", r.name);
+                    setDragged(r.id);
+                    setArranged(reviewers.map((x) => x.id));
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragged || !arranged) return;
+                    e.preventDefault();
+                    if (r.id !== dragged) setArranged(moveId(arranged, dragged, arranged.indexOf(r.id)));
+                  }}
+                  onDrop={(e) => e.preventDefault()}
+                  onDragEnd={(e) => {
+                    // Esc, or let go outside the list: as it was.
+                    if (arranged && e.dataTransfer.dropEffect !== "none") reorder(arranged);
+                    setDragged(null);
+                    setArranged(null);
+                  }}
+                >
+                  <NavLink
+                    // A button, not a link without an href, so it can take focus for Alt+↑/↓.
+                    component="button"
+                    type="button"
+                    active={draft?.id === r.id}
+                    label={r.name}
+                    leftSection={<IconGripVertical size={15} className="er-grip" />}
+                    title="Drag, or Alt+↑/↓, to reorder"
+                    onClick={() => leave(() => setDraft(fromReviewer(r)))}
+                    onKeyDown={(e) => {
+                      if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+                      e.preventDefault();
+                      const ids = reviewers.map((x) => x.id);
+                      reorder(moveId(ids, r.id, i + (e.key === "ArrowUp" ? -1 : 1)));
+                    }}
+                  />
+                </div>
               ))}
               {draft?.id === null && <NavLink active label={draft.name.trim() || "New reviewer"} leftSection={<IconPlus size={15} />} />}
             </ScrollArea>

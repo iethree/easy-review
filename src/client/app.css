@@ -1181,6 +1181,19 @@ body {
   border-right: 1px solid var(--er-row-border);
 }
 
+/* Drag a reviewer to reorder them. */
+.er-reviewer-row {
+  cursor: grab;
+}
+
+.er-reviewer-row[data-dragged] {
+  opacity: 0.5;
+}
+
+.er-reviewer-row .er-grip {
+  color: var(--mantine-color-dimmed);
+}
+
 /* Settings read best at a form's width, not the window's. */
 .er-settings {
   max-width: 680px;

@@ -21,6 +21,7 @@ import {
   listReviewers,
   REVIEWER_ID,
   ReviewerError,
+  setReviewerOrder,
   updateReviewer,
 } from "./reviewers.ts";
 
@@ -37,7 +38,7 @@ function json(body: unknown, status = 200): Response {
 
 const fail = (error: string, status: number) => json({ error }, status);
 
-async function body(request: Request): Promise<{ name?: unknown; instructions?: unknown }> {
+async function body(request: Request): Promise<{ name?: unknown; instructions?: unknown; order?: unknown }> {
   const parsed = (await request.json().catch(() => null)) as unknown;
   return parsed && typeof parsed === "object" ? parsed : {};
 }
@@ -80,6 +81,10 @@ export function createLocalApi(jobs: ReviewJobs) {
         const id = parts[1];
         if (!id && method === "GET") return json({ reviewers: await listReviewers(), dir: localPaths().reviewers });
         if (!id && method === "POST") return json(await createReviewer(await body(request)), 201);
+        // Not under /reviewers/order: "order" is a name a reviewer could have.
+        if (!id && method === "PUT") {
+          return json({ reviewers: await setReviewerOrder((await body(request)).order) });
+        }
         if (id && REVIEWER_ID.test(id) && !parts[2]) {
           if (method === "PUT") return json(await updateReviewer(id, await body(request)));
           if (method === "DELETE") {

@@ -11,6 +11,7 @@ import {
   listReviewers,
   parseReviewerFile,
   seedReviewers,
+  setReviewerOrder,
   slugify,
   updateReviewer,
 } from "./reviewers.ts";
@@ -142,6 +143,21 @@ test("a reviewer needs a name and instructions, and the last one can't be delete
   await expect(updateReviewer("missing", { name: "X", instructions: "x" })).rejects.toThrow(/No such/);
 });
 
+test("reviewers keep the order you put them in; new ones follow, by name", async () => {
+  for (const name of ["Alpha", "Bravo", "Charlie"]) await createReviewer({ name, instructions: "x" });
+  expect((await setReviewerOrder(["charlie", "alpha"])).map((r) => r.id)).toEqual(["charlie", "alpha", "bravo"]);
+  await createReviewer({ name: "Able", instructions: "x" });
+  expect((await listReviewers()).map((r) => r.id)).toEqual(["charlie", "alpha", "able", "bravo"]);
+
+  // A deleted reviewer leaves the order, so a new one by its name starts at the end.
+  await deleteReviewer("charlie");
+  await createReviewer({ name: "Charlie", instructions: "x" });
+  expect((await listReviewers()).map((r) => r.id)).toEqual(["alpha", "able", "bravo", "charlie"]);
+
+  await expect(setReviewerOrder("alpha")).rejects.toThrow(/list of reviewer ids/);
+  await expect(setReviewerOrder(["../config"])).rejects.toThrow(/list of reviewer ids/);
+});
+
 /* -------------------------------------------------------------------------- */
 /* Over HTTP                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -179,6 +195,15 @@ test("the reviewer routes list, create, update and delete", async () => {
   }
   expect((await call("DELETE", "reviewers/general")).status).toBe(400);
   expect((await call("PUT", "reviewers/..%2Fconfig", { name: "x", instructions: "x" })).status).toBe(404);
+});
+
+test("the reviewers are reordered with a PUT of their ids", async () => {
+  const call = await api();
+  const res = await call("PUT", "reviewers", { order: ["tulip", "general"] });
+  expect(res.status).toBe(200);
+  const { reviewers } = (await res.json()) as { reviewers: { id: string }[] };
+  expect(reviewers.map((r) => r.id)).toEqual(["tulip", "general", "changed-screens", "diagrams", "layers", "screen-comparison"]);
+  expect((await call("PUT", "reviewers", { order: "tulip" })).status).toBe(400);
 });
 
 test("a review must name reviewers that exist", async () => {
