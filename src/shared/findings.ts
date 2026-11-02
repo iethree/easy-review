@@ -49,7 +49,7 @@ export interface Finding {
 }
 
 /** What the model is told to produce. Kept here, beside the parser that reads it. */
-export const FINDINGS_INSTRUCTIONS = `Make your points distinct and concrete: one issue, at one place in the code, per point — never two problems folded into one, and never the same problem twice. Keep the prose of your review to a short summary; the verdict and the points themselves go in the block below, not in the prose.
+export const FINDINGS_INSTRUCTIONS = `Keep the prose of your review to a short summary; the verdict and the points themselves go in the block below, not in the prose.
 
 End your final message with a fenced code block tagged ${FINDINGS_FENCE} holding one JSON object:
 {"verdict": "approve" | "comment" | "request-changes", "summary": "one or two sentences: why that verdict", "findings": [...]}

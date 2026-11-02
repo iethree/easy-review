@@ -16,6 +16,7 @@ import { join } from "node:path";
 import {
   CHECKOUT_MAX_AGE_DAYS,
   DEFAULT_AI_CONFIG,
+  activeInstructions,
   isActive,
   isBusy,
   prKey,
@@ -238,6 +239,8 @@ export class ReviewJobs {
       reviewerId: reviewer.id,
       reviewerName: reviewer.name,
       instructions: reviewer.instructions,
+      // Taken now, like the reviewer's: what you switch on or off later is for later reviews.
+      globalInstructions: activeInstructions(this.config.globalInstructions),
       owner,
       name,
       number,
@@ -593,6 +596,7 @@ export class ReviewJobs {
           job,
           job.instructions || config.instructions,
           (job.questions ?? []).map((q) => q.text),
+          job.globalInstructions,
         ),
         timeoutMs: config.timeoutMinutes * 60_000,
         onSpawn: (proc) => {

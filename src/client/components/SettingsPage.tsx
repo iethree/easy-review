@@ -21,6 +21,7 @@ import {
   IconPalette,
   IconRobot,
   IconUsers,
+  IconWorld,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef } from "react";
 import type { LocalStatus } from "../../shared/aiReview.ts";
@@ -28,6 +29,7 @@ import { withLook } from "../../shared/reviewerLook.ts";
 import type { Settings } from "../../shared/types.ts";
 import { CheckoutSettings } from "./CheckoutSettings.tsx";
 import { ClaudeSettings } from "./ClaudeSettings.tsx";
+import { GlobalInstructionsSettings } from "./GlobalInstructionsSettings.tsx";
 import { DISCARD, ReviewersSettings } from "./ReviewersSettings.tsx";
 import { ShortcutsSettings } from "./ShortcutsSettings.tsx";
 import type { useReviewers } from "../hooks/useReviewers.ts";
@@ -45,7 +47,14 @@ interface Props {
   onSectionChange: (section: SettingsSection) => void;
 }
 
-export type SettingsSection = "queue" | "appearance" | "shortcuts" | "claude" | "reviewers" | "checkouts";
+export type SettingsSection =
+  | "queue"
+  | "appearance"
+  | "shortcuts"
+  | "claude"
+  | "reviewers"
+  | "instructions"
+  | "checkouts";
 
 /**
  * Settings: a page of its own, in place of the pull requests. Changes apply
@@ -101,6 +110,7 @@ export function SettingsPage({
       ? [
           { value: "claude" as const, label: "Claude review", icon: <IconRobot size={16} /> },
           { value: "reviewers" as const, label: "Reviewers", icon: <IconUsers size={16} /> },
+          { value: "instructions" as const, label: "Global instructions", icon: <IconWorld size={16} /> },
           { value: "checkouts" as const, label: "Checkouts", icon: <IconFolder size={16} /> },
         ]
       : []),
@@ -148,6 +158,8 @@ export function SettingsPage({
               ) : section === "checkouts" && local.supported ? (
                 // Mounted only while it's showing, so opening Settings doesn't run `du`.
                 <CheckoutSettings active />
+              ) : section === "instructions" && local.supported ? (
+                <GlobalInstructionsSettings />
               ) : section === "claude" && local.supported ? (
                 <ClaudeSettings status={local.status} opened onOpenReviewers={() => onSectionChange("reviewers")} />
               ) : (

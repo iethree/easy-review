@@ -10,7 +10,7 @@ import {
   type CheckoutsResponse,
   type LocalStatus,
 } from "../shared/aiReview.ts";
-import { detectClaude, type ClaudeStatus } from "./claude.ts";
+import { detectClaude, reviewSystemPrompt, type ClaudeStatus } from "./claude.ts";
 import { ChatError, type ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
 import { reportCsp, reportFile, servedPage } from "./reports.ts";
@@ -66,6 +66,11 @@ export function createLocalApi(jobs: ReviewJobs) {
           ...jobs.counts(),
         };
         return json(body);
+      }
+
+      if (parts[0] === "config" && parts[1] === "fixed" && method === "GET") {
+        // What every review is told whatever the settings say, for Settings to show.
+        return json({ text: reviewSystemPrompt(jobs.getConfig().readOnly) });
       }
 
       if (parts[0] === "config") {

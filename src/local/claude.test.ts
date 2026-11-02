@@ -9,7 +9,9 @@ import {
   fencedClaudeScript,
   QUESTION_HEADER,
   questionMessage,
+  reviewSystemPrompt,
 } from "./claude.ts";
+import { GROUND_RULES } from "../shared/aiReview.ts";
 import { childEnv } from "./env.ts";
 
 const CWD = "/wt";
@@ -256,4 +258,20 @@ test("each message echoed back counts as delivered; a tool result doesn't", () =
     { type: "user", isReplay: true, message: { role: "user", content: "And CI?" } },
   ].reduce((s, e) => applyEvent(s, e, CWD), EMPTY_STREAM);
   expect(state.delivered).toBe(2);
+});
+
+test("global instructions follow the reviewer's own, before any questions", () => {
+  const prompt = buildPrompt(
+    { owner: "o", name: "n", number: 1, title: "t" },
+    "Look closely.",
+    ["Will this slow down CI?"],
+    [{ instructions: " We're on Java 21. " }, { instructions: "Flag new dependencies." }],
+  );
+  expect(prompt).toContain("Look closely.\n\nWe're on Java 21.\n\nFlag new dependencies.");
+  expect(prompt.indexOf("Flag new dependencies.")).toBeLessThan(prompt.indexOf(QUESTION_HEADER));
+});
+
+test("the ground rules are a set of their own now, not part of what every review is told regardless", () => {
+  expect(reviewSystemPrompt(false)).not.toContain(GROUND_RULES.instructions);
+  expect(reviewSystemPrompt(true)).toContain("easy-review-findings");
 });

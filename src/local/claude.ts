@@ -51,7 +51,10 @@ Context prepared for you, inside the working directory:
 - .easy-review/base-commit — the commit the pull request's branch started from`;
 }
 
-/** Fixed framing. The reviewer's own instructions go in the prompt. */
+/**
+ * Fixed framing: what easy-review depends on, so not up to the reviewer. The
+ * reviewer's own instructions, and the global ones, go in the prompt.
+ */
 export function reviewSystemPrompt(readOnly: boolean): string {
   return `You are running as an automated code reviewer launched by easy-review. ${framing(readOnly)}
 
@@ -90,10 +93,19 @@ export interface ReviewTarget {
   title: string;
 }
 
-/** With questions asked before it started, after the instructions, as they would have arrived. */
-export function buildPrompt(pr: ReviewTarget, instructions: string, questions: readonly string[] = []): string {
+/**
+ * The reviewer's instructions, then the global ones, then the questions asked
+ * before it started, as they would have arrived.
+ */
+export function buildPrompt(
+  pr: ReviewTarget,
+  instructions: string,
+  questions: readonly string[] = [],
+  globals: readonly { instructions: string }[] = [],
+): string {
+  const all = [instructions, ...globals.map((g) => g.instructions)].map((text) => text.trim()).filter(Boolean);
   const asked = questions.map((q) => `\n${questionMessage(q)}\n`).join("");
-  return `Review pull request #${pr.number} in ${pr.owner}/${pr.name}: "${pr.title}".\n\n${instructions.trim()}\n${asked}`;
+  return `Review pull request #${pr.number} in ${pr.owner}/${pr.name}: "${pr.title}".\n\n${all.join("\n\n")}\n${asked}`;
 }
 
 /**

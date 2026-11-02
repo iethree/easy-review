@@ -45,6 +45,27 @@ export interface AiReviewConfig {
    * it suspects — running the pull request's code on this machine.
    */
   readOnly: boolean;
+  /** Added to every review, whichever reviewer runs it; in order. */
+  globalInstructions: InstructionSet[];
+}
+
+/**
+ * Instructions for every review — "we're on Java 21", "flag any new
+ * dependency" — added after the reviewer's own. Switched off, a set is kept
+ * but left out.
+ */
+export interface InstructionSet {
+  id: string;
+  name: string;
+  instructions: string;
+  enabled: boolean;
+}
+
+/** The sets a review started now gets: those switched on, with something in them. */
+export function activeInstructions(sets: readonly InstructionSet[]): { name: string; instructions: string }[] {
+  return sets
+    .filter((s) => s.enabled && s.instructions.trim())
+    .map((s) => ({ name: s.name.trim(), instructions: s.instructions.trim() }));
 }
 
 /** The tools a review gets: reading, and unless read-only, running and editing. */
@@ -124,6 +145,8 @@ export interface AiReviewJob extends AiReviewSummary {
   baseRef: string;
   /** The reviewer's instructions as they were when this review started. */
   instructions: string;
+  /** The global instructions switched on then. Absent on reviews from before there were any. */
+  globalInstructions?: { name: string; instructions: string }[];
   /** The finished review, as Markdown. */
   review: string | null;
   /** What Claude has been doing: "Read src/foo.ts", "Grep “bar”". */
@@ -209,6 +232,19 @@ Structure the review as:
 
 Cite file paths with line numbers. Skip praise, and skip anything a linter would catch.`;
 
+/**
+ * The one set there is to begin with: the part of what every review was
+ * always told that is a matter of taste, rather than something easy-review
+ * depends on (see reviewSystemPrompt in src/local/claude.ts).
+ */
+export const GROUND_RULES: InstructionSet = {
+  id: "ground-rules",
+  name: "Ground rules",
+  instructions:
+    "Make your points distinct and concrete: one issue, at one place in the code, per point — never two problems folded into one, and never the same problem twice.",
+  enabled: true,
+};
+
 export const DEFAULT_AI_CONFIG: AiReviewConfig = {
   instructions: DEFAULT_INSTRUCTIONS,
   model: "",
@@ -217,6 +253,7 @@ export const DEFAULT_AI_CONFIG: AiReviewConfig = {
   maxConcurrent: 2,
   clones: "",
   readOnly: false,
+  globalInstructions: [GROUND_RULES],
 };
 
 export function prKey(pr: { owner: string; name: string; number: number }): string {

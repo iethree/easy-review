@@ -219,6 +219,13 @@ export function useReviewDetail(summary: AiReviewSummary | undefined) {
   return detail?.id === id ? detail : null;
 }
 
+/**
+ * The last save sent. Settings has more than one section that edits the
+ * config, each loading it when it opens: one opened just after another closed
+ * waits for that one's save, rather than loading what it replaces.
+ */
+let lastSave: Promise<unknown> = Promise.resolve();
+
 export function useLocalConfig(enabled: boolean) {
   const [config, setConfig] = useState<AiReviewConfig | null>(null);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -226,7 +233,9 @@ export function useLocalConfig(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
-    call<AiReviewConfig>("/api/local/config")
+    lastSave
+      .catch(() => {})
+      .then(() => call<AiReviewConfig>("/api/local/config"))
       .then(setConfig)
       .catch(() => setConfig(null));
   }, [enabled]);
@@ -238,9 +247,8 @@ export function useLocalConfig(enabled: boolean) {
     const next = pending.current;
     if (!next) return;
     pending.current = null;
-    call<AiReviewConfig>("/api/local/config", { method: "PUT", body: JSON.stringify(next) })
-      .then(() => setSaving("saved"))
-      .catch(() => setSaving("error"));
+    lastSave = call<AiReviewConfig>("/api/local/config", { method: "PUT", body: JSON.stringify(next) });
+    lastSave.then(() => setSaving("saved")).catch(() => setSaving("error"));
   }, []);
 
   /** Applies at once, saves shortly after typing stops. */
@@ -260,6 +268,20 @@ export function useLocalConfig(enabled: boolean) {
   useEffect(() => flush, [flush]);
 
   return { config, update, saving };
+}
+
+/** What every review is told whatever the settings say; it changes only with read-only. */
+export function useFixedInstructions(readOnly: boolean | undefined) {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    if (readOnly === undefined) return;
+    lastSave
+      .catch(() => {})
+      .then(() => call<{ text: string }>("/api/local/config/fixed"))
+      .then((r) => setText(r.text))
+      .catch(() => setText(null));
+  }, [readOnly]);
+  return text;
 }
 
 /** What's checked out, for Settings → Checkouts. Sizes arrive a moment after the list. */
