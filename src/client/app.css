@@ -7,13 +7,6 @@
   --er-row-hover: var(--mantine-color-gray-0);
   --er-row-active: var(--mantine-color-indigo-0);
   --er-surface: var(--mantine-color-white);
-  /* The list and other sidebars: a shade off the page, as the title bar is. */
-  --er-sidebar: var(--mantine-color-gray-0);
-  --er-sidebar-hover: rgba(0, 0, 0, 0.04);
-  /* A selected row: the accent while its list has the keyboard, grey otherwise. */
-  --er-row-selected: var(--mantine-color-indigo-1);
-  --er-row-selected-inactive: rgba(0, 0, 0, 0.07);
-  --er-row-line: rgba(0, 0, 0, 0.07);
   --er-muted: var(--mantine-color-gray-6);
   --er-diff-add-bg: #e6ffed;
   --er-diff-add-gutter: #cdffd8;
@@ -29,11 +22,6 @@
   --er-row-hover: var(--mantine-color-dark-6);
   --er-row-active: rgba(76, 84, 194, 0.18);
   --er-surface: var(--mantine-color-dark-7);
-  --er-sidebar: var(--mantine-color-dark-8);
-  --er-sidebar-hover: rgba(255, 255, 255, 0.04);
-  --er-row-selected: rgba(92, 124, 250, 0.3);
-  --er-row-selected-inactive: rgba(255, 255, 255, 0.08);
-  --er-row-line: rgba(255, 255, 255, 0.06);
   --er-muted: var(--mantine-color-dark-2);
   --er-diff-add-bg: rgba(46, 160, 67, 0.16);
   --er-diff-add-gutter: rgba(46, 160, 67, 0.3);
@@ -49,9 +37,8 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
-   App shell: a fixed top bar, then independently scrolling panes that fill
-   the rest of the window edge to edge, as a native app's do: no gutters, no
-   cards, just a hairline between them.
+   App shell: a fixed top bar, then two independently scrolling
+   panes that fill the rest of the viewport.
    --------------------------------------------------------------------------- */
 
 .er-shell {
@@ -68,7 +55,6 @@ body {
   gap: var(--mantine-spacing-md);
   padding: 8px 16px;
   border-bottom: 1px solid var(--er-row-border);
-  background: var(--er-sidebar);
 }
 
 .er-split {
@@ -77,21 +63,23 @@ body {
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+  padding: 10px 16px 14px;
 }
 
 /*
  * The clamp repeats SplitView's limits in CSS so a width saved on a big
  * monitor can't crush the code pane after the window shrinks: the list stays
- * at least 320px and always leaves 420px (+ the 1px handle) for the diff.
+ * at least 320px and always leaves 420px (+ the 12px handle) for the diff.
  */
 .er-split[data-mode="split"] {
-  grid-template-columns: clamp(320px, var(--er-left-w), calc(100% - 421px)) 1px minmax(0, 1fr);
+  grid-template-columns: clamp(320px, var(--er-left-w), calc(100% - 432px)) 12px minmax(0, 1fr);
 }
 .er-split[data-mode="list"] {
   grid-template-columns: minmax(0, 1fr) 0 0;
 }
 .er-split[data-mode="preview"] {
   grid-template-columns: 0 0 minmax(0, 1fr);
+  padding-top: 12px;
 }
 
 /* Placed explicitly so hiding a pane doesn't reflow the others into it. */
@@ -118,25 +106,22 @@ body {
   display: none;
 }
 
-/* A hairline to see, and 9px to grab: the ::after reaches over both panes. */
 .er-split-handle {
   position: relative;
-  z-index: 3;
   cursor: col-resize;
   touch-action: none;
-  background: var(--er-row-border);
 }
 
 .er-split-handle::after {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -4px;
-  right: -4px;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
   background: transparent;
-  background-clip: content-box;
-  padding: 0 3px;
   transition: background-color 120ms ease;
 }
 
@@ -145,20 +130,17 @@ body {
   background: var(--mantine-color-indigo-5);
 }
 
-/* An independently scrolling box, flush with its neighbours. */
+/* A bordered, independently scrolling box. */
 .er-pane {
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--er-row-border);
+  border-radius: var(--mantine-radius-md);
   background: var(--er-surface);
   overflow: hidden;
-}
-
-/* The list of pull requests: the sidebar. */
-.er-pane-list {
-  background: var(--er-sidebar);
 }
 
 .er-pane-head {
@@ -215,32 +197,18 @@ body {
    the right.
    --------------------------------------------------------------------------- */
 
-/*
- * Rows inset from the pane's edges, rounded when hovered or selected, with a
- * hairline between them that stops short of the edges — and goes, beside a
- * row that is filled in.
- */
 .er-item {
   display: grid;
   /* stripe (the verdict, in Reviewed) | title and meta | actions */
   grid-template-columns: 4px minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 8px;
-  margin: 0 6px;
-  padding: 8px 8px 8px 2px;
-  border-radius: 6px;
-  background: linear-gradient(var(--er-row-line), var(--er-row-line)) no-repeat center bottom / calc(100% - 16px) 1px;
+  column-gap: 10px;
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--er-row-border);
   cursor: pointer;
   transition: background-color 90ms ease;
   content-visibility: auto;
   contain-intrinsic-size: auto 56px;
-}
-
-.er-item:hover,
-.er-item[data-selected="true"],
-.er-item:has(+ .er-item:hover),
-.er-item:has(+ .er-item[data-selected="true"]) {
-  background-image: none;
 }
 
 /* History rows have no approve button. */
@@ -249,15 +217,12 @@ body {
 }
 
 .er-item:hover {
-  background-color: var(--er-sidebar-hover);
+  background: var(--er-row-hover);
 }
 
 .er-item[data-selected="true"] {
-  background-color: var(--er-row-selected-inactive);
-}
-
-.er-pane[data-focused="true"] .er-item[data-selected="true"] {
-  background-color: var(--er-row-selected);
+  background: var(--er-row-active);
+  box-shadow: inset 0 0 0 1px var(--mantine-color-indigo-4);
 }
 
 .er-item:focus,
@@ -267,8 +232,12 @@ body {
 
 .er-item-accent {
   align-self: stretch;
-  border-radius: 2px;
+  margin: -8px 0;
   background: var(--er-accent, transparent);
+}
+
+.er-item[data-selected="true"] .er-item-accent {
+  box-shadow: 0 0 8px var(--er-accent);
 }
 
 .er-item-main {
@@ -840,19 +809,9 @@ body {
   padding-bottom: 2px;
 }
 
-/* The tabs in line with the header's text; the line under them edge to edge. */
 .er-pane-tabs {
   flex: none;
-}
-
-.er-pane-tabs > .mantine-Tabs-list {
-  padding: 0 12px;
-}
-
-/* The pull request's own header: room to breathe, as a document's has. */
-.er-preview-head {
-  padding: 14px 24px 8px;
-  border-bottom: 0;
+  padding: 0 8px;
 }
 
 .er-activity {
@@ -920,6 +879,11 @@ body {
 /* ---------------------------------------------------------------------------
    Pane focus (a / d)
    --------------------------------------------------------------------------- */
+
+/* The pane with the keyboard. */
+.er-pane[data-focused="true"] {
+  border-color: var(--mantine-color-indigo-5);
+}
 
 /* The ring is on the pane; the scroller inside it just holds focus. */
 .er-pane-scroll:focus,
@@ -1054,8 +1018,8 @@ body {
 /* ---------------------------------------------------------------------------
    The desktop app (desktop/main.ts). The top bar is the window's title bar:
    it drags the window, makes room for the traffic lights, and dims while the
-   window is in the background, as macOS toolbars do. The lists are segments
-   in it, the open one on a soft fill. The page's chrome stops
+   window is in the background, as macOS toolbars do. The lists are tabs in
+   it, as a browser's are, the open one joined to the page below. The page's chrome stops
    behaving like a web page — no text selection, no pointing hand — while the
    code and the conversation stay selectable.
    --------------------------------------------------------------------------- */
@@ -1119,13 +1083,15 @@ body {
   gap: 2px;
 }
 
-/* Just the name and a count, the open one on a soft fill, as a toolbar's segments are. */
+/* Just the name and a count: no icons, no pills. */
 [data-desktop] .er-main-tabs .mantine-Tabs-tab {
-  height: 26px;
-  margin-bottom: 4px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 6px;
+  height: 32px;
+  /* Over the bar's bottom border, so the open tab runs into the page. */
+  margin-bottom: -1px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
   background: transparent;
   color: var(--mantine-color-dimmed);
   font-size: 13px;
@@ -1138,7 +1104,8 @@ body {
 }
 
 [data-desktop] .er-main-tabs .mantine-Tabs-tab[data-active] {
-  background: var(--er-row-selected-inactive);
+  background: var(--mantine-color-body);
+  border-color: var(--er-row-border);
   color: var(--mantine-color-text);
 }
 
@@ -1177,6 +1144,8 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  padding: 10px 16px 14px;
 }
 
 .er-page-head {
@@ -1185,9 +1154,6 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--mantine-spacing-md);
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--er-row-border);
-  background: var(--er-sidebar);
 }
 
 .er-page-body {
@@ -1195,16 +1161,7 @@ body {
   min-height: 0;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-}
-
-.er-page-nav {
-  padding: 8px 6px;
-  border-right: 1px solid var(--er-row-border);
-  background: var(--er-sidebar);
-}
-
-.er-page-nav .mantine-NavLink-root {
-  border-radius: 6px;
+  gap: 12px;
 }
 
 .er-page-content {
@@ -1427,12 +1384,15 @@ body {
  */
 .er-review-pane {
   flex: none;
-  width: clamp(280px, var(--er-review-w, 340px), max(280px, calc(100% - 742px)));
+  width: clamp(280px, var(--er-review-w, 340px), max(280px, calc(100% - 800px)));
+  margin: 10px 16px 14px 0;
 }
 
+/* In the split's right padding, so the gap beside the pane stays as it was. */
 .er-review-pane-handle {
   flex: none;
-  width: 1px;
+  width: 12px;
+  margin: 10px 2px 14px -14px;
 }
 
 .er-review-pane-comment {
