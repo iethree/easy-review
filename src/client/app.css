@@ -163,6 +163,31 @@ body {
 }
 
 /* The diff lags the header by a frame while you flick through with j/k. */
+/* Under the tabs: the scroller, and the find box floating over its corner. */
+.er-pane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.er-find {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 3;
+}
+
+::highlight(er-find) {
+  background-color: rgba(250, 204, 21, 0.4);
+}
+
+::highlight(er-find-current) {
+  background-color: rgba(249, 115, 22, 0.75);
+  color: #000;
+}
+
 .er-pane-scroll[data-stale="true"] {
   opacity: 0.55;
 }
@@ -174,7 +199,7 @@ body {
 
 .er-item {
   display: grid;
-  /* difficulty stripe | title and meta | actions */
+  /* stripe (the verdict, in Reviewed) | title and meta | actions */
   grid-template-columns: 4px minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 10px;
@@ -1156,6 +1181,19 @@ body {
   border-right: 1px solid var(--er-row-border);
 }
 
+/* Drag a reviewer to reorder them. */
+.er-reviewer-row {
+  cursor: grab;
+}
+
+.er-reviewer-row[data-dragged] {
+  opacity: 0.5;
+}
+
+.er-reviewer-row .er-grip {
+  color: var(--mantine-color-dimmed);
+}
+
 /* Settings read best at a form's width, not the window's. */
 .er-settings {
   max-width: 680px;
@@ -1503,6 +1541,20 @@ body {
   box-shadow: inset 2px 0 0 var(--mantine-color-teal-5);
 }
 
+/* A Claude review's verdict, as wide as the review under it. Its colour (the left edge) is set inline. */
+.er-ai-verdict {
+  max-width: 900px;
+  padding: 8px 12px;
+  border: 1px solid var(--er-row-border);
+  border-left-width: 3px;
+  border-radius: var(--mantine-radius-md);
+}
+
+/* Questions sent to a review while it runs. */
+.er-review-questions {
+  max-width: 900px;
+}
+
 /* One block per Markdown render: the spacing between them is the blocks'. */
 .er-prose .er-markdown > :first-child {
   margin-top: 0;
@@ -1546,13 +1598,3 @@ body {
   margin-bottom: 0;
 }
 
-/* A difficulty's colour, as a dot: the legend for the stripes on the rows. */
-.er-level-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 5px;
-  border-radius: 50%;
-  vertical-align: 1px;
-  background: var(--er-level);
-}

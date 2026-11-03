@@ -1,7 +1,7 @@
 import { ActionIcon, Badge, Group, Menu, SegmentedControl, Text, TextInput, Tooltip } from "@mantine/core";
-import { IconArrowsSort, IconCheck, IconSearch, IconX } from "@tabler/icons-react";
+import { IconArrowsSort, IconCheck, IconRefresh, IconRobot, IconSearch, IconX } from "@tabler/icons-react";
 import { useMemo, type ReactNode, type RefObject } from "react";
-import { describeFilters, removeTerm } from "../../shared/filter.ts";
+import { AI_REVIEWED, describeFilters, readAiReviewed, removeTerm, setAiReviewed } from "../../shared/filter.ts";
 
 export type SortKey = "quickest" | "newest" | "oldest";
 
@@ -19,28 +19,57 @@ interface Props {
   /** Absent for lists that keep their own order (history). */
   sort?: SortKey;
   onSortChange?: (next: SortKey) => void;
-  /** A segmented control under the box: difficulty, or verdict. */
+  /** A segmented control under the box, such as the verdict. */
   segments?: { value: string; data: { label: ReactNode; value: string }[]; onChange: (value: string) => void };
   /** Shown in place of the box, for lists with nothing to search. */
   note?: ReactNode;
+  /** Fetch the list again (Shift+R), spinning while it loads. */
+  refresh: { onRefresh: () => void; loading: boolean };
+  /** Offer the toggle for `is:ai-reviewed`: only where Claude reviews can run. */
+  aiFilter?: boolean;
+}
+
+function RefreshButton({ refresh }: { refresh: Props["refresh"] }) {
+  return (
+    <Tooltip label="Refresh (Shift+R)">
+      <ActionIcon variant="subtle" color="gray" size="md" onClick={refresh.onRefresh} aria-label="Refresh">
+        <IconRefresh size={16} className={refresh.loading ? "er-spin" : undefined} />
+      </ActionIcon>
+    </Tooltip>
+  );
 }
 
 /**
  * The one search box, at the top of the list it searches. Free text matches
  * the title, repo, author and number; `author:`, `repo:` and `is:` narrow it
- * further, and each shows as a chip you can remove. The difficulty control and
- * an author's name on a row write into the same text, so what you see in the
+ * further, and each shows as a chip you can remove. The toggles and an
+ * author's name on a row write into the same text, so what you see in the
  * box is always the whole filter.
  */
-export function ListFilter({ query, onQueryChange, placeholder, inputRef, sort, onSortChange, segments, note }: Props) {
+export function ListFilter({
+  query,
+  onQueryChange,
+  placeholder,
+  inputRef,
+  sort,
+  onSortChange,
+  segments,
+  note,
+  refresh,
+  aiFilter,
+}: Props) {
   const chips = useMemo(() => describeFilters(query), [query]);
+  const aiOnly = useMemo(() => readAiReviewed(query), [query]);
 
   if (note) {
     return (
       <div className="er-pane-head er-list-filter">
-        <Text size="xs" c="dimmed">
-          {note}
-        </Text>
+        <Group gap={6} wrap="nowrap" justify="space-between">
+          <Text size="xs" c="dimmed">
+            {note}
+          </Text>
+          <RefreshButton refresh={refresh} />
+        </Group>
       </div>
     );
   }
@@ -69,6 +98,20 @@ export function ListFilter({ query, onQueryChange, placeholder, inputRef, sort, 
           style={{ flex: 1, minWidth: 0 }}
           aria-label="Search the list"
         />
+        {aiFilter && (
+          <Tooltip label={aiOnly ? "Showing only AI-reviewed pull requests" : `Only AI-reviewed pull requests (${AI_REVIEWED})`}>
+            <ActionIcon
+              variant={aiOnly ? "light" : "subtle"}
+              color={aiOnly ? "violet" : "gray"}
+              size="md"
+              onClick={() => onQueryChange(setAiReviewed(query, !aiOnly))}
+              aria-label="Only AI-reviewed pull requests"
+              aria-pressed={aiOnly}
+            >
+              <IconRobot size={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         {sort && onSortChange && (
           <Menu position="bottom-end" shadow="md" width={200}>
             <Menu.Target>
@@ -91,6 +134,7 @@ export function ListFilter({ query, onQueryChange, placeholder, inputRef, sort, 
             </Menu.Dropdown>
           </Menu>
         )}
+        <RefreshButton refresh={refresh} />
       </Group>
 
       {segments && (

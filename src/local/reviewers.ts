@@ -10,12 +10,15 @@
  *   Look for injection, missing permission checks, …
  *
  * The file name is the reviewer's id, and stays put when it is renamed. A
- * file without the header is still a reviewer, named after the file.
+ * file without the header is still a reviewer, named after the file. The
+ * order you put them in, in Settings, is kept beside them in `.order`: one id
+ * a line.
  */
 
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Reviewer } from "../shared/aiReview.ts";
+import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { BUILT_IN_REVIEWERS } from "./builtInReviewers.ts";
 import { localPaths } from "./paths.ts";
 
@@ -23,6 +26,7 @@ export const REVIEWER_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 const dir = () => localPaths().reviewers;
 const fileOf = (id: string) => join(dir(), `${id}.md`);
+const orderFile = () => Bun.file(join(dir(), ".order"));
 
 export function parseReviewerFile(id: string, text: string): Reviewer {
   const header = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
@@ -64,7 +68,13 @@ export function slugify(name: string): string {
   return slug || "reviewer";
 }
 
-/** Every reviewer, by name. */
+async function readOrder(): Promise<string[]> {
+  const file = orderFile();
+  if (!(await file.exists())) return [];
+  return (await file.text()).split("\n").map((l) => l.trim()).filter((id) => REVIEWER_ID.test(id));
+}
+
+/** Every reviewer, in your order (see inReviewerOrder). */
 export async function listReviewers(): Promise<Reviewer[]> {
   let files: string[];
   try {
@@ -77,7 +87,17 @@ export async function listReviewers(): Promise<Reviewer[]> {
       .filter((file) => file.endsWith(".md") && REVIEWER_ID.test(file.slice(0, -3)))
       .map(async (file) => parseReviewerFile(file.slice(0, -3), await Bun.file(join(dir(), file)).text())),
   );
-  return reviewers.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  return inReviewerOrder(reviewers, await readOrder(), (r) => r);
+}
+
+/** Put the reviewers in this order, first to last. Returns them in it. */
+export async function setReviewerOrder(ids: unknown): Promise<Reviewer[]> {
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string" && REVIEWER_ID.test(id))) {
+    throw new ReviewerError("Expected a list of reviewer ids.");
+  }
+  await mkdir(dir(), { recursive: true });
+  await Bun.write(orderFile(), `${[...new Set(ids)].join("\n")}\n`);
+  return listReviewers();
 }
 
 function validate(input: { name?: unknown; instructions?: unknown }): { name: string; instructions: string } {
@@ -119,6 +139,10 @@ export async function deleteReviewer(id: string): Promise<void> {
   if (!all.some((r) => r.id === id)) throw new ReviewerError("No such reviewer.");
   if (all.length === 1) throw new ReviewerError("Keep at least one reviewer.");
   await rm(fileOf(id), { force: true });
+  // Not kept in the order either, or one made later under the same name
+  // would take its place.
+  const order = await readOrder();
+  if (order.includes(id)) await Bun.write(orderFile(), `${order.filter((x) => x !== id).join("\n")}\n`);
 }
 
 /**
@@ -149,7 +173,7 @@ export async function seedReviewers(legacyInstructions: string): Promise<void> {
   if (due.length === 0) return;
   for (const reviewer of due) {
     const file = Bun.file(fileOf(reviewer.id));
-    if (!(await file.exists())) await Bun.write(file, formatReviewerFile(reviewer));
+    if (!(await file.exists())) await Bun.write(file, reviewer.file);
     offered.add(reviewer.id);
   }
   await Bun.write(offeredFile, `${[...offered].join("\n")}\n`);

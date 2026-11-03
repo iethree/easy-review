@@ -1,8 +1,8 @@
 import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
 import { IconAlertCircle, IconEyeOff, IconInbox } from "@tabler/icons-react";
 import { useState } from "react";
-import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
-import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
+import { prKey, verdictFor, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
+import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { PrRow } from "./PrRow.tsx";
 import { QuickReviewMenu } from "./QuickReviewMenu.tsx";
 import { LoadingScene, MINE_MESSAGES, QUEUE_MESSAGES } from "./Loading.tsx";
@@ -15,7 +15,6 @@ interface Props {
   loading: boolean;
   error: string | null;
   fetchedAt: string | null;
-  settings: Settings;
   selectedId: string | null;
   reviewed: Record<string, ReviewEvent>;
   onSelect: (pr: PullRequest) => void;
@@ -46,7 +45,6 @@ export function QueueList({
   loading,
   error,
   fetchedAt,
-  settings,
   selectedId,
   reviewed,
   onSelect,
@@ -148,7 +146,6 @@ export function QueueList({
           <PrRow
             key={pr.id}
             pr={pr}
-            settings={settings}
             selected={pr.id === selectedId}
             reviewed={reviewed[pr.id]}
             onSelect={onSelect}
@@ -156,6 +153,7 @@ export function QueueList({
             showRepo={showRepo}
             aiJob={ai?.byPr.get(prKey(pr))}
             aiCount={ai?.reviewsByPr.get(prKey(pr))?.length ?? 0}
+            aiVerdict={verdictFor(ai?.reviewsByPr.get(prKey(pr)) ?? [], pr.headSha)}
             onUnhide={variant === "hidden" ? onUnhide : undefined}
           />
         ))}

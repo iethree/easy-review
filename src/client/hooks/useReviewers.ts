@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Reviewer } from "../../shared/aiReview.ts";
+import { inReviewerOrder } from "../../shared/reviewerOrder.ts";
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -52,5 +53,23 @@ export function useReviewers(enabled: boolean) {
     [refresh],
   );
 
-  return { reviewers: reviewers ?? [], loaded: reviewers !== null, dir, refresh, create, update, remove };
+  /** First to last. Shown at once; put back as the files have it if saving fails. */
+  const reorder = useCallback(
+    async (ids: string[]) => {
+      setReviewers((list) => list && inReviewerOrder(list, ids, (r) => r));
+      try {
+        const body = await call<{ reviewers: Reviewer[] }>("/api/local/reviewers", {
+          method: "PUT",
+          body: JSON.stringify({ order: ids }),
+        });
+        setReviewers(body.reviewers);
+      } catch (err) {
+        await refresh().catch(() => {});
+        throw err;
+      }
+    },
+    [refresh],
+  );
+
+  return { reviewers: reviewers ?? [], loaded: reviewers !== null, dir, refresh, create, update, remove, reorder };
 }

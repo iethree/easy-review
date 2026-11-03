@@ -10,7 +10,7 @@ import {
   type CheckoutsResponse,
   type LocalStatus,
 } from "../shared/aiReview.ts";
-import { detectClaude, type ClaudeStatus } from "./claude.ts";
+import { detectClaude, reviewSystemPrompt, type ClaudeStatus } from "./claude.ts";
 import { ChatError, type ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
 import { reportCsp, reportFile, servedPage } from "./reports.ts";
@@ -21,6 +21,7 @@ import {
   listReviewers,
   REVIEWER_ID,
   ReviewerError,
+  setReviewerOrder,
   updateReviewer,
 } from "./reviewers.ts";
 
@@ -37,7 +38,7 @@ function json(body: unknown, status = 200): Response {
 
 const fail = (error: string, status: number) => json({ error }, status);
 
-async function body(request: Request): Promise<{ name?: unknown; instructions?: unknown }> {
+async function body(request: Request): Promise<{ name?: unknown; instructions?: unknown; order?: unknown }> {
   const parsed = (await request.json().catch(() => null)) as unknown;
   return parsed && typeof parsed === "object" ? parsed : {};
 }
@@ -67,6 +68,11 @@ export function createLocalApi(jobs: ReviewJobs) {
         return json(body);
       }
 
+      if (parts[0] === "config" && parts[1] === "fixed" && method === "GET") {
+        // What every review is told whatever the settings say, for Settings to show.
+        return json({ text: reviewSystemPrompt(jobs.getConfig().readOnly) });
+      }
+
       if (parts[0] === "config") {
         if (method === "GET") return json(jobs.getConfig());
         if (method === "PUT") {
@@ -80,6 +86,10 @@ export function createLocalApi(jobs: ReviewJobs) {
         const id = parts[1];
         if (!id && method === "GET") return json({ reviewers: await listReviewers(), dir: localPaths().reviewers });
         if (!id && method === "POST") return json(await createReviewer(await body(request)), 201);
+        // Not under /reviewers/order: "order" is a name a reviewer could have.
+        if (!id && method === "PUT") {
+          return json({ reviewers: await setReviewerOrder((await body(request)).order) });
+        }
         if (id && REVIEWER_ID.test(id) && !parts[2]) {
           if (method === "PUT") return json(await updateReviewer(id, await body(request)));
           if (method === "DELETE") {
@@ -184,6 +194,14 @@ export function createLocalApi(jobs: ReviewJobs) {
             }
             const asked = await jobs.ask(id, question, quote);
             return json({ ...asked, resumeCommand: resumeCommand(asked) }, 202);
+          }
+          if (parts[2] === "questions" && !parts[3] && method === "POST") {
+            const input = (await request.json().catch(() => null)) as { question?: unknown } | null;
+            const question = typeof input?.question === "string" ? input.question : "";
+            if (!question.trim() || question.length > MAX_CHAT_TEXT) {
+              return fail("Ask a question (up to 20,000 characters).", 400);
+            }
+            return json(jobs.question(id, question), 202);
           }
           if (parts[2] === "chat" && parts[3] === "stop" && !parts[4] && method === "POST") {
             return json(jobs.stopChat(id));

@@ -1,17 +1,16 @@
-import { ActionIcon, Avatar, Badge, Group, Tooltip, VisuallyHidden } from "@mantine/core";
+import { ActionIcon, Avatar, Badge, Group, ThemeIcon, Tooltip } from "@mantine/core";
 import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { memo } from "react";
 import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
-import { rateDifficulty } from "../../shared/difficulty.ts";
-import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
-import { DIFFICULTY_COLOR } from "../theme.ts";
+import type { AiVerdict } from "../../shared/findings.ts";
+import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { relativeTime } from "../time.ts";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
+import { VERDICT_LOOK } from "./Verdict.tsx";
 
 interface Props {
   pr: PullRequest;
-  settings: Settings;
   selected: boolean;
   reviewed: ReviewEvent | undefined;
   onSelect: (pr: PullRequest) => void;
@@ -23,11 +22,11 @@ interface Props {
   // reviews change: the one standing for them all, and how many there are.
   aiJob?: AiReviewSummary;
   aiCount?: number;
+  /** The finished reviews' verdict on the current commit, the most severe of them. */
+  aiVerdict?: AiVerdict | null;
   /** In the Hidden tab: brings the PR back. */
   onUnhide?: (pr: PullRequest) => void;
 }
-
-const LEVEL_LABEL = { easy: "Easy", medium: "Medium", hard: "Hard" } as const;
 
 const REVIEWED_LABEL: Record<ReviewEvent, string> = {
   APPROVE: "approved",
@@ -37,7 +36,6 @@ const REVIEWED_LABEL: Record<ReviewEvent, string> = {
 
 export const PrRow = memo(function PrRow({
   pr,
-  settings,
   selected,
   reviewed,
   onSelect,
@@ -45,11 +43,9 @@ export const PrRow = memo(function PrRow({
   showRepo,
   aiJob,
   aiCount = 0,
+  aiVerdict = null,
   onUnhide,
 }: Props) {
-  const rating = rateDifficulty(pr, settings);
-  const accent = `var(--mantine-color-${DIFFICULTY_COLOR[rating.level]}-5)`;
-
   return (
     // biome-ignore lint/a11y: rows are chosen with the keyboard through the app's keymap (j/k), not focus
     <div
@@ -57,17 +53,13 @@ export const PrRow = memo(function PrRow({
       data-pr-id={pr.id}
       data-selected={selected}
       data-row-id={pr.id}
-      style={{ "--er-accent": accent } as React.CSSProperties}
       onClick={() => onSelect(pr)}
       role="option"
       aria-selected={selected}
       tabIndex={-1}
     >
-      {/* Difficulty is the stripe's colour alone; the tooltip and screen readers say it in words. */}
-      <Tooltip label={`${LEVEL_LABEL[rating.level]} review — ${rating.reason}`} position="right" openDelay={400} multiline w={240}>
-        <div className="er-item-accent" />
-      </Tooltip>
-      <VisuallyHidden>{LEVEL_LABEL[rating.level]} review</VisuallyHidden>
+      {/* Uncoloured here: it keeps these rows in line with the Reviewed tab's, where it is the verdict. */}
+      <div className="er-item-accent" />
 
       <div className="er-item-main">
         <div className="er-item-title">
@@ -130,7 +122,7 @@ export const PrRow = memo(function PrRow({
       </div>
 
       <Group gap={4} wrap="nowrap">
-        <ReviewCount job={aiJob} count={aiCount} headSha={pr.headSha} />
+        <ReviewCount job={aiJob} count={aiCount} headSha={pr.headSha} verdict={aiVerdict} />
         {/* No approve button here: approving is done from the preview, with the pull request in view. */}
         {onUnhide && (
           <Tooltip label="Unhide (⇧H)">
@@ -157,10 +149,39 @@ export const PrRow = memo(function PrRow({
  * How many Claude reviews the pull request has, coloured by how they stand.
  * Always takes its place, so rows line up whether or not they have any.
  */
-function ReviewCount({ job, count, headSha }: { job: AiReviewSummary | undefined; count: number; headSha: string }) {
+/**
+ * The row's Claude reviews: how many, coloured by how the latest is doing.
+ * Once they're done, of this commit, and say what they'd do, the verdict's
+ * icon in place of the count.
+ */
+function ReviewCount({
+  job,
+  count,
+  headSha,
+  verdict,
+}: {
+  job: AiReviewSummary | undefined;
+  count: number;
+  headSha: string;
+  verdict: AiVerdict | null;
+}) {
   if (!job || count === 0) return <span className="er-review-count" />;
   const running = isActive(job.status);
   const stale = job.status === "done" && headSha !== "" && job.headSha !== headSha;
+  const reviews = `${count} Claude review${count === 1 ? "" : "s"}`;
+  if (verdict && job.status === "done" && !stale) {
+    const look = VERDICT_LOOK[verdict];
+    const label = `${reviews} — ${look.label.toLowerCase()}`;
+    return (
+      <span className="er-review-count">
+        <Tooltip label={label} openDelay={250}>
+          <ThemeIcon size={18} radius="xl" variant="light" color={look.color} aria-label={label}>
+            <look.Icon size={14} />
+          </ThemeIcon>
+        </Tooltip>
+      </span>
+    );
+  }
   const [color, state] = running
     ? ["indigo", job.phase]
     : job.status === "failed"
@@ -170,7 +191,7 @@ function ReviewCount({ job, count, headSha }: { job: AiReviewSummary | undefined
         : job.status === "cancelled"
           ? ["gray", "cancelled"]
           : ["teal", "ready"];
-  const label = `${count} Claude review${count === 1 ? "" : "s"} — ${state}`;
+  const label = `${reviews} — ${state}`;
   return (
     <span className="er-review-count">
       <Tooltip label={label} openDelay={250}>

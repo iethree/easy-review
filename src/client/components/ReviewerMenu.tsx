@@ -1,7 +1,8 @@
 import { ActionIcon, Menu, Text, Tooltip } from "@mantine/core";
-import { IconPencil, IconPlus, IconRobot } from "@tabler/icons-react";
+import { IconPencil, IconPlus } from "@tabler/icons-react";
 import type { AiReviewSummary, Reviewer } from "../../shared/aiReview.ts";
 import { StatusIcon } from "./AiReviewPanel.tsx";
+import { ReviewerIcon } from "./ReviewerIcon.tsx";
 
 interface Props {
   reviewers: Reviewer[];
@@ -45,7 +46,7 @@ export function ReviewerMenu({ reviewers, reviews, opened, onOpenChange, onStart
           return (
             <Menu.Item
               key={r.id}
-              leftSection={review ? <StatusIcon job={review} /> : <IconRobot size={14} />}
+              leftSection={review ? <StatusIcon job={review} /> : <ReviewerIcon id={r.id} />}
               rightSection={
                 review && (
                   <Text size="10px" c="dimmed">

@@ -59,7 +59,8 @@ export function ClaudeSettings({
             Review instructions
           </Text>
           <Text size="xs" c="dimmed">
-            Each reviewer has its own. Pick one or more when you start a review.
+            Each reviewer has its own, and every review gets the global ones too. Pick one or more
+            reviewers when you start a review.
           </Text>
         </div>
         <Group gap="xs" wrap="nowrap">

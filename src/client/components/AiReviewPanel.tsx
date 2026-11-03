@@ -33,6 +33,9 @@ import { splitReview } from "../../shared/findings.ts";
 import { Findings } from "./Findings.tsx";
 import { ReviewScreenshots } from "./Markdown.tsx";
 import { ProseReview } from "./ProseReview.tsx";
+import { ReviewQuestions } from "./ReviewQuestions.tsx";
+import { ReviewerIcon } from "./ReviewerIcon.tsx";
+import { VerdictBlock } from "./Verdict.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -45,6 +48,8 @@ interface Props {
   onFindingAdded?: () => void;
   /** Open the chat about this review: about one part of it, if quoted. */
   onAsk?: (quote?: string) => void;
+  /** Send a question to the review while it runs. */
+  onQuestion?: (text: string) => Promise<void>;
 }
 
 const STATUS = {
@@ -76,7 +81,7 @@ function useTick(active: boolean) {
   }, [active]);
 }
 
-export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded, onAsk }: Props) {
+export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingAdded, onAsk, onQuestion }: Props) {
   const detail = useReviewDetail(job);
   // The prose, and the findings block the review ends with, apart.
   const review = useMemo(() => (detail?.review ? splitReview(detail.review) : null), [detail?.review]);
@@ -213,6 +218,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
 
         {job.status === "done" && review && (
           <>
+            {review.verdict && <VerdictBlock verdict={review.verdict} reviewerName={job.reviewerName} />}
             <ProseReview
               pr={pr}
               review={{ id: job.id, headSha: job.headSha }}
@@ -236,6 +242,8 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
             <Loader size="sm" />
           </Center>
         )}
+
+        {running && onQuestion && <ReviewQuestions questions={detail?.questions ?? []} onSend={onQuestion} />}
 
         {(running || (job.status !== "done" && activity.length > 0)) && (
           <Stack gap={2} className="er-activity">
@@ -332,14 +340,16 @@ function ResumeButton({ command }: { command: string }) {
 }
 
 /** A review's state, as the icon on its tab. */
-export function StatusIcon({ job }: { job: AiReviewSummary | undefined }) {
+/** A review's reviewer, by its icon and colour (see ReviewerIcon) — or how the review stands. */
+export function StatusIcon({ job }: { job: AiReviewSummary }) {
   // The tab's own text colour: an indigo loader vanished on the selected tab, which is indigo too.
-  if (job && isActive(job.status)) return <Loader size={14} color="currentColor" />;
-  const color =
-    job?.status === "done"
-      ? "var(--mantine-color-teal-6)"
-      : job?.status === "failed"
-        ? "var(--mantine-color-red-6)"
-        : undefined; // currentColor
-  return <IconRobot size={14} color={color} />;
+  if (isActive(job.status)) return <Loader size={14} color="currentColor" />;
+  return (
+    <ReviewerIcon
+      id={job.reviewerId}
+      // Failed is red, whoever's it is. Done is the reviewer's colour, or teal without one.
+      color={job.status === "failed" ? "var(--mantine-color-red-6)" : undefined}
+      fallback={job.status === "done" ? "var(--mantine-color-teal-6)" : undefined}
+    />
+  );
 }

@@ -23,8 +23,7 @@ import {
 } from "@tabler/icons-react";
 import { useCallback, useDeferredValue, useMemo, type RefObject } from "react";
 import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
-import { rateDifficulty } from "../../shared/difficulty.ts";
-import type { PullRequest, ReviewEvent, Settings } from "../../shared/types.ts";
+import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { useDiff } from "../hooks/diffStore.ts";
 import { useConversation } from "../hooks/useConversation.ts";
 import { useDrafts } from "../drafts.ts";
@@ -38,13 +37,12 @@ import { CiBadge } from "./CiBadge.tsx";
 import type { DiffThreadItem } from "./DiffThread.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
-import { DifficultyBadge } from "./DifficultyBadge.tsx";
+import { FindBar } from "./FindBar.tsx";
 import { PrDescription } from "./PrDescription.tsx";
 import { ReviewActions } from "./ReviewActions.tsx";
 
 interface Props {
   pr: PullRequest | null;
-  settings: Settings;
   /** Set once this pull request has been reviewed in this session. */
   reviewed: ReviewEvent | undefined;
   onSubmit: (pr: PullRequest, event: ReviewEvent, body?: string) => Promise<void>;
@@ -91,6 +89,8 @@ export interface AiControls {
   findingAdded: () => void;
   /** Open the chat about a review: about one part of it, if quoted. */
   ask: (job: AiReviewSummary, quote?: string) => void;
+  /** Send a question to a review while it runs; rejects with why it couldn't be. */
+  question: (id: string, text: string) => Promise<void>;
   /** The pull request whose + is open, if any. */
   pickingFor: string | null;
   reviewers: Reviewer[];
@@ -191,49 +191,52 @@ export function PreviewPane(props: Props) {
           )}
         </Tabs.List>
       </Tabs>
-      {deferred && (
-        <div
-          // Keyed so every pull request (and tab) starts at the top, with its
-          // own fresh expand/collapse state.
-          key={`${deferred.id}:${tab}`}
-          className="er-pane-scroll"
-          ref={setScrollEl}
-          tabIndex={-1}
-          data-stale={stale}
-        >
-          <Box p="sm">
-            <ErrorBoundary>
-              {review ? (
-                <AiReviewPanel
-                  key={review.id}
-                  pr={deferred}
-                  job={review}
-                  // Re-run by the same reviewer; one deleted since, or a review
-                  // from before there were reviewers, asks instead.
-                  onStart={() =>
-                    ai.start(deferred, ai.reviewerIds.has(review.reviewerId) ? review.reviewerId : undefined)
-                  }
-                  onCancel={ai.cancel}
-                  onRemove={ai.remove}
-                  onFindingAdded={ai.findingAdded}
-                  onAsk={(quote) => ai.ask(review, quote)}
-                />
-              ) : tab === "description" ? (
-                <PrDescription pr={deferred} viewer={props.viewer} />
-              ) : (
-                <Body pr={deferred} />
-              )}
-            </ErrorBoundary>
-          </Box>
-        </div>
-      )}
+      <div className="er-pane-body">
+        <FindBar scrollRef={scrollRef} />
+        {deferred && (
+          <div
+            // Keyed so every pull request (and tab) starts at the top, with its
+            // own fresh expand/collapse state.
+            key={`${deferred.id}:${tab}`}
+            className="er-pane-scroll"
+            ref={setScrollEl}
+            tabIndex={-1}
+            data-stale={stale}
+          >
+            <Box p="sm">
+              <ErrorBoundary>
+                {review ? (
+                  <AiReviewPanel
+                    key={review.id}
+                    pr={deferred}
+                    job={review}
+                    // Re-run by the same reviewer; one deleted since, or a review
+                    // from before there were reviewers, asks instead.
+                    onStart={() =>
+                      ai.start(deferred, ai.reviewerIds.has(review.reviewerId) ? review.reviewerId : undefined)
+                    }
+                    onCancel={ai.cancel}
+                    onRemove={ai.remove}
+                    onFindingAdded={ai.findingAdded}
+                    onAsk={(quote) => ai.ask(review, quote)}
+                    onQuestion={(text) => ai.question(review.id, text)}
+                  />
+                ) : tab === "description" ? (
+                  <PrDescription pr={deferred} viewer={props.viewer} />
+                ) : (
+                  <Body pr={deferred} />
+                )}
+              </ErrorBoundary>
+            </Box>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function Header({
   pr,
-  settings,
   reviewed,
   onSubmit,
   changesOpen,
@@ -270,8 +273,8 @@ function Header({
               </ActionIcon>
             </Tooltip>
           )}
-          <Box w={78} style={{ flex: "none" }} mt={2}>
-            {verdict ? (
+          {verdict && (
+            <Box w={78} style={{ flex: "none" }} mt={2}>
               <Badge
                 color={verdict.color}
                 variant="light"
@@ -280,10 +283,8 @@ function Header({
               >
                 {verdict.label}
               </Badge>
-            ) : (
-              <DifficultyBadge rating={rateDifficulty(pr, settings)} />
-            )}
-          </Box>
+            </Box>
+          )}
           <Text fw={650} size="md" lh={1.3} lineClamp={2} style={{ minWidth: 0 }}>
             {pr.title}
           </Text>

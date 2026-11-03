@@ -32,10 +32,3 @@ export const theme = createTheme({
     },
   },
 });
-
-/** Difficulty → Mantine colour key, used for badges and the row accent. */
-export const DIFFICULTY_COLOR = {
-  easy: "teal",
-  medium: "yellow",
-  hard: "red",
-} as const;

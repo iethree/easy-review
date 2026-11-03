@@ -1,5 +1,12 @@
 import { test, expect } from "bun:test";
-import { parseQuery, matchesQuery, isEmptyQuery, type MatchInput } from "./filter.ts";
+import {
+  parseQuery,
+  matchesQuery,
+  isEmptyQuery,
+  readAiReviewed,
+  setAiReviewed,
+  type MatchInput,
+} from "./filter.ts";
 
 const base: MatchInput = {
   title: "Fix flaky login redirect",
@@ -8,8 +15,8 @@ const base: MatchInput = {
   number: 4821,
   isDraft: false,
   ciFailed: 0,
-  level: "easy",
   reviewedByMe: false,
+  aiReviewed: false,
 };
 
 const match = (query: string, pr: Partial<MatchInput> = {}) =>
@@ -36,12 +43,6 @@ test("author and repo tokens", () => {
   expect(match("in:other")).toBe(false);
 });
 
-test("difficulty tokens", () => {
-  expect(match("is:easy")).toBe(true);
-  expect(match("is:hard")).toBe(false);
-  expect(match("is:hard", { level: "hard" })).toBe(true);
-});
-
 test("draft and failing tokens", () => {
   expect(match("is:draft")).toBe(false);
   expect(match("is:draft", { isDraft: true })).toBe(true);
@@ -50,9 +51,26 @@ test("draft and failing tokens", () => {
   expect(match("is:failing", { ciFailed: 2 })).toBe(true);
 });
 
+test("is:ai-reviewed keeps pull requests a Claude review has finished; is:ai is short for it", () => {
+  expect(match("is:ai-reviewed")).toBe(false);
+  expect(match("is:ai-reviewed", { aiReviewed: true })).toBe(true);
+  expect(match("is:ai", { aiReviewed: true })).toBe(true);
+  expect(match("is:ai")).toBe(false);
+  expect(isEmptyQuery(parseQuery("is:ai-reviewed"))).toBe(false);
+  expect(describeFilters("is:ai")).toEqual([{ term: "is:ai", label: "AI reviewed", color: "violet" }]);
+});
+
+test("the AI-reviewed toggle adds the term, and takes either spelling out", () => {
+  expect(setAiReviewed("kim is:draft", true)).toBe("kim is:draft is:ai-reviewed");
+  expect(setAiReviewed("kim is:ai-reviewed", true)).toBe("kim is:ai-reviewed");
+  expect(setAiReviewed("is:ai kim is:draft", false)).toBe("kim is:draft");
+  expect(readAiReviewed("kim is:ai")).toBe(true);
+  expect(readAiReviewed("kim is:draft")).toBe(false);
+});
+
 test("tokens combine with free text", () => {
-  expect(match("author:kim is:easy login")).toBe(true);
-  expect(match("author:kim is:hard login")).toBe(false);
+  expect(match("author:kim is:ready login")).toBe(true);
+  expect(match("author:kim is:draft login")).toBe(false);
 });
 
 test("quoted phrases stay together", () => {
@@ -82,23 +100,17 @@ test("case is ignored", () => {
   expect(match("AUTHOR:KIM")).toBe(true);
 });
 
-import { readToken, upsertToken, removeTerm, readLevel, setLevel, describeFilters, joinTerms, splitTerms } from "./filter.ts";
+import { readToken, upsertToken, removeTerm, describeFilters, joinTerms, splitTerms } from "./filter.ts";
 
 test("reads and replaces a token without disturbing the rest", () => {
-  expect(readToken("login author:kim is:easy", "author")).toBe("kim");
-  expect(upsertToken("login author:kim is:easy", "author", "sam")).toBe("login is:easy author:sam");
+  expect(readToken("login author:kim is:draft", "author")).toBe("kim");
+  expect(upsertToken("login author:kim is:draft", "author", "sam")).toBe("login is:draft author:sam");
   expect(upsertToken("login author:kim", "author", null)).toBe("login");
   expect(upsertToken("login", "author", "kim")).toBe("login author:kim");
 });
 
-test("level editing leaves other is: tokens alone", () => {
-  expect(readLevel("is:draft is:hard")).toBe("hard");
-  expect(setLevel("is:draft is:hard", "easy")).toBe("is:draft is:easy");
-  expect(setLevel("is:draft is:hard", null)).toBe("is:draft");
-});
-
 test("removing a chip term removes exactly that term", () => {
-  expect(removeTerm("login author:kim is:easy", "author:kim")).toBe("login is:easy");
+  expect(removeTerm("login author:kim is:draft", "author:kim")).toBe("login is:draft");
   expect(removeTerm("login", "missing")).toBe("login");
 });
 
@@ -109,8 +121,8 @@ test("quoted phrases survive a round-trip", () => {
 });
 
 test("describes each active filter", () => {
-  const chips = describeFilters("login author:kim is:hard");
-  expect(chips.map((c) => c.label)).toEqual(['"login"', "by kim", "hard"]);
+  const chips = describeFilters("login author:kim is:draft");
+  expect(chips.map((c) => c.label)).toEqual(['"login"', "by kim", "draft"]);
 });
 
 test("repo:owner/name is exact, so similar repo names don't leak in", () => {

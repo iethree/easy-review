@@ -11,6 +11,7 @@ import {
   EFFORTS,
   type AiReviewConfig,
   type AiReviewEffort,
+  type InstructionSet,
 } from "../shared/aiReview.ts";
 import { expandHome, localPaths } from "./paths.ts";
 
@@ -18,6 +19,28 @@ const clampInt = (value: unknown, min: number, max: number, fallback: number): n
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), min), max) : fallback;
 };
+
+const SET_ID = /^[\w-]{1,64}$/;
+
+/** Missing, the sets there are to begin with; an empty list is no sets. */
+function normalizeSets(value: unknown): InstructionSet[] {
+  if (!Array.isArray(value)) return DEFAULT_AI_CONFIG.globalInstructions;
+  const ids = new Set<string>();
+  return value.flatMap((item): InstructionSet[] => {
+    if (!item || typeof item !== "object") return [];
+    const raw = item as Partial<InstructionSet>;
+    const id = typeof raw.id === "string" && SET_ID.test(raw.id) && !ids.has(raw.id) ? raw.id : crypto.randomUUID();
+    ids.add(id);
+    return [
+      {
+        id,
+        name: typeof raw.name === "string" ? raw.name : "",
+        instructions: typeof raw.instructions === "string" ? raw.instructions : "",
+        enabled: typeof raw.enabled === "boolean" ? raw.enabled : true,
+      },
+    ];
+  });
+}
 
 /** Accepts anything, returns a complete and sane config. */
 export function normalizeConfig(input: unknown): AiReviewConfig {
@@ -34,6 +57,7 @@ export function normalizeConfig(input: unknown): AiReviewConfig {
     maxConcurrent: clampInt(raw.maxConcurrent, 1, 6, d.maxConcurrent),
     clones: typeof raw.clones === "string" ? raw.clones : d.clones,
     readOnly: typeof raw.readOnly === "boolean" ? raw.readOnly : d.readOnly,
+    globalInstructions: normalizeSets(raw.globalInstructions),
   };
 }
 

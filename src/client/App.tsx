@@ -16,30 +16,28 @@ import {
   IconHistory,
   IconInbox,
   IconClipboardText,
-  IconKeyboard,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
-  IconRefresh,
   IconSettings,
   IconUser,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { rateDifficulty, reviewCost, type Difficulty } from "../shared/difficulty.ts";
 import { prKey, type AiReviewSummary } from "../shared/aiReview.ts";
+import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { leadingEmoji } from "../shared/approval.ts";
-import { matchesQuery, parseQuery, readLevel, setLevel, upsertToken } from "../shared/filter.ts";
-import type { PullRequest, ReviewEvent, ReviewVerdict, Settings } from "../shared/types.ts";
+import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
+import type { PullRequest, ReviewEvent, ReviewVerdict } from "../shared/types.ts";
 import { EVENT_LABEL, submitReview } from "./api.ts";
 import { notifyDesktop, useDesktopCommands, useNotificationClicks } from "./desktop.ts";
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
+import { ReviewerLooksContext } from "./components/ReviewerIcon.tsx";
 import { ChatPane, type ChatRequest } from "./components/ChatPane.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
-import { ShortcutsModal } from "./components/ShortcutsModal.tsx";
 import { ReviewPaneHandle, SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestDiff } from "./hooks/diffStore.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
@@ -54,18 +52,22 @@ import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
 import { resolveTab, reviewTab, tabOrder } from "./previewTabs.ts";
 import { isReviewed } from "./reviewMeta.ts";
-import { DIFFICULTY_COLOR } from "./theme.ts";
 
 type Tab = "queue" | "reviewed" | "hidden" | "mine";
 type VerdictFilter = ReviewVerdict | "all";
+
+/** Sort key that puts the quickest wins first. */
+function reviewCost(pr: PullRequest): number {
+  return pr.additions + pr.deletions + pr.changedFiles * 12;
+}
 
 /** The queue's filter and sort, for any list of open pull requests. */
 function filterAndSort(
   prs: PullRequest[],
   parsed: ReturnType<typeof parseQuery>,
   sort: SortKey,
-  settings: Settings,
   reviewed: Record<string, ReviewEvent>,
+  aiReviewed: ReadonlySet<string>,
 ): PullRequest[] {
   const filtered = prs.filter((pr) =>
     matchesQuery(
@@ -76,8 +78,8 @@ function filterAndSort(
         number: pr.number,
         isDraft: pr.isDraft,
         ciFailed: pr.ci.failed,
-        level: rateDifficulty(pr, settings).level,
         reviewedByMe: reviewed[pr.id] === "APPROVE",
+        aiReviewed: aiReviewed.has(prKey(pr)),
       },
       parsed,
     ),
@@ -123,7 +125,6 @@ export function App() {
   const [approveFor, setApproveFor] = useState<string | null>(null);
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   /** Settings, as a page in place of the lists; and which of its sections. */
   const [page, setPage] = useState<"settings" | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("queue");
@@ -150,6 +151,39 @@ export function App() {
   historyRef.current = history;
 
   /* ---------------------------------------------------------------------- */
+  /* Local Claude reviews                                                    */
+  /* ---------------------------------------------------------------------- */
+
+  // Read from the notification's Open button, which outlives this render.
+  /** Shows a review's pull request on its Claude tab; false if that PR isn't loaded. */
+  const openRef = useRef<(job: AiReviewSummary) => boolean>(() => false);
+
+  const ai = useLocalReviews((job) => {
+    const ok = job.status === "done";
+    const title = ok
+      ? `${job.reviewerName} finished reviewing #${job.number}`
+      : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`;
+    // In the background, macOS says so too. Not for a review you cancelled.
+    if (job.status !== "cancelled") notifyDesktop({ id: job.id, title, body: job.title });
+    notifications.show({
+      color: ok ? "teal" : job.status === "failed" ? "red" : "gray",
+      title,
+      message: (
+        <Text
+          size="xs"
+          c="dimmed"
+          td="underline"
+          style={{ cursor: "pointer" }}
+          onClick={() => openRef.current(job)}
+        >
+          {job.title} — open
+        </Text>
+      ),
+      autoClose: ok ? 8000 : 10000,
+    });
+  });
+
+  /* ---------------------------------------------------------------------- */
   /* Lists                                                                  */
   /* ---------------------------------------------------------------------- */
 
@@ -160,28 +194,20 @@ export function App() {
     [allPrs, hidden],
   );
   const parsed = useMemo(() => parseQuery(query), [query]);
+  /** Pull requests a Claude review has finished for, by prKey: what `is:ai-reviewed` keeps. */
+  const aiReviewed = useMemo(
+    () => new Set(ai.jobs.filter((job) => job.status === "done").map(prKey)),
+    [ai.jobs],
+  );
 
   const visible = useMemo(
-    () => filterAndSort(prs, parsed, sort, settings, reviewed),
-    [prs, parsed, sort, settings, reviewed],
+    () => filterAndSort(prs, parsed, sort, reviewed, aiReviewed),
+    [prs, parsed, sort, reviewed, aiReviewed],
   );
   const visibleMine = useMemo(
-    () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, settings, reviewed),
-    [mine.pullRequests, mineQuery, sort, settings, reviewed],
+    () => filterAndSort(mine.pullRequests, parseQuery(mineQuery), sort, reviewed, aiReviewed),
+    [mine.pullRequests, mineQuery, sort, reviewed, aiReviewed],
   );
-  const mineCounts = useMemo(() => {
-    const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
-    for (const pr of mine.pullRequests) tally[rateDifficulty(pr, settings).level]++;
-    return tally;
-  }, [mine.pullRequests, settings]);
-
-
-  const counts = useMemo(() => {
-    const tally: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0 };
-    for (const pr of prs) tally[rateDifficulty(pr, settings).level]++;
-    return tally;
-  }, [prs, settings]);
-
   const visibleHistory = useMemo(() => {
     const parsedHistory = parseQuery(historyQuery);
     return history.pullRequests.filter((pr) => {
@@ -194,13 +220,13 @@ export function App() {
           number: pr.number,
           isDraft: pr.isDraft,
           ciFailed: pr.ci.failed,
-          level: rateDifficulty(pr, settings).level,
-          reviewedByMe: true,
+            reviewedByMe: true,
+          aiReviewed: aiReviewed.has(prKey(pr)),
         },
         parsedHistory,
       );
     });
-  }, [history.pullRequests, historyQuery, verdict, settings]);
+  }, [history.pullRequests, historyQuery, verdict, aiReviewed]);
 
   const verdictCounts = useMemo(() => {
     const tally = new Map<ReviewVerdict, number>();
@@ -313,39 +339,6 @@ export function App() {
     [hidden, list, selectedKey, setSelectedId, setHiddenFor],
   );
 
-  /* ---------------------------------------------------------------------- */
-  /* Local Claude reviews                                                    */
-  /* ---------------------------------------------------------------------- */
-
-  // Read from the notification's Open button, which outlives this render.
-  /** Shows a review's pull request on its Claude tab; false if that PR isn't loaded. */
-  const openRef = useRef<(job: AiReviewSummary) => boolean>(() => false);
-
-  const ai = useLocalReviews((job) => {
-    const ok = job.status === "done";
-    const title = ok
-      ? `${job.reviewerName} finished reviewing #${job.number}`
-      : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`;
-    // In the background, macOS says so too. Not for a review you cancelled.
-    if (job.status !== "cancelled") notifyDesktop({ id: job.id, title, body: job.title });
-    notifications.show({
-      color: ok ? "teal" : job.status === "failed" ? "red" : "gray",
-      title,
-      message: (
-        <Text
-          size="xs"
-          c="dimmed"
-          td="underline"
-          style={{ cursor: "pointer" }}
-          onClick={() => openRef.current(job)}
-        >
-          {job.title} — open
-        </Text>
-      ),
-      autoClose: ok ? 8000 : 10000,
-    });
-  });
-
   /** The review the chat is about — only while its pull request is the one on screen. */
   const chatJob =
     side !== null && typeof side === "object" && selected
@@ -378,6 +371,16 @@ export function App() {
 
   const reviewers = useReviewers(ai.supported);
   const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
+  // Each pull request's reviews — its tabs, the badges on its row — in your
+  // order of reviewers, as set in Settings.
+  const reviewsByPr = useMemo(() => {
+    const order = reviewers.reviewers.map((r) => r.id);
+    const sorted = new Map<string, AiReviewSummary[]>();
+    for (const [key, list] of ai.reviewsByPr) {
+      sorted.set(key, inReviewerOrder(list, order, (j) => ({ id: j.reviewerId, name: j.reviewerName })));
+    }
+    return sorted;
+  }, [ai.reviewsByPr, reviewers.reviewers]);
 
   const runAiReview = useCallback(
     (pr: PullRequest, reviewerId: string) => {
@@ -436,13 +439,14 @@ export function App() {
   const aiControls = useMemo<AiControls>(
     () => ({
       available: ai.available,
-      reviewsByPr: ai.reviewsByPr,
+      reviewsByPr,
       reviewerIds,
       start: startAiReview,
       cancel: (id) => void ai.cancel(id).catch(() => {}),
       remove: (id) => void ai.remove(id).catch(() => {}),
       findingAdded: () => setSide("review"),
       ask: (job, quote) => setSide({ jobId: job.id, quote: quote ?? null, n: ++asks.current }),
+      question: ai.question,
       pickingFor: pickFor?.id ?? null,
       reviewers: reviewers.reviewers,
       cancelPick: () => setPickFor(null),
@@ -451,7 +455,7 @@ export function App() {
         openSettings("reviewers");
       },
     }),
-    [ai.available, ai.reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, pickFor, reviewers.reviewers, openSettings],
+    [ai.available, reviewsByPr, reviewerIds, startAiReview, ai.cancel, ai.remove, ai.question, pickFor, reviewers.reviewers, openSettings],
   );
 
   /** From a row's context menu: start it where it is, without opening it. */
@@ -472,9 +476,9 @@ export function App() {
   const queueAi = useMemo(
     () =>
       ai.available
-        ? { byPr: ai.byPr, reviewsByPr: ai.reviewsByPr, reviewers: reviewers.reviewers, start: quickStart }
+        ? { byPr: ai.byPr, reviewsByPr, reviewers: reviewers.reviewers, start: quickStart }
         : undefined,
-    [ai.available, ai.byPr, ai.reviewsByPr, reviewers.reviewers, quickStart],
+    [ai.available, ai.byPr, reviewsByPr, reviewers.reviewers, quickStart],
   );
 
   // Fetch the open pull request's diff, and only that one. Again after a
@@ -503,7 +507,7 @@ export function App() {
     const active = document.activeElement;
     const lost = !active || active === document.body;
     if (el && (lost || (other?.contains(active) ?? false))) el.focus({ preventScroll: true });
-  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, page, shortcutsOpen]);
+  }, [focusedPane, expanded, narrow, approveOpen, changesOpen, page]);
 
   // Keep the selected row visible when moving by keyboard — and after the
   // list is swapped (tab) or shown again (expanded).
@@ -637,10 +641,6 @@ export function App() {
           target?.blur();
           return;
         }
-        if (shortcutsOpen) {
-          setShortcutsOpen(false);
-          return;
-        }
         if (changesOpen || approveOpen) {
           setChangesFor(null);
           setApproveFor(null);
@@ -652,7 +652,7 @@ export function App() {
 
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       // While a box or dialog is up, let it own the keyboard.
-      if (shortcutsOpen || changesOpen || approveOpen) return;
+      if (changesOpen || approveOpen) return;
 
       const action = actionForKey(e.key, e.repeat);
       if (!action || (action.type === "approve" && onControl)) return;
@@ -673,7 +673,7 @@ export function App() {
           previewScrollRef.current?.scrollBy({ top: action.direction * 80 });
           return;
         case "cycleTab": {
-          const reviews = (ai.available && selected && ai.reviewsByPr.get(prKey(selected))) || [];
+          const reviews = (ai.available && selected && reviewsByPr.get(prKey(selected))) || [];
           const tabs = tabOrder(reviews);
           setPreviewTab((t) => {
             const i = Math.max(tabs.indexOf(resolveTab(t, reviews).tab), 0);
@@ -731,7 +731,7 @@ export function App() {
           if (selected && (tab === "queue" || tab === "hidden")) toggleHidden(selected);
           return;
         case "help":
-          setShortcutsOpen(true);
+          openSettings("shortcuts");
           return;
       }
     }
@@ -746,7 +746,6 @@ export function App() {
     canReviewSelected,
     narrow,
     expanded,
-    shortcutsOpen,
     changesOpen,
     approveOpen,
     page,
@@ -756,24 +755,24 @@ export function App() {
     toggleColorScheme,
     ai.available,
     ai.byPr,
-    ai.reviewsByPr,
+    reviewsByPr,
     startAiReview,
     askApprove,
     toggleHidden,
+    openSettings,
   ]);
 
   // The desktop app's menus: the same actions as ",", Shift+R and "?".
   useDesktopCommands((name) => {
     switch (name) {
       case "settings":
-        setShortcutsOpen(false);
         setPage("settings");
         return;
       case "refresh":
         refreshTab();
         return;
       case "help":
-        setShortcutsOpen(true);
+        openSettings("shortcuts");
         return;
       case "reviewers":
         if (ai.supported) openSettings("reviewers");
@@ -785,16 +784,11 @@ export function App() {
 
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
 
-  const difficultySegments = (q: string, set: (next: string) => void, total: number, c: Record<Difficulty, number>) => ({
-    value: readLevel(q) ?? "all",
-    onChange: (v: string) => set(setLevel(q, v === "all" ? null : (v as Difficulty))),
-    data: [
-      { label: `All ${total}`, value: "all" },
-      { label: <LevelLabel level="easy" text={`Easy ${c.easy}`} />, value: "easy" },
-      { label: <LevelLabel level="medium" text={`Med ${c.medium}`} />, value: "medium" },
-      { label: <LevelLabel level="hard" text={`Hard ${c.hard}`} />, value: "hard" },
-    ],
-  });
+  // Hidden pull requests come from the queue, so its tab refreshes that.
+  const listRefresh = {
+    onRefresh: refreshTab,
+    loading: tab === "reviewed" ? history.loading : tab === "mine" ? mine.loading : loading,
+  };
 
   const listFilter =
     tab === "hidden" ? (
@@ -803,6 +797,7 @@ export function App() {
         onQueryChange={() => {}}
         placeholder=""
         inputRef={searchRef}
+        refresh={listRefresh}
         note="Hidden pull requests stay out of Review until you unhide them — ⇧H, or the eye on a row."
       />
     ) : tab === "reviewed" ? (
@@ -811,6 +806,8 @@ export function App() {
         onQueryChange={setHistoryQuery}
         placeholder="Search your reviews"
         inputRef={searchRef}
+        refresh={listRefresh}
+        aiFilter={ai.available}
         segments={{
           value: verdict,
           onChange: (v) => setVerdict(v as VerdictFilter),
@@ -828,9 +825,10 @@ export function App() {
         onQueryChange={setMineQuery}
         placeholder="Search your pull requests"
         inputRef={searchRef}
+        refresh={listRefresh}
+        aiFilter={ai.available}
         sort={sort}
         onSortChange={setSort}
-        segments={difficultySegments(mineQuery, setMineQuery, mine.pullRequests.length, mineCounts)}
       />
     ) : (
       <ListFilter
@@ -838,9 +836,10 @@ export function App() {
         onQueryChange={setQuery}
         placeholder="Search title, repo, author, number…"
         inputRef={searchRef}
+        refresh={listRefresh}
+        aiFilter={ai.available}
         sort={sort}
         onSortChange={setSort}
-        segments={difficultySegments(query, setQuery, prs.length, counts)}
       />
     );
 
@@ -853,7 +852,6 @@ export function App() {
       loading={mine.loading}
       error={mine.error}
       fetchedAt={mine.data?.fetchedAt ?? null}
-      settings={settings}
       selectedId={selectedKey}
       reviewed={reviewed}
       onSelect={select}
@@ -871,7 +869,6 @@ export function App() {
       loading={loading}
       error={error}
       fetchedAt={data?.fetchedAt ?? null}
-      settings={settings}
       selectedId={selectedKey}
       reviewed={reviewed}
       onSelect={select}
@@ -902,7 +899,7 @@ export function App() {
     />
   );
 
-  return (
+  const shell = (
     <div className="er-shell">
       <header className="er-topbar">
         <Group gap="lg" wrap="nowrap" style={{ minWidth: 0 }}>
@@ -983,21 +980,6 @@ export function App() {
         </Group>
 
         <Group gap={6} wrap="nowrap">
-          <Tooltip label="Refresh (Shift+R)">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={refreshTab}
-              aria-label="Refresh"
-            >
-              <IconRefresh
-                size={17}
-                className={
-                  (tab === "reviewed" ? history.loading : tab === "mine" ? mine.loading : loading) ? "er-spin" : undefined
-                }
-              />
-            </ActionIcon>
-          </Tooltip>
           <Tooltip label={reviewPaneOpen ? "Hide your review" : "Your review: summary, comments, submit"}>
             <ActionIcon
               variant={reviewPaneOpen ? "light" : "subtle"}
@@ -1008,16 +990,6 @@ export function App() {
               style={page ? { visibility: "hidden" } : undefined}
             >
               <IconClipboardText size={17} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Shortcuts (?)">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => setShortcutsOpen(true)}
-              aria-label="Keyboard shortcuts"
-            >
-              <IconKeyboard size={17} />
             </ActionIcon>
           </Tooltip>
           <Tooltip label="Settings (,)">
@@ -1042,7 +1014,6 @@ export function App() {
           settings={settings}
           onChange={update}
           onReset={reset}
-          prs={prs}
           local={{ supported: ai.supported, status: ai.status }}
         />
       )}
@@ -1067,7 +1038,6 @@ export function App() {
             right={
               <PreviewPane
                 pr={selected}
-                settings={settings}
                 reviewed={selected ? reviewed[selected.id] : undefined}
                 onSubmit={handleSubmit}
                 changesOpen={changesOpen}
@@ -1117,17 +1087,9 @@ export function App() {
         </div>
       )}
 
-      <ShortcutsModal opened={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
-}
 
-/** A difficulty in the filter, with the dot that matches its rows' stripe. */
-function LevelLabel({ level, text }: { level: Difficulty; text: string }) {
-  return (
-    <>
-      <span className="er-level-dot" style={{ "--er-level": `var(--mantine-color-${DIFFICULTY_COLOR[level]}-5)` } as React.CSSProperties} />
-      {text}
-    </>
-  );
+  // Every reviewer's icon and colour, for wherever a reviewer is drawn.
+  return <ReviewerLooksContext value={settings.reviewerLooks}>{shell}</ReviewerLooksContext>;
 }

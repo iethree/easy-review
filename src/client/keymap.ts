@@ -1,7 +1,7 @@
 /**
  * Every keyboard shortcut, in one table. The handler in App asks this what a
- * key means, and the shortcuts dialog is drawn from it — so the help can't
- * drift from what the keys actually do.
+ * key means, and Settings' list of shortcuts is drawn from it — so the help
+ * can't drift from what the keys actually do.
  *
  * The layout is WASD-shaped: w/s move through the list, a/d choose the pane,
  * the arrows drive the code pane, Enter approves (and Enter again confirms).
@@ -30,7 +30,7 @@ export type KeyAction =
 export interface KeyBinding {
   /** KeyboardEvent.key values. */
   keys: string[];
-  /** How the shortcuts dialog shows them. */
+  /** How the list of shortcuts shows them. */
   display: string[];
   description: string;
   action: KeyAction;
@@ -66,7 +66,7 @@ export const KEYMAP: KeyBinding[] = [
   { keys: [","], display: [","], description: "Settings", action: { type: "settings" } },
   { keys: ["t"], display: ["t"], description: "Light / dark", action: { type: "theme" } },
   { keys: ["R"], display: ["⇧R"], description: "Refresh from GitHub", action: { type: "refresh" } },
-  { keys: ["?"], display: ["?"], description: "This list", action: { type: "help" } },
+  { keys: ["?"], display: ["?"], description: "This list of shortcuts, in Settings", action: { type: "help" } },
 ];
 
 const BY_KEY = new Map<string, KeyBinding>(
