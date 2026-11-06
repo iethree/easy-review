@@ -6,9 +6,10 @@
  * comes back as failed rather than pretending to still be running.
  *
  * The checkouts they run in are large, so they don't outlive their use: they
- * go when you submit your review of the pull request, when nothing has used
- * them for CHECKOUT_MAX_AGE_DAYS, or when you remove them in Settings. The
- * review itself is always kept.
+ * go when nothing has used them for CHECKOUT_MAX_AGE_DAYS, or when you remove
+ * them in Settings. Submitting your review of the pull request leaves them,
+ * so you can still chat with Claude about its review. The review itself is
+ * always kept.
  */
 
 import { access, mkdir, readdir, rm } from "node:fs/promises";
@@ -460,14 +461,6 @@ export class ReviewJobs {
       }
     }
     return result;
-  }
-
-  /** Once you've submitted your review of a pull request, its checkouts are done with. */
-  async removeCheckoutsForPr(owner: string, name: string, number: number): Promise<RemoveCheckoutsResult> {
-    const key = prKey({ owner, name, number });
-    const all = await scanCheckouts(this.jobs.values());
-    const paths = all.filter((c) => prKey(c) === key && !c.inUse).map((c) => c.path);
-    return paths.length > 0 ? this.removeCheckouts(paths) : { removed: [], failed: [] };
   }
 
   /** Removes checkouts that nothing has used for CHECKOUT_MAX_AGE_DAYS. */

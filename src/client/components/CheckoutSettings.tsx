@@ -95,10 +95,9 @@ export function CheckoutSettings({ active }: { active: boolean }) {
   return (
     <Stack gap="md">
       <Text size="xs" c="dimmed">
-        Each Claude review runs in its own checkout of the pull request. A checkout is removed when
-        you submit your review of that pull request, or once no review has run in it for{" "}
-        {maxAgeDays} days. Removing one keeps its Claude review, but that session can no longer be
-        continued in a terminal.
+        Each Claude review runs in its own checkout of the pull request. A checkout is removed once
+        no review has run in it for {maxAgeDays} days. Removing one keeps its Claude review, but
+        you can no longer chat with that session, here or in a terminal.
       </Text>
 
       {checkouts.length === 0 ? (

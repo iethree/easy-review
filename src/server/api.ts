@@ -24,8 +24,6 @@ export type TokenSource = (request: Request) => string | undefined | Promise<str
 
 export interface ApiOptions {
   getToken: TokenSource;
-  /** Called once a review is posted, so the server can clear that pull request's checkouts. */
-  onReviewSubmitted?: (pr: { owner: string; name: string; number: number }) => void;
 }
 
 const SIGN_IN =
@@ -46,7 +44,7 @@ function fail(message: string, status: number): Response {
   return json({ error: message }, status);
 }
 
-export function createApi({ getToken, onReviewSubmitted }: ApiOptions) {
+export function createApi({ getToken }: ApiOptions) {
   // Immutable per head-SHA, so this survives reloads and makes diffs feel instant.
   const diffCache = new TtlCache<DiffResponse>(300, 30 * 60 * 1000);
   const listCache = new TtlCache<ReviewsResponse>(8, 20 * 1000);
@@ -284,12 +282,6 @@ export function createApi({ getToken, onReviewSubmitted }: ApiOptions) {
     listCache.clear();
     reviewedCache.clear();
     conversationCache.clear();
-    // Best effort: nothing that happens here may turn a posted review into an error.
-    try {
-      onReviewSubmitted?.({ owner, name, number });
-    } catch {
-      // ignored
-    }
     return json({ ok: true, state: result.state, url: result.html_url });
   }
 

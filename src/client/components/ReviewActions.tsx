@@ -123,7 +123,7 @@ export function ReviewActions({
         >
           <Popover.Target>
             <Tooltip
-              label={alreadyReviewed ? "Already reviewed — refresh to update the queue" : "Approve… (Enter)"}
+              label={alreadyReviewed ? "Already reviewed — if it was re-requested, refresh to review again" : "Approve… (Enter)"}
             >
               <Button
                 size="compact-sm"
@@ -209,7 +209,7 @@ export function ReviewActions({
         trapFocus
       >
         <Popover.Target>
-          <Tooltip label={alreadyReviewed ? "Already reviewed" : ownPr ? "Comment (r)" : "Request changes (r)"}>
+          <Tooltip label={alreadyReviewed ? "Already reviewed — if it was re-requested, refresh to review again" : ownPr ? "Comment (r)" : "Request changes (r)"}>
             <ActionIcon
               variant="light"
               color="orange"

@@ -11,7 +11,7 @@ export const VERDICT_LOOK: Record<AiVerdict, { label: string; color: string; Ico
 
 /**
  * The verdict at the top of a review, with the reviewer's reason under it:
- * framed like a finding, with the verdict's colour only on its edge and label.
+ * framed in the verdict's colour all round, so it stands out from the findings.
  */
 export function VerdictBlock({ verdict, reviewerName }: { verdict: ReviewVerdict; reviewerName: string }) {
   const look = VERDICT_LOOK[verdict.verdict];
@@ -19,7 +19,7 @@ export function VerdictBlock({ verdict, reviewerName }: { verdict: ReviewVerdict
   return (
     <section
       className="er-ai-verdict"
-      style={{ borderLeftColor: color }}
+      style={{ borderColor: color }}
       aria-label={`${reviewerName}'s verdict: ${look.label}`}
     >
       <Group gap={6} wrap="nowrap">
@@ -29,7 +29,7 @@ export function VerdictBlock({ verdict, reviewerName }: { verdict: ReviewVerdict
         </Text>
       </Group>
       {verdict.summary && (
-        <Text size="sm" c="dimmed" mt={2}>
+        <Text size="sm" mt={2}>
           {verdict.summary}
         </Text>
       )}
