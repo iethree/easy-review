@@ -1545,7 +1545,7 @@ body {
 .er-ai-verdict {
   max-width: 900px;
   padding: 8px 12px;
-  border: 1px solid var(--er-row-border);
+  border: 1.5px solid;
   border-left-width: 3px;
   border-radius: var(--mantine-radius-md);
 }
