@@ -134,7 +134,7 @@ export function ReviewPane({ pr, ownPr, reviewed, onSubmit, onClose }: Props) {
           <div className="er-review-pane-actions">
             {reviewed ? (
               <Text size="xs" c="dimmed" ta="center">
-                Reviewed — refresh to update the queue.
+                Reviewed. If it was re-requested, refresh to review again.
               </Text>
             ) : (
               <Group gap={6} grow>

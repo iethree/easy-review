@@ -52,6 +52,7 @@ import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
 import { resolveTab, reviewTab, tabOrder } from "./previewTabs.ts";
 import { isReviewed } from "./reviewMeta.ts";
+import { clearReRequested, reviewEvents, type SessionReviews } from "./sessionReviews.ts";
 
 type Tab = "queue" | "reviewed" | "hidden" | "mine";
 type VerdictFilter = ReviewVerdict | "all";
@@ -141,7 +142,12 @@ export function App() {
   const asks = useRef(0);
   /** The pull request whose reviewers are being chosen. */
   const [pickFor, setPickFor] = useState<PullRequest | null>(null);
-  const [reviewed, setReviewed] = useState<Record<string, ReviewEvent>>({});
+  const [sessionReviews, setSessionReviews] = useState<SessionReviews>({});
+  const reviewed = useMemo(() => reviewEvents(sessionReviews), [sessionReviews]);
+  // A pull request back in a queue fetched after your review was re-requested: unlock it.
+  useEffect(() => {
+    if (data) setSessionReviews((prev) => clearReRequested(prev, data));
+  }, [data]);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
@@ -571,7 +577,7 @@ export function App() {
       });
       // Only the ones that went up: a comment added while this was posting stays a draft.
       if (drafts.length > 0) removeDrafts(pr.id, drafts.map((d) => d.id));
-      setReviewed((prev) => ({ ...prev, [pr.id]: event }));
+      setSessionReviews((prev) => ({ ...prev, [pr.id]: { event, at: Date.now() } }));
       // Your review is now part of the conversation; fetch it fresh.
       invalidateConversation(pr.id);
       // If the history tab has been opened, it now has a new first entry.
