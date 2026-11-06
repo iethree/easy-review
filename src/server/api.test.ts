@@ -169,36 +169,6 @@ test("the old standalone comment route is gone", async () => {
   expect(sent).toHaveLength(0);
 });
 
-test("a posted review is reported, so that PR's checkouts can be cleared", async () => {
-  stubGitHub();
-  const submitted: unknown[] = [];
-  const res = await createApi({
-    getToken: () => "test-token",
-    onReviewSubmitted: (pr) => submitted.push(pr),
-  }).handle(review({ event: "APPROVE", body: "🎉" }));
-  expect(res.status).toBe(200);
-  expect(submitted).toEqual([{ owner: "acme", name: "app", number: 7 }]);
-});
-
-test("a review that is refused, or rejected by GitHub, clears nothing", async () => {
-  stubGitHub();
-  const submitted: unknown[] = [];
-  const withHook = () =>
-    createApi({ getToken: () => "test-token", onReviewSubmitted: (pr) => submitted.push(pr) });
-
-  expect((await withHook().handle(review({ event: "APPROVE", body: "LGTM" }))).status).toBe(400);
-
-  globalThis.fetch = mock(async () =>
-    new Response(JSON.stringify({ message: "Unprocessable Entity", errors: ["Can not approve your own pull request"] }), {
-      status: 422,
-      headers: { "content-type": "application/json" },
-    }),
-  ) as unknown as typeof fetch;
-  expect((await withHook().handle(review({ event: "APPROVE", body: "🎉" }))).status).toBe(422);
-
-  expect(submitted).toEqual([]);
-});
-
 test("the conversation route checks its input", async () => {
   const sent = stubGitHub();
   const res = await api().handle(

@@ -32,17 +32,6 @@ export async function startServer({ development }: { development: boolean }): Pr
   // `gh auth login` while the server is running just starts working.
   const api = createApi({
     getToken,
-    // Your review is in, so the checkouts Claude reviewed that PR in are done with.
-    onReviewSubmitted: ({ owner, name, number }) => {
-      void jobs
-        .removeCheckoutsForPr(owner, name, number)
-        .then(({ removed }) => {
-          if (removed.length === 0) return;
-          const s = removed.length === 1 ? "" : "s";
-          console.log(`  removed ${removed.length} checkout${s} of ${owner}/${name}#${number} after your review`);
-        })
-        .catch(() => {});
-    },
   });
 
   async function handleApi(req: Request): Promise<Response> {

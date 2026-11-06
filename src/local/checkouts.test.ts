@@ -184,9 +184,8 @@ test("the sweep leaves checkouts used within 7 days alone", async () => {
   expect(await exists(orphan)).toBe(true);
 });
 
-test("submitting your review removes that PR's checkout and refs, and keeps the review", async () => {
-  // Owner casing from GitHub needn't match the folder's.
-  const result = await jobs.removeCheckoutsForPr("ACME", "app", 7);
+test("removing a checkout removes its refs, and keeps the review", async () => {
+  const result = await jobs.removeCheckouts([reviewed]);
   expect(result).toEqual({ removed: [reviewed], failed: [] });
 
   expect(await exists(reviewed)).toBe(false);
