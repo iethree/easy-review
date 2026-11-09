@@ -307,7 +307,7 @@ body {
 
 .er-ci-slot {
   display: flex;
-  min-width: 76px;
+  min-width: 38px;
 }
 
 .er-truncate {
