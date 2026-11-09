@@ -2,6 +2,7 @@ import {
   ActionIcon,
   Badge,
   Group,
+  Indicator,
   Tabs,
   Text,
   Title,
@@ -11,6 +12,7 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
+  IconActivity,
   IconGitPullRequest,
   IconEyeOff,
   IconHistory,
@@ -22,7 +24,7 @@ import {
   IconUser,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { prKey, type AiReviewSummary } from "../shared/aiReview.ts";
+import { isActive, prKey, type AiReviewSummary } from "../shared/aiReview.ts";
 import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { leadingEmoji } from "../shared/approval.ts";
 import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
@@ -35,6 +37,7 @@ import { PreviewPane, type AiControls, type PreviewTab } from "./components/Prev
 import { QueueList } from "./components/QueueList.tsx";
 import { ReviewerLooksContext } from "./components/ReviewerIcon.tsx";
 import { ChatPane, type ChatRequest } from "./components/ChatPane.tsx";
+import { InFlightPage } from "./components/InFlightPage.tsx";
 import { ReviewPane } from "./components/ReviewPane.tsx";
 import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
@@ -126,8 +129,8 @@ export function App() {
   const [approveFor, setApproveFor] = useState<string | null>(null);
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
-  /** Settings, as a page in place of the lists; and which of its sections. */
-  const [page, setPage] = useState<"settings" | null>(null);
+  /** Settings, or the reviews in progress, as a page in place of the lists; and Settings' section. */
+  const [page, setPage] = useState<"settings" | "inFlight" | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("queue");
   const openSettings = useCallback((section?: SettingsSection) => {
     if (section) setSettingsSection(section);
@@ -440,6 +443,17 @@ export function App() {
     setPreviewTab(reviewTab(job.reviewerId));
     setExpanded(narrow);
     return true;
+  };
+
+  const inFlightCount = useMemo(() => ai.jobs.filter((j) => isActive(j.status)).length, [ai.jobs]);
+
+  /** From a card on the in-progress page: its pull request, open on that review — or GitHub, if no list has it. */
+  const openInFlight = (job: AiReviewSummary) => {
+    if (!openRef.current(job)) {
+      window.open(`https://github.com/${job.owner}/${job.name}/pull/${job.number}`, "_blank", "noreferrer");
+      return;
+    }
+    setPage(null);
   };
 
   const aiControls = useMemo<AiControls>(
@@ -986,6 +1000,28 @@ export function App() {
         </Group>
 
         <Group gap={6} wrap="nowrap">
+          {ai.available && (
+            <Tooltip label="Reviews in progress">
+              <Indicator
+                label={inFlightCount}
+                disabled={inFlightCount === 0}
+                size={14}
+                offset={4}
+                color="indigo"
+                className="er-inflight-indicator"
+              >
+                <ActionIcon
+                  variant={page === "inFlight" ? "light" : "subtle"}
+                  color="gray"
+                  onClick={() => setPage((p) => (p === "inFlight" ? null : "inFlight"))}
+                  aria-label={`Reviews in progress: ${inFlightCount}`}
+                  aria-pressed={page === "inFlight"}
+                >
+                  <IconActivity size={17} />
+                </ActionIcon>
+              </Indicator>
+            </Tooltip>
+          )}
           <Tooltip label={reviewPaneOpen ? "Hide your review" : "Your review: summary, comments, submit"}>
             <ActionIcon
               variant={reviewPaneOpen ? "light" : "subtle"}
@@ -1021,6 +1057,15 @@ export function App() {
           onChange={update}
           onReset={reset}
           local={{ supported: ai.supported, status: ai.status }}
+        />
+      )}
+
+      {page === "inFlight" && (
+        <InFlightPage
+          jobs={ai.jobs}
+          onOpen={openInFlight}
+          onCancel={(id) => void ai.cancel(id).catch(() => {})}
+          onClose={() => setPage(null)}
         />
       )}
 
