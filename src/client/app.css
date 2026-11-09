@@ -6,6 +6,8 @@
   --er-row-border: var(--mantine-color-gray-3);
   --er-row-hover: var(--mantine-color-gray-0);
   --er-row-active: var(--mantine-color-indigo-0);
+  /* The page behind the panels, a step darker so the panels stand off it. */
+  --er-backdrop: var(--mantine-color-gray-0);
   --er-surface: var(--mantine-color-white);
   --er-muted: var(--mantine-color-gray-6);
   --er-diff-add-bg: #e6ffed;
@@ -21,6 +23,7 @@
   --er-row-border: var(--mantine-color-dark-4);
   --er-row-hover: var(--mantine-color-dark-6);
   --er-row-active: rgba(76, 84, 194, 0.18);
+  --er-backdrop: var(--mantine-color-dark-8);
   --er-surface: var(--mantine-color-dark-7);
   --er-muted: var(--mantine-color-dark-2);
   --er-diff-add-bg: rgba(46, 160, 67, 0.16);
@@ -32,8 +35,13 @@
   --er-gutter-text: rgba(200, 205, 215, 0.4);
 }
 
+/*
+ * Only the page takes --er-backdrop. --mantine-color-body stays the panels'
+ * colour, so modals, menus and popovers still match the panels.
+ */
 body {
   overscroll-behavior-y: none;
+  background-color: var(--er-backdrop);
 }
 
 /* ---------------------------------------------------------------------------
@@ -880,12 +888,7 @@ body {
    Pane focus (a / d)
    --------------------------------------------------------------------------- */
 
-/* The pane with the keyboard. */
-.er-pane[data-focused="true"] {
-  border-color: var(--mantine-color-indigo-5);
-}
-
-/* The ring is on the pane; the scroller inside it just holds focus. */
+/* The pane with the keyboard isn't marked; the scroller inside it just holds focus. */
 .er-pane-scroll:focus,
 .er-pane-scroll:focus-visible {
   outline: none;
@@ -1027,12 +1030,12 @@ body {
 /* :root as well, to outrank the variables Mantine declares on :root. */
 :root[data-desktop] {
   --mantine-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  --er-titlebar-bg: var(--mantine-color-gray-0);
+  --er-titlebar-bg: var(--mantine-color-gray-1);
   --er-tab-hover-bg: rgba(0, 0, 0, 0.05);
 }
 
 :root[data-desktop][data-mantine-color-scheme="dark"] {
-  --er-titlebar-bg: var(--mantine-color-dark-8);
+  --er-titlebar-bg: #191919;
   --er-tab-hover-bg: rgba(255, 255, 255, 0.06);
 }
 
@@ -1104,7 +1107,7 @@ body {
 }
 
 [data-desktop] .er-main-tabs .mantine-Tabs-tab[data-active] {
-  background: var(--mantine-color-body);
+  background: var(--er-backdrop);
   border-color: var(--er-row-border);
   color: var(--mantine-color-text);
 }
@@ -1711,8 +1714,7 @@ body {
 .er-ai-verdict {
   max-width: 900px;
   padding: 8px 12px;
-  border: 1.5px solid;
-  border-left-width: 3px;
+  border: 2px solid;
   border-radius: var(--mantine-radius-md);
 }
 
