@@ -566,6 +566,34 @@ export class GitHubClient {
     };
   }
 
+  /** A branch, tag or commit (in full or in part), as the commit it names. */
+  async resolveCommit(owner: string, name: string, ref: string): Promise<string> {
+    const res = await fetch(`${REST_URL}/repos/${owner}/${name}/commits/${encodeURIComponent(ref)}`, {
+      headers: this.headers({ accept: "application/vnd.github+json" }),
+    });
+    const json = (await res.json().catch(() => null)) as (RestErrorBody & { sha?: string }) | null;
+    if (!res.ok || !json?.sha) {
+      // GitHub's 404 says only "Not Found", which could be the repository or the ref.
+      const message =
+        res.status === 404 || res.status === 422
+          ? `${owner}/${name} has no branch, tag or commit called ${ref} (or you can't see the repository).`
+          : describeRestError(res.status, json, `Could not find ${ref}`);
+      throw new GitHubError(message, res.status === 422 ? 404 : res.status);
+    }
+    return json.sha;
+  }
+
+  async fetchDefaultBranch(owner: string, name: string): Promise<string> {
+    const res = await fetch(`${REST_URL}/repos/${owner}/${name}`, {
+      headers: this.headers({ accept: "application/vnd.github+json" }),
+    });
+    const json = (await res.json().catch(() => null)) as (RestErrorBody & { default_branch?: string }) | null;
+    if (!res.ok || !json?.default_branch) {
+      throw new GitHubError(describeRestError(res.status, json, `Could not load ${owner}/${name}`), res.status);
+    }
+    return json.default_branch;
+  }
+
   /** Every comment on a pull request, in order — for the Description tab. */
   async fetchConversation(owner: string, name: string, number: number): Promise<Conversation> {
     const data = await this.graphql<{

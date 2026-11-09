@@ -1,7 +1,7 @@
 import { ActionIcon, Alert, Button, Group, Loader, ScrollArea, Stack, Text, Textarea, Tooltip } from "@mantine/core";
 import { IconAlertTriangle, IconPlayerStop, IconSend, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import type { AiReviewSummary } from "../../shared/aiReview.ts";
+import { describeTarget, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { answerKey } from "../assembly.ts";
 import { useReviewDetail } from "../hooks/useLocalReviews.ts";
@@ -16,7 +16,8 @@ export interface ChatRequest {
 }
 
 interface Props {
-  pr: PullRequest;
+  /** Null when the review isn't of a pull request in your lists: answers can't go into a review. */
+  pr: PullRequest | null;
   job: AiReviewSummary;
   request: ChatRequest;
   onAsk: (id: string, question: string, quote?: string) => Promise<void>;
@@ -79,7 +80,7 @@ export function ChatPane({ pr, job, request, onAsk, onStop, onClose }: Props) {
       <div className="er-pane-head">
         <Group justify="space-between" wrap="nowrap">
           <Text size="sm" fw={700} truncate>
-            Ask {job.reviewerName} about #{pr.number}
+            Ask {job.reviewerName} about {describeTarget(job)}
           </Text>
           <Tooltip label="Close the chat">
             <ActionIcon variant="subtle" color="gray" size="sm" onClick={onClose} aria-label="Close the chat">
@@ -95,8 +96,8 @@ export function ChatPane({ pr, job, request, onAsk, onStop, onClose }: Props) {
             {chat.length === 0 && !answering && (
               <Text size="xs" c="dimmed">
                 Questions go to the Claude session that wrote this review, in its checkout, with the tools it
-                had. Hover a part of the review and press its speech bubble to ask about just that. Anything in an
-                answer can go into your review with its +.
+                had. Hover a part of the review and press its speech bubble to ask about just that.
+                {pr && " Anything in an answer can go into your review with its +."}
               </Text>
             )}
             {chat.map((message, i) =>

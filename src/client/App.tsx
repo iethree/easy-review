@@ -2,6 +2,7 @@ import {
   ActionIcon,
   Badge,
   Group,
+  Indicator,
   Tabs,
   Text,
   Title,
@@ -16,13 +17,15 @@ import {
   IconHistory,
   IconInbox,
   IconClipboardText,
+  IconFolders,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
+  IconPlus,
   IconSettings,
   IconUser,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { prKey, type AiReviewSummary } from "../shared/aiReview.ts";
+import { describeTarget, isActive, prKey, reviewKey, type AiReviewSummary } from "../shared/aiReview.ts";
 import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { leadingEmoji } from "../shared/approval.ts";
 import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
@@ -31,6 +34,8 @@ import { EVENT_LABEL, submitReview } from "./api.ts";
 import { notifyDesktop, useDesktopCommands, useNotificationClicks } from "./desktop.ts";
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
+import { NewReviewDialog } from "./components/NewReviewDialog.tsx";
+import { OtherReviewsPage } from "./components/OtherReviewsPage.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
 import { ReviewerLooksContext } from "./components/ReviewerIcon.tsx";
@@ -127,7 +132,10 @@ export function App() {
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
   /** Settings, as a page in place of the lists; and which of its sections. */
-  const [page, setPage] = useState<"settings" | null>(null);
+  const [page, setPage] = useState<"settings" | "others" | null>(null);
+  /** New review's dialog; and what's open on the page of the reviews it starts. */
+  const [newReviewOpen, setNewReviewOpen] = useState(false);
+  const [othersSelected, setOthersSelected] = useState<{ key: string; reviewerId: string | null } | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("queue");
   const openSettings = useCallback((section?: SettingsSection) => {
     if (section) setSettingsSection(section);
@@ -167,8 +175,8 @@ export function App() {
   const ai = useLocalReviews((job) => {
     const ok = job.status === "done";
     const title = ok
-      ? `${job.reviewerName} finished reviewing #${job.number}`
-      : `${job.reviewerName}'s review of #${job.number} ${job.status === "failed" ? "failed" : "stopped"}`;
+      ? `${job.reviewerName} finished reviewing ${describeTarget(job)}`
+      : `${job.reviewerName}'s review of ${describeTarget(job)} ${job.status === "failed" ? "failed" : "stopped"}`;
     // In the background, macOS says so too. Not for a review you cancelled.
     if (job.status !== "cancelled") notifyDesktop({ id: job.id, title, body: job.title });
     notifications.show({
@@ -202,7 +210,7 @@ export function App() {
   const parsed = useMemo(() => parseQuery(query), [query]);
   /** Pull requests a Claude review has finished for, by prKey: what `is:ai-reviewed` keeps. */
   const aiReviewed = useMemo(
-    () => new Set(ai.jobs.filter((job) => job.status === "done").map(prKey)),
+    () => new Set(ai.jobs.filter((job) => job.kind === "pr" && job.status === "done").map(prKey)),
     [ai.jobs],
   );
 
@@ -376,6 +384,14 @@ export function App() {
   }, [openOnLoad, ai.jobs, data, mine.data, history.pullRequests]);
 
   const reviewers = useReviewers(ai.supported);
+  /** The reviews on the page of those from New review: how many things, and how many still running. */
+  const { otherCount, otherRunning } = useMemo(() => {
+    const others = ai.jobs.filter((j) => j.kind !== "pr" || j.adhoc);
+    return {
+      otherCount: new Set(others.map(reviewKey)).size,
+      otherRunning: others.filter((j) => isActive(j.status)).length,
+    };
+  }, [ai.jobs]);
   const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
   // Each pull request's reviews — its tabs, the badges on its row — in your
   // order of reviewers, as set in Settings.
@@ -419,15 +435,40 @@ export function App() {
     [runAiReview, select, reviewers.refresh],
   );
 
+  /** A review started from New review, on the page of those. */
+  const openOther = (job: AiReviewSummary) => {
+    setOthersSelected({ key: reviewKey(job), reviewerId: job.reviewerId });
+    setPage("others");
+  };
+
+  // A pull request's review where its pull request is listed; the others, and
+  // a pull request asked for by number that isn't, on the page of those.
   openRef.current = (job) => {
+    if (openInLists(job)) return true;
+    if (job.kind !== "pr" || job.adhoc) {
+      openOther(job);
+      return true;
+    }
+    return false;
+  };
+
+  /** The list a pull request's review is in, and its row there; undefined when none has it. */
+  const findInLists = (job: AiReviewSummary): { where: Tab; target: PullRequest } | undefined => {
+    if (job.kind !== "pr") return undefined;
     const key = prKey(job);
     const inQueue = prs.find((pr) => prKey(pr) === key);
     const inHidden = hiddenPrs.find((pr) => prKey(pr) === key);
     const inHistory = history.pullRequests.find((pr) => prKey(pr) === key);
     const inMine = mine.pullRequests.find((pr) => prKey(pr) === key);
     const target = inQueue ?? inHidden ?? inMine ?? inHistory;
-    if (!target) return false;
-    const where: Tab = inQueue ? "queue" : inHidden ? "hidden" : inMine ? "mine" : "reviewed";
+    if (!target) return undefined;
+    return { where: inQueue ? "queue" : inHidden ? "hidden" : inMine ? "mine" : "reviewed", target };
+  };
+
+  const openInLists = (job: AiReviewSummary) => {
+    const found = findInLists(job);
+    if (!found) return false;
+    const { where, target } = found;
     setTab(where);
     ({
       queue: setQueueSelected,
@@ -439,6 +480,7 @@ export function App() {
     );
     setPreviewTab(reviewTab(job.reviewerId));
     setExpanded(narrow);
+    setPage(null);
     return true;
   };
 
@@ -986,6 +1028,29 @@ export function App() {
         </Group>
 
         <Group gap={6} wrap="nowrap">
+          {ai.available && (
+            <>
+              <Tooltip label="New review: any pull request, diff or repository">
+                <ActionIcon variant="subtle" color="gray" onClick={() => setNewReviewOpen(true)} aria-label="New review">
+                  <IconPlus size={17} />
+                </ActionIcon>
+              </Tooltip>
+              {otherCount > 0 && (
+                <Tooltip label={`Other reviews: ${otherCount}${otherRunning > 0 ? `, ${otherRunning} running` : ""}`}>
+                  <Indicator disabled={otherRunning === 0} size={7} offset={5} processing color="indigo">
+                    <ActionIcon
+                      variant={page === "others" ? "light" : "subtle"}
+                      color="gray"
+                      onClick={() => setPage("others")}
+                      aria-label="Other reviews"
+                    >
+                      <IconFolders size={17} />
+                    </ActionIcon>
+                  </Indicator>
+                </Tooltip>
+              )}
+            </>
+          )}
           <Tooltip label={reviewPaneOpen ? "Hide your review" : "Your review: summary, comments, submit"}>
             <ActionIcon
               variant={reviewPaneOpen ? "light" : "subtle"}
@@ -1010,6 +1075,39 @@ export function App() {
           </Tooltip>
         </Group>
       </header>
+
+      {page === "others" && (
+        <OtherReviewsPage
+          jobs={ai.jobs}
+          reviewers={reviewers.reviewers}
+          selected={othersSelected}
+          onSelect={setOthersSelected}
+          onStart={ai.startTarget}
+          onCancel={(id) => void ai.cancel(id).catch(() => {})}
+          onRemove={(id) => void ai.remove(id).catch(() => {})}
+          ask={ai.ask}
+          question={ai.question}
+          stopChat={(id) => void ai.stopChat(id).catch(() => {})}
+          listed={(job) => findInLists(job) !== undefined}
+          openInList={openInLists}
+          onNew={() => setNewReviewOpen(true)}
+          onManageReviewers={() => openSettings("reviewers")}
+          onClose={() => setPage(null)}
+        />
+      )}
+
+      {ai.available && (
+        <NewReviewDialog
+          opened={newReviewOpen}
+          onClose={() => setNewReviewOpen(false)}
+          reviewers={reviewers.reviewers}
+          onStart={ai.startTarget}
+          onStarted={(started) => {
+            const first = started[0];
+            if (first) openRef.current(first);
+          }}
+        />
+      )}
 
       {page === "settings" && (
         <SettingsPage

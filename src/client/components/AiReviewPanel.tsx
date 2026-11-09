@@ -25,7 +25,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { describeTarget, isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { useReviewDetail } from "../hooks/useLocalReviews.ts";
 import { relativeTime } from "../time.ts";
@@ -38,7 +38,11 @@ import { ReviewerIcon } from "./ReviewerIcon.tsx";
 import { VerdictBlock } from "./Verdict.tsx";
 
 interface Props {
-  pr: PullRequest;
+  /**
+   * The pull request it's of, as listed; null for a diff, a repository, or a
+   * pull request in none of your lists — whose points can't go into a review here.
+   */
+  pr: PullRequest | null;
   job: AiReviewSummary;
   /** Run this reviewer again. */
   onStart: () => void;
@@ -95,7 +99,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
           <IconRobot size={40} color="var(--mantine-color-gray-5)" />
           <Text fw={600}>Review cancelled</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Checks out #{pr.number} into its own worktree and has Claude Code review it as{" "}
+            Checks out {describeTarget(job)} into its own worktree and has Claude Code review it as{" "}
             {job.reviewerName}.
           </Text>
           <Button leftSection={<IconRobot size={16} />} onClick={onStart}>
@@ -107,7 +111,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
   }
 
   const status = STATUS[job.status];
-  const stale = job.status === "done" && job.headSha !== pr.headSha;
+  const stale = pr !== null && job.status === "done" && job.headSha !== pr.headSha;
   const activity = detail?.activity ?? [];
   // Its session goes on in its checkout; once that's removed, it can't.
   const ask = job.status === "done" && detail?.sessionId && detail.worktreePath ? onAsk : undefined;
@@ -200,7 +204,7 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
           <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />} p="xs">
             <Text size="xs">
               This review is of {job.headSha.slice(0, 7)}; the pull request is now at{" "}
-              {pr.headSha.slice(0, 7)}. Re-run to review the new commits.
+              {pr?.headSha.slice(0, 7)}. Re-run to review the new commits.
             </Text>
           </Alert>
         )}

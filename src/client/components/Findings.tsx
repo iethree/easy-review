@@ -15,7 +15,8 @@ const SEVERITY: Record<FindingSeverity, { color: string; label: string }> = {
 };
 
 interface Props {
-  pr: PullRequest;
+  /** Null for a review that isn't of a pull request in your lists: then nothing can be added. */
+  pr: PullRequest | null;
   review: { id: string; headSha: string };
   findings: Finding[];
   /** Something went into the review: show it. */
@@ -30,15 +31,15 @@ interface Props {
  * author can apply — when it can, and in the summary when not.
  */
 export function Findings({ pr, review, findings, onAdded, onAsk }: Props) {
-  const added = useAdded(pr.id);
+  const added = useAdded(pr?.id);
   const isAdded = (i: number) => added.has(findingKey(review.id, i));
   const remaining = findings.map((_, i) => i).filter((i) => !isAdded(i));
 
-  const entry = peek(pr);
+  const entry = pr ? peek(pr) : undefined;
   const diff = entry?.status === "ready" ? entry.data.diff : null;
   /** What the + will do with it, for its tooltip. */
   const destination = (finding: Finding) => {
-    const place = placeFinding(finding, diff, review.headSha, pr.headSha);
+    const place = placeFinding(finding, diff, review.headSha, pr?.headSha ?? review.headSha);
     return place.kind === "line"
       ? `Comment on ${place.path.split("/").pop()}:${place.startLine ? `${place.startLine}–` : ""}${place.line}`
       : "Add to summary";
@@ -47,7 +48,7 @@ export function Findings({ pr, review, findings, onAdded, onAsk }: Props) {
   const add = (indexes: number[]) => {
     for (const i of indexes) {
       const finding = findings[i];
-      if (finding) addFinding(pr, review, finding, i, diff);
+      if (finding && pr) addFinding(pr, review, finding, i, diff);
     }
     onAdded();
   };
@@ -58,7 +59,7 @@ export function Findings({ pr, review, findings, onAdded, onAsk }: Props) {
         <Text size="xs" fw={700} tt="uppercase" c="dimmed" style={{ letterSpacing: 0.4 }}>
           Findings · {findings.length}
         </Text>
-        {remaining.length > 1 && (
+        {pr && remaining.length > 1 && (
           <Button size="compact-xs" variant="subtle" leftSection={<IconPlus size={12} />} onClick={() => add(remaining)}>
             Add all to review
           </Button>
@@ -72,7 +73,7 @@ export function Findings({ pr, review, findings, onAdded, onAsk }: Props) {
           // A section per point; its action shows on hover or focus, so the
           // list reads as a review rather than a wall of buttons.
           <section key={findingKey(review.id, i)} className="er-finding" data-added={done} aria-label={finding.title}>
-            <Group gap={6} wrap="nowrap" pr={onAsk ? 60 : 32}>
+            <Group gap={6} wrap="nowrap" pr={(onAsk ? 28 : 0) + (pr ? 32 : 0)}>
               <Badge size="xs" variant="light" color={severity.color} style={{ flex: "none" }}>
                 {severity.label}
               </Badge>
@@ -101,7 +102,7 @@ export function Findings({ pr, review, findings, onAdded, onAsk }: Props) {
             )}
             <Group gap={4} wrap="nowrap" className="er-finding-action">
               {onAsk && <AskButton onAsk={() => onAsk(summaryItem(finding))} />}
-              <AddButton done={done} label={destination(finding)} onAdd={() => add([i])} />
+              {pr && <AddButton done={done} label={destination(finding)} onAdd={() => add([i])} />}
             </Group>
           </section>
         );

@@ -1168,6 +1168,16 @@ body {
   overflow-y: auto;
 }
 
+/* Other reviews: a chat beside the review, when one is open. */
+.er-others[data-chat="true"] {
+  grid-template-columns: 260px minmax(0, 1fr) clamp(300px, 30vw, 420px);
+}
+
+.er-others .er-review-pane {
+  width: auto;
+  margin: 0;
+}
+
 /* Settings › Reviewers: the reviewers beside the one being edited. */
 .er-reviewers {
   display: grid;

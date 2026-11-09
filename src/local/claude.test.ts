@@ -275,3 +275,30 @@ test("the ground rules are a set of their own now, not part of what every review
   expect(reviewSystemPrompt(false)).not.toContain(GROUND_RULES.instructions);
   expect(reviewSystemPrompt(true)).toContain("easy-review-findings");
 });
+
+test("a diff or a whole repository is framed as what it is, not as a pull request", () => {
+  const head = "b".repeat(40);
+  const base = "a".repeat(40);
+  const diff = buildPrompt({ owner: "acme", name: "app", number: 0, title: "main → feature", kind: "diff", baseSha: base, headSha: head }, "Be thorough.");
+  expect(diff.split("\n")[0]).toBe(`Review the changes in acme/app from ${base.slice(0, 10)} to ${head.slice(0, 10)}: "main → feature".`);
+  const repo = buildPrompt({ owner: "acme", name: "app", number: 0, title: "acme/app at main", kind: "repo", baseSha: null, headSha: head }, "Be thorough.");
+  expect(repo.split("\n")[0]).toBe(`Review the whole repository acme/app, at ${head.slice(0, 10)}.`);
+
+  // A pull request's framing is as it always was.
+  expect(reviewSystemPrompt(false, "pr")).toBe(reviewSystemPrompt(false));
+  expect(reviewSystemPrompt(false)).toContain("the pull request's head commit");
+
+  const forDiff = reviewSystemPrompt(false, "diff");
+  expect(forDiff).toContain("not of a pull request");
+  expect(forDiff).toContain(".easy-review/pr.diff");
+  expect(forDiff).toContain(".easy-review/base-commit");
+
+  // No diff and no base to check out beside it.
+  const forRepo = reviewSystemPrompt(false, "repo");
+  expect(forRepo).toContain("there is no diff");
+  expect(forRepo).not.toContain(".easy-review/pr.diff");
+  expect(forRepo).not.toContain("base-commit");
+
+  const chat = buildArgs("q", { model: "", effort: "", readOnly: true }, "session", "repo");
+  expect(chat[chat.indexOf("--append-system-prompt") + 1]).toContain("You have reviewed this repository");
+});

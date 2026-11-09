@@ -6,7 +6,9 @@ import {
   candidateClonePaths,
   git,
   parseGitHubRemote,
+  prepareCommitWorktree,
   prepareWorktree,
+  checkoutRefs,
   prRefs,
   removeWorktree,
   type ResolvedClone,
@@ -185,9 +187,50 @@ test("removing cleans up the checkout and our refs", async () => {
     { owner: "acme", name: "app", number: 7, baseRef: "main", description: "x" },
     () => {},
   );
-  await removeWorktree(clone.path, wt.path, 7, true);
+  await removeWorktree(clone.path, wt.path, checkoutRefs(wt.path).refs);
 
   expect(await exists(wt.path)).toBe(false);
   expect(await sh(clone.path, "for-each-ref", "refs/easy-review")).toBe("");
   expect(await sh(clone.path, "worktree", "list")).not.toContain(wt.path);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Commits that aren't a pull request                                          */
+/* -------------------------------------------------------------------------- */
+
+test("a diff between two commits is checked out at the head, with the diff from the base", async () => {
+  const mainSha = await sh(join(dir, "seed"), "rev-parse", "main");
+  const wt = await prepareCommitWorktree(
+    clone,
+    { owner: "acme", name: "app", kind: "diff", baseSha: mainSha, headSha: prSha, description: "# main → feature\n" },
+    () => {},
+  );
+
+  expect(await exists(MARKER())).toBe(false);
+  expect(wt.path.endsWith(`diff-${mainSha.slice(0, 10)}-${prSha.slice(0, 10)}`)).toBe(true);
+  expect(await sh(wt.path, "rev-parse", "HEAD")).toBe(prSha);
+  const diff = await Bun.file(join(wt.path, ".easy-review", "pr.diff")).text();
+  expect(diff).toContain("+export const answer = 42;");
+  expect(await Bun.file(join(wt.path, ".easy-review", "base-commit")).text()).toBe(`${mainSha}\n`);
+
+  // Its commits are held under refs of its own, which go with it.
+  const { refs } = checkoutRefs(wt.path);
+  expect(await sh(clone.path, "rev-parse", refs[0] ?? "")).toBe(prSha);
+  await removeWorktree(clone.path, wt.path, refs);
+  expect(await exists(wt.path)).toBe(false);
+  expect(await sh(clone.path, "for-each-ref", "refs/easy-review")).toBe("");
+});
+
+test("a whole repository is checked out at its commit, with no diff", async () => {
+  const wt = await prepareCommitWorktree(
+    clone,
+    { owner: "acme", name: "app", kind: "repo", baseSha: null, headSha: prSha, description: "# acme/app at feature\n" },
+    () => {},
+  );
+
+  expect(await sh(wt.path, "rev-parse", "HEAD")).toBe(prSha);
+  expect(await exists(join(wt.path, ".easy-review", "pr.md"))).toBe(true);
+  expect(await exists(join(wt.path, ".easy-review", "pr.diff"))).toBe(false);
+  await removeWorktree(clone.path, wt.path, checkoutRefs(wt.path).refs);
+  expect(await sh(clone.path, "for-each-ref", "refs/easy-review")).toBe("");
 });

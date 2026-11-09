@@ -21,6 +21,9 @@ print({ type: "result", subtype: "success", result: JSON.stringify(args), sessio
 function review(over: Partial<AiReviewJob>): AiReviewJob {
   const at = new Date().toISOString();
   return {
+    kind: "pr",
+    baseSha: null,
+    adhoc: false,
     id: crypto.randomUUID(),
     reviewerId: "general",
     reviewerName: "General",

@@ -13,16 +13,28 @@ import {
   isBusy,
   type AiReviewJob,
   type Checkout,
+  type ReviewKind,
 } from "../shared/aiReview.ts";
 import { localPaths } from "./paths.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** `pr-82101-1488e5ad56` → the pull request number and commit prefix. */
-export function parseCheckoutDir(dirName: string): { number: number; sha: string } | null {
-  const match = /^pr-(\d+)-([0-9a-f]{7,40})$/.exec(dirName);
-  if (!match?.[1] || !match[2]) return null;
-  return { number: Number(match[1]), sha: match[2] };
+/**
+ * A checkout's folder name, read: `pr-82101-1488e5ad56` is a pull request and
+ * its commit; `diff-<base>-<head>` the changes between two commits;
+ * `repo-<commit>` a whole repository. Each commit by its first characters.
+ */
+export function parseCheckoutDir(
+  dirName: string,
+): { kind: ReviewKind; number: number; sha: string; baseSha: string | null } | null {
+  const sha = "([0-9a-f]{7,40})";
+  const pr = new RegExp(`^pr-(\\d+)-${sha}$`).exec(dirName);
+  if (pr?.[1] && pr[2]) return { kind: "pr", number: Number(pr[1]), sha: pr[2], baseSha: null };
+  const diff = new RegExp(`^diff-${sha}-${sha}$`).exec(dirName);
+  if (diff?.[1] && diff[2]) return { kind: "diff", number: 0, sha: diff[2], baseSha: diff[1] };
+  const repo = new RegExp(`^repo-${sha}$`).exec(dirName);
+  if (repo?.[1]) return { kind: "repo", number: 0, sha: repo[1], baseSha: null };
+  return null;
 }
 
 /** Unused for longer than the limit, and not in use right now. */
@@ -91,8 +103,10 @@ export async function scanCheckouts(jobs: Iterable<AiReviewJob>): Promise<Checko
           path,
           owner: latest?.owner ?? owner,
           name: latest?.name ?? name,
+          kind: parsed.kind,
           number: parsed.number,
           sha: parsed.sha,
+          baseSha: parsed.baseSha,
           title: latest?.title ?? null,
           lastUsedAt: latest ? usedAt(latest) : (changed as NonNullable<typeof changed>).mtime.toISOString(),
           inUse: related.some(isBusy),

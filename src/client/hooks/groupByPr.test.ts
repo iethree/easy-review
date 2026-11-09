@@ -6,6 +6,9 @@ let n = 0;
 function job(over: Partial<AiReviewSummary>): AiReviewSummary {
   const at = `2026-10-26T10:00:${String(n++).padStart(2, "0")}Z`;
   return {
+    kind: "pr",
+    baseSha: null,
+    adhoc: false,
     id: `job-${n}`,
     reviewerId: "general",
     reviewerName: "General",
