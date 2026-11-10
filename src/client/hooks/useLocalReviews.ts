@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   isActive,
   isBusy,
-  prKey,
+  reviewKey,
   type AiReviewConfig,
   type AiReviewJob,
   type AiReviewSummary,
@@ -184,10 +184,8 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
  * is, then one that failed, then the latest.
  */
 export function groupByPr(jobs: readonly AiReviewSummary[]) {
-  return groupReviews(
-    jobs.filter((job) => job.kind === "pr"),
-    prKey,
-  );
+  // A pull request's under its prKey; a diff's or a repository's under what it's of (see rowKey).
+  return groupReviews(jobs, reviewKey);
 }
 
 /** As groupByPr, for whatever the key groups by — what reviews are of, for one. */

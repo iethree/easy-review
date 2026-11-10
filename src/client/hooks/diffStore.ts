@@ -18,7 +18,9 @@ export type DiffEntry =
 const entries = new Map<string, DiffEntry>();
 const listeners = new Map<string, Set<() => void>>();
 
-export function diffKey(pr: Pick<PullRequest, "owner" | "name" | "number" | "headSha">): string {
+export function diffKey(pr: Pick<PullRequest, "owner" | "name" | "number" | "headSha" | "target">): string {
+  // A review of a diff is of two commits, not a number.
+  if (pr.target?.baseSha) return `${pr.owner}/${pr.name}@${pr.target.baseSha}..${pr.headSha}`;
   return `${pr.owner}/${pr.name}#${pr.number}@${pr.headSha}`;
 }
 
@@ -52,6 +54,7 @@ async function load(pr: PullRequest): Promise<void> {
     number: String(pr.number),
     sha: pr.headSha,
   });
+  if (pr.target?.baseSha) params.set("base", pr.target.baseSha);
 
   try {
     const res = await fetch(`/api/diff?${params}`);
@@ -77,6 +80,8 @@ function settled(pr: PullRequest): boolean {
 
 /** Fetches a PR's diff, unless it's already here or on its way. */
 export function requestDiff(pr: PullRequest): void {
+  // A whole repository has no diff to fetch.
+  if (pr.target && !pr.target.baseSha) return;
   if (!settled(pr)) void load(pr);
 }
 

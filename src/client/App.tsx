@@ -2,7 +2,6 @@ import {
   ActionIcon,
   Badge,
   Group,
-  Indicator,
   Tabs,
   Text,
   Title,
@@ -17,7 +16,6 @@ import {
   IconHistory,
   IconInbox,
   IconClipboardText,
-  IconFolders,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconPlus,
@@ -25,7 +23,7 @@ import {
   IconUser,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { describeTarget, isActive, prKey, reviewKey, type AiReviewSummary } from "../shared/aiReview.ts";
+import { describeTarget, prKey, reviewKey, type AiReviewSummary } from "../shared/aiReview.ts";
 import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { leadingEmoji } from "../shared/approval.ts";
 import { matchesQuery, parseQuery, upsertToken } from "../shared/filter.ts";
@@ -35,7 +33,6 @@ import { notifyDesktop, useDesktopCommands, useNotificationClicks } from "./desk
 import { getDrafts, removeDrafts, reviewCommit } from "./drafts.ts";
 import { ListFilter, type SortKey } from "./components/ListFilter.tsx";
 import { NewReviewDialog } from "./components/NewReviewDialog.tsx";
-import { OtherReviewsPage } from "./components/OtherReviewsPage.tsx";
 import { PreviewPane, type AiControls, type PreviewTab } from "./components/PreviewPane.tsx";
 import { QueueList } from "./components/QueueList.tsx";
 import { ReviewerLooksContext } from "./components/ReviewerIcon.tsx";
@@ -45,6 +42,7 @@ import { ReviewedList } from "./components/ReviewedList.tsx";
 import { SettingsPage, type SettingsSection } from "./components/SettingsPage.tsx";
 import { ReviewPaneHandle, SplitView, type SplitMode } from "./components/SplitView.tsx";
 import { requestDiff } from "./hooks/diffStore.ts";
+import { useAskedPulls } from "./hooks/useAskedPulls.ts";
 import { useLocalReviews } from "./hooks/useLocalReviews.ts";
 import { useReviewed } from "./hooks/useReviewed.ts";
 import { useMine } from "./hooks/useMine.ts";
@@ -57,6 +55,7 @@ import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
 import { resolveTab, reviewTab, tabOrder } from "./previewTabs.ts";
 import { isReviewed } from "./reviewMeta.ts";
+import { rowKey, targetRows } from "./reviewRows.ts";
 import { clearReRequested, reviewEvents, type SessionReviews } from "./sessionReviews.ts";
 
 type Tab = "queue" | "reviewed" | "hidden" | "mine";
@@ -85,7 +84,7 @@ function filterAndSort(
         isDraft: pr.isDraft,
         ciFailed: pr.ci.failed,
         reviewedByMe: reviewed[pr.id] === "APPROVE",
-        aiReviewed: aiReviewed.has(prKey(pr)),
+        aiReviewed: aiReviewed.has(rowKey(pr)),
       },
       parsed,
     ),
@@ -132,10 +131,9 @@ export function App() {
   /** Which pane has the keyboard: `a` and `d` move it. */
   const [focusedPane, setFocusedPane] = useState<Pane>("list");
   /** Settings, as a page in place of the lists; and which of its sections. */
-  const [page, setPage] = useState<"settings" | "others" | null>(null);
-  /** New review's dialog; and what's open on the page of the reviews it starts. */
+  const [page, setPage] = useState<"settings" | null>(null);
+  /** New review: any pull request, diff or repository, for Claude to review. */
   const [newReviewOpen, setNewReviewOpen] = useState(false);
-  const [othersSelected, setOthersSelected] = useState<{ key: string; reviewerId: string | null } | null>(null);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("queue");
   const openSettings = useCallback((section?: SettingsSection) => {
     if (section) setSettingsSection(section);
@@ -201,16 +199,21 @@ export function App() {
   /* Lists                                                                  */
   /* ---------------------------------------------------------------------- */
 
-  const allPrs = useMemo(() => data?.pullRequests ?? [], [data]);
-  // The queue is everything GitHub says needs you, minus what you've hidden.
-  const { shown: prs, hidden: hiddenPrs } = useMemo(
-    () => splitHidden(allPrs, hidden),
-    [allPrs, hidden],
-  );
+  // The queue is everything GitHub says needs you, and the pull requests you
+  // asked Claude to review by number, minus what you've hidden — and then the
+  // diffs and repositories you asked it to review: a list of reviews, not
+  // only of review requests.
+  const requested = useMemo(() => data?.pullRequests ?? [], [data]);
+  const requestedKeys = useMemo(() => new Set(requested.map(prKey)), [requested]);
+  const askedPulls = useAskedPulls(ai.jobs, requestedKeys);
+  const allPrs = useMemo(() => [...requested, ...askedPulls], [requested, askedPulls]);
+  const targets = useMemo(() => targetRows(ai.jobs), [ai.jobs]);
+  const { shown, hidden: hiddenPrs } = useMemo(() => splitHidden(allPrs, hidden), [allPrs, hidden]);
+  const prs = useMemo(() => (targets.length > 0 ? [...shown, ...targets] : shown), [shown, targets]);
   const parsed = useMemo(() => parseQuery(query), [query]);
-  /** Pull requests a Claude review has finished for, by prKey: what `is:ai-reviewed` keeps. */
+  /** Rows a Claude review has finished for, by rowKey: what `is:ai-reviewed` keeps. */
   const aiReviewed = useMemo(
-    () => new Set(ai.jobs.filter((job) => job.kind === "pr" && job.status === "done").map(prKey)),
+    () => new Set(ai.jobs.filter((job) => job.status === "done").map(reviewKey)),
     [ai.jobs],
   );
 
@@ -235,7 +238,7 @@ export function App() {
           isDraft: pr.isDraft,
           ciFailed: pr.ci.failed,
             reviewedByMe: true,
-          aiReviewed: aiReviewed.has(prKey(pr)),
+          aiReviewed: aiReviewed.has(rowKey(pr)),
         },
         parsedHistory,
       );
@@ -282,7 +285,9 @@ export function App() {
   const selectedKey = selected?.id ?? null;
 
   // A pull request that has been merged or closed can't be reviewed again.
-  const canReviewSelected = selected !== null && (!isReviewed(selected) || selected.state === "OPEN");
+  // A diff or a repository has no pull request to approve, comment on or hide.
+  const canReviewSelected =
+    selected !== null && !selected.target && (!isReviewed(selected) || selected.state === "OPEN");
 
   const changesOpen = changesFor !== null && changesFor === selectedKey;
   const approveOpen = approveFor !== null && approveFor === selectedKey;
@@ -356,7 +361,7 @@ export function App() {
   /** The review the chat is about — only while its pull request is the one on screen. */
   const chatJob =
     side !== null && typeof side === "object" && selected
-      ? ai.jobs.find((job) => job.id === side.jobId && prKey(job) === prKey(selected))
+      ? ai.jobs.find((job) => job.id === side.jobId && reviewKey(job) === rowKey(selected))
       : undefined;
   // Moving on to another pull request, or deleting the review, closes it.
   const chatOrphaned = side !== null && typeof side === "object" && !chatJob;
@@ -381,17 +386,10 @@ export function App() {
   useEffect(() => {
     const job = openOnLoad ? ai.jobs.find((j) => j.id === openOnLoad) : undefined;
     if (job && openRef.current(job)) setOpenOnLoad(null);
-  }, [openOnLoad, ai.jobs, data, mine.data, history.pullRequests]);
+  }, [openOnLoad, ai.jobs, prs, mine.data, history.pullRequests]);
 
   const reviewers = useReviewers(ai.supported);
-  /** The reviews on the page of those from New review: how many things, and how many still running. */
-  const { otherCount, otherRunning } = useMemo(() => {
-    const others = ai.jobs.filter((j) => j.kind !== "pr" || j.adhoc);
-    return {
-      otherCount: new Set(others.map(reviewKey)).size,
-      otherRunning: others.filter((j) => isActive(j.status)).length,
-    };
-  }, [ai.jobs]);
+
   const reviewerIds = useMemo(() => new Set(reviewers.reviewers.map((r) => r.id)), [reviewers.reviewers]);
   // Each pull request's reviews — its tabs, the badges on its row — in your
   // order of reviewers, as set in Settings.
@@ -404,11 +402,31 @@ export function App() {
     return sorted;
   }, [ai.reviewsByPr, reviewers.reviewers]);
 
+  /**
+   * Starts reviewers on a row: a pull request; one asked for by number, which
+   * stays a row of its own; or a diff or a repository, of the same commits.
+   */
+  const startOn = useCallback(
+    async (pr: PullRequest, reviewers: string[]): Promise<void> => {
+      const repo = { owner: pr.owner, name: pr.name, reviewers };
+      if (pr.target?.kind === "diff") {
+        await ai.startTarget({ ...repo, kind: "diff", base: pr.target.baseSha ?? "", head: pr.headSha });
+      } else if (pr.target?.kind === "repo") {
+        await ai.startTarget({ ...repo, kind: "repo", head: pr.headSha });
+      } else if (askedPulls.some((asked) => asked.id === pr.id)) {
+        await ai.startTarget({ ...repo, kind: "pr", number: pr.number, adhoc: true });
+      } else {
+        await ai.start(pr, reviewers);
+      }
+    },
+    [ai.start, ai.startTarget, askedPulls],
+  );
+
   const runAiReview = useCallback(
     (pr: PullRequest, reviewerId: string) => {
       setPickFor(null);
       openAiReview(pr, reviewerId);
-      ai.start(pr, [reviewerId]).catch((err: unknown) =>
+      startOn(pr, [reviewerId]).catch((err: unknown) =>
         notifications.show({
           color: "red",
           title: "Couldn't start the review",
@@ -417,7 +435,7 @@ export function App() {
         }),
       );
     },
-    [openAiReview, ai.start],
+    [openAiReview, startOn],
   );
 
   /** With no reviewer named: open the + over the pull request, to choose one. */
@@ -435,31 +453,16 @@ export function App() {
     [runAiReview, select, reviewers.refresh],
   );
 
-  /** A review started from New review, on the page of those. */
-  const openOther = (job: AiReviewSummary) => {
-    setOthersSelected({ key: reviewKey(job), reviewerId: job.reviewerId });
-    setPage("others");
-  };
-
-  // A pull request's review where its pull request is listed; the others, and
-  // a pull request asked for by number that isn't, on the page of those.
-  openRef.current = (job) => {
-    if (openInLists(job)) return true;
-    if (job.kind !== "pr" || job.adhoc) {
-      openOther(job);
-      return true;
-    }
-    return false;
-  };
+  // Wherever its row is: the lists hold every review, of a pull request or not.
+  openRef.current = (job) => openInLists(job);
 
   /** The list a pull request's review is in, and its row there; undefined when none has it. */
   const findInLists = (job: AiReviewSummary): { where: Tab; target: PullRequest } | undefined => {
-    if (job.kind !== "pr") return undefined;
-    const key = prKey(job);
-    const inQueue = prs.find((pr) => prKey(pr) === key);
-    const inHidden = hiddenPrs.find((pr) => prKey(pr) === key);
-    const inHistory = history.pullRequests.find((pr) => prKey(pr) === key);
-    const inMine = mine.pullRequests.find((pr) => prKey(pr) === key);
+    const key = reviewKey(job);
+    const inQueue = prs.find((pr) => rowKey(pr) === key);
+    const inHidden = hiddenPrs.find((pr) => rowKey(pr) === key);
+    const inHistory = history.pullRequests.find((pr) => rowKey(pr) === key);
+    const inMine = mine.pullRequests.find((pr) => rowKey(pr) === key);
     const target = inQueue ?? inHidden ?? inMine ?? inHistory;
     if (!target) return undefined;
     return { where: inQueue ? "queue" : inHidden ? "hidden" : inMine ? "mine" : "reviewed", target };
@@ -509,7 +512,7 @@ export function App() {
   /** From a row's context menu: start it where it is, without opening it. */
   const quickStart = useCallback(
     (pr: PullRequest, reviewerId: string) => {
-      ai.start(pr, [reviewerId]).catch((err: unknown) =>
+      startOn(pr, [reviewerId]).catch((err: unknown) =>
         notifications.show({
           color: "red",
           title: "Couldn't start the review",
@@ -518,7 +521,7 @@ export function App() {
         }),
       );
     },
-    [ai.start],
+    [startOn],
   );
 
   const queueAi = useMemo(
@@ -721,8 +724,9 @@ export function App() {
           previewScrollRef.current?.scrollBy({ top: action.direction * 80 });
           return;
         case "cycleTab": {
-          const reviews = (ai.available && selected && reviewsByPr.get(prKey(selected))) || [];
-          const tabs = tabOrder(reviews);
+          const reviews = (ai.available && selected && reviewsByPr.get(rowKey(selected))) || [];
+          // A whole repository has no diff.
+          const tabs = tabOrder(reviews).filter((t) => t !== "diff" || !selected?.target || selected.target.baseSha);
           setPreviewTab((t) => {
             const i = Math.max(tabs.indexOf(resolveTab(t, reviews).tab), 0);
             return tabs[(i + action.direction + tabs.length) % tabs.length] ?? "diff";
@@ -746,9 +750,12 @@ export function App() {
           // Flip between Claude's review and the diff — or, with none yet,
           // choose a reviewer from the +.
           if (!ai.available || !selected) return;
-          const job = ai.byPr.get(prKey(selected));
+          const job = ai.byPr.get(rowKey(selected));
           if (!job) startAiReview(selected);
-          else setPreviewTab((t) => (t.startsWith("review:") ? "diff" : reviewTab(job.reviewerId)));
+          else {
+            const back = selected.target && !selected.target.baseSha ? "description" : "diff";
+            setPreviewTab((t) => (t.startsWith("review:") ? back : reviewTab(job.reviewerId)));
+          }
           if (narrow) setExpanded(true);
           return;
         }
@@ -776,7 +783,7 @@ export function App() {
           return;
         case "toggleHidden":
           // Only the queue and Hidden hold hideable pull requests.
-          if (selected && (tab === "queue" || tab === "hidden")) toggleHidden(selected);
+          if (selected && !selected.target && (tab === "queue" || tab === "hidden")) toggleHidden(selected);
           return;
         case "help":
           openSettings("shortcuts");
@@ -1029,27 +1036,11 @@ export function App() {
 
         <Group gap={6} wrap="nowrap">
           {ai.available && (
-            <>
-              <Tooltip label="New review: any pull request, diff or repository">
-                <ActionIcon variant="subtle" color="gray" onClick={() => setNewReviewOpen(true)} aria-label="New review">
-                  <IconPlus size={17} />
-                </ActionIcon>
-              </Tooltip>
-              {otherCount > 0 && (
-                <Tooltip label={`Other reviews: ${otherCount}${otherRunning > 0 ? `, ${otherRunning} running` : ""}`}>
-                  <Indicator disabled={otherRunning === 0} size={7} offset={5} processing color="indigo">
-                    <ActionIcon
-                      variant={page === "others" ? "light" : "subtle"}
-                      color="gray"
-                      onClick={() => setPage("others")}
-                      aria-label="Other reviews"
-                    >
-                      <IconFolders size={17} />
-                    </ActionIcon>
-                  </Indicator>
-                </Tooltip>
-              )}
-            </>
+            <Tooltip label="New review: any pull request, diff or repository">
+              <ActionIcon variant="subtle" color="gray" onClick={() => setNewReviewOpen(true)} aria-label="New review">
+                <IconPlus size={17} />
+              </ActionIcon>
+            </Tooltip>
           )}
           <Tooltip label={reviewPaneOpen ? "Hide your review" : "Your review: summary, comments, submit"}>
             <ActionIcon
@@ -1076,26 +1067,6 @@ export function App() {
         </Group>
       </header>
 
-      {page === "others" && (
-        <OtherReviewsPage
-          jobs={ai.jobs}
-          reviewers={reviewers.reviewers}
-          selected={othersSelected}
-          onSelect={setOthersSelected}
-          onStart={ai.startTarget}
-          onCancel={(id) => void ai.cancel(id).catch(() => {})}
-          onRemove={(id) => void ai.remove(id).catch(() => {})}
-          ask={ai.ask}
-          question={ai.question}
-          stopChat={(id) => void ai.stopChat(id).catch(() => {})}
-          listed={(job) => findInLists(job) !== undefined}
-          openInList={openInLists}
-          onNew={() => setNewReviewOpen(true)}
-          onManageReviewers={() => openSettings("reviewers")}
-          onClose={() => setPage(null)}
-        />
-      )}
-
       {ai.available && (
         <NewReviewDialog
           opened={newReviewOpen}
@@ -1103,8 +1074,9 @@ export function App() {
           reviewers={reviewers.reviewers}
           onStart={ai.startTarget}
           onStarted={(started) => {
+            // Its row may not be here yet: a pull request asked for by number is fetched first.
             const first = started[0];
-            if (first) openRef.current(first);
+            if (first && !openRef.current(first)) setOpenOnLoad(first.id);
           }}
         />
       )}
@@ -1170,7 +1142,7 @@ export function App() {
           {reviewPaneOpen && (
             <ReviewPane
               key={selected?.id ?? "none"}
-              pr={selected}
+              pr={selected?.target ? null : selected}
               ownPr={selected !== null && isOwn(selected)}
               reviewed={selected ? reviewed[selected.id] : undefined}
               onSubmit={handleSubmit}
@@ -1180,7 +1152,7 @@ export function App() {
           {chatJob && selected && side !== null && typeof side === "object" && (
             <ChatPane
               key={chatJob.id}
-              pr={selected}
+              pr={selected.target ? null : selected}
               job={chatJob}
               request={side}
               onAsk={ai.ask}

@@ -30,6 +30,9 @@ const SIGN_IN =
   "Not signed in to GitHub. Run `gh auth login` in a terminal — easy-review signs in with the GitHub CLI (https://cli.github.com).";
 
 const VALID_EVENTS = new Set(["APPROVE", "REQUEST_CHANGES", "COMMENT"]);
+const NAME_PART = /^[\w.-]+$/;
+/** A whole commit id: what a comparison is asked for by, so nothing else reaches GitHub's URL. */
+const SHA = /^[0-9a-f]{40}$/;
 /** Generous for a human, and a bound on what one request can ask GitHub to do. */
 const MAX_REVIEW_COMMENTS = 200;
 
@@ -80,6 +83,16 @@ export function createApi({ getToken }: ApiOptions) {
       }
       if (path === "/api/diff" && request.method === "GET") {
         return await handleDiff(gh, url);
+      }
+      if (path === "/api/pull" && request.method === "GET") {
+        const owner = url.searchParams.get("owner") ?? "";
+        const name = url.searchParams.get("name") ?? "";
+        const number = Number(url.searchParams.get("number"));
+        if (!NAME_PART.test(owner) || !NAME_PART.test(name) || !Number.isInteger(number) || number <= 0) {
+          return fail("owner, name and a positive number are required", 400);
+        }
+        const pr = await gh.getPullRequest(owner, name, number);
+        return pr ? json(pr) : fail(`${owner}/${name} has no pull request #${number}`, 404);
       }
       if (path === "/api/conversation" && request.method === "GET") {
         return await handleConversation(gh, url);
@@ -137,18 +150,22 @@ export function createApi({ getToken }: ApiOptions) {
     const sha = url.searchParams.get("sha") ?? "head";
     const number = Number(numberRaw);
 
-    if (!owner || !name || !numberRaw || !Number.isInteger(number) || number <= 0) {
+    // A comparison of two commits, for a review of a diff, rather than a pull request's.
+    const base = url.searchParams.get("base");
+    const comparing = base !== null && SHA.test(base) && SHA.test(sha) && !!owner && !!name;
+    if (!comparing && (!owner || !name || !numberRaw || !Number.isInteger(number) || number <= 0)) {
       return fail("owner, name and a positive number are required", 400);
     }
+    if (!owner || !name) return fail("owner and name are required", 400);
 
-    const key = `${owner}/${name}#${number}@${sha}`;
+    const key = comparing ? `${owner}/${name}@${base}..${sha}` : `${owner}/${name}#${number}@${sha}`;
     const cached = diffCache.get(key);
     if (cached) return json(cached);
 
     let pending = inFlight.get(key);
     if (!pending) {
       pending = (async () => {
-        const raw = await gh.fetchDiff(owner, name, number);
+        const raw = comparing ? await gh.fetchCompareDiff(owner, name, base, sha) : await gh.fetchDiff(owner, name, number);
         const result: DiffResponse = { key, diff: parseDiff(raw), bytes: raw.length };
         diffCache.set(key, result);
         return result;

@@ -123,6 +123,20 @@ const REVIEWS_QUERY = /* GraphQL */ `
   }
 `;
 
+/** One pull request, by number, as a row of the list: for one asked for that isn't in any. */
+const PULL_QUERY = /* GraphQL */ `
+  ${PR_CORE}
+  ${PR_CHECKS}
+  query Pull($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      pullRequest(number: $number) {
+        ...PrCore
+        ...PrChecks
+      }
+    }
+  }
+`;
+
 /**
  * Your own open pull requests: the ones you wrote, and the ones assigned to
  * you. GitHub search has no OR across qualifiers, so it's two searches in one
@@ -421,6 +435,16 @@ export class GitHubClient {
     };
   }
 
+  /** One pull request, as the lists have them; null when there's no such pull request. */
+  async getPullRequest(owner: string, name: string, number: number): Promise<PullRequest | null> {
+    const data = await this.graphql<{ repository?: { pullRequest?: RawPullRequest | null } | null }>(PULL_QUERY, {
+      owner,
+      name,
+      number,
+    });
+    return normalizePullRequest(data.repository?.pullRequest ?? null);
+  }
+
   /** Your open pull requests — written by you or assigned to you — newest activity first. */
   async listMine(limit: number): Promise<ReviewsResponse> {
     const [authored, assigned] = mineSearchQueries();
@@ -614,6 +638,19 @@ export class GitHubClient {
       if (res.status === 406 && text.includes("too_large")) {
         throw new GitHubError(TOO_LARGE_MESSAGE, 413);
       }
+      throw new GitHubError(`Could not load diff (${res.status}): ${text.slice(0, 200)}`, res.status);
+    }
+    return res.text();
+  }
+
+  /** The raw unified diff between two commits, as GitHub's compare view has it (from their merge base). */
+  async fetchCompareDiff(owner: string, name: string, base: string, head: string): Promise<string> {
+    const res = await fetch(`${REST_URL}/repos/${owner}/${name}/compare/${base}...${head}`, {
+      headers: this.headers({ accept: "application/vnd.github.v3.diff" }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      if (res.status === 406 && text.includes("too_large")) throw new GitHubError(TOO_LARGE_MESSAGE, 413);
       throw new GitHubError(`Could not load diff (${res.status}): ${text.slice(0, 200)}`, res.status);
     }
     return res.text();
