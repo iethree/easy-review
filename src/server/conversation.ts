@@ -8,6 +8,9 @@ import type {
   Conversation,
   ConversationComment,
   Person,
+  PrDetails,
+  PrLabel,
+  PrReviewer,
   ReviewSummaryState,
   TimelineItem,
 } from "../shared/types.ts";
@@ -19,6 +22,27 @@ export const CONVERSATION_QUERY = /* GraphQL */ `
   query Conversation($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) {
       pullRequest(number: $number) {
+        author { login }
+        reviewRequests(first: 50) {
+          nodes {
+            requestedReviewer {
+              __typename
+              ... on User { login avatarUrl(size: 48) }
+              ... on Bot { login avatarUrl(size: 48) }
+              ... on Mannequin { login avatarUrl(size: 48) }
+              ... on Team { name avatarUrl(size: 48) }
+            }
+          }
+        }
+        latestReviews(first: 50) {
+          nodes { state ${AUTHOR} }
+        }
+        assignees(first: 20) {
+          nodes { login avatarUrl(size: 48) }
+        }
+        labels(first: 30) {
+          nodes { name color description }
+        }
         comments(first: 100) {
           totalCount
           nodes { ${COMMENT} }
@@ -89,7 +113,19 @@ interface Page<T> {
   nodes?: (T | null)[] | null;
 }
 
+interface RawRequestedReviewer {
+  __typename?: string;
+  login?: string;
+  name?: string;
+  avatarUrl?: string | null;
+}
+
 export interface RawConversation {
+  author?: { login?: string } | null;
+  reviewRequests?: Page<{ requestedReviewer?: RawRequestedReviewer | null }> | null;
+  latestReviews?: Page<{ state?: string; author?: RawAuthor | null }> | null;
+  assignees?: Page<{ login?: string; avatarUrl?: string | null }> | null;
+  labels?: Page<{ name?: string; color?: string; description?: string | null }> | null;
   comments?: Page<RawComment> | null;
   reviews?: Page<RawReview> | null;
   reviewThreads?: Page<RawThread> | null;
@@ -176,5 +212,50 @@ export function buildConversation(raw: RawConversation | null | undefined): Conv
   return {
     items,
     truncated: more(raw?.comments) || more(raw?.reviews) || more(raw?.reviewThreads),
+    details: buildDetails(raw),
   };
+}
+
+/**
+ * The sidebar: who is asked to review and where each reviewer stands, who
+ * it's assigned to, and its labels. Someone asked again after reviewing is
+ * waiting on, as GitHub shows them; the author's own comments aren't a review.
+ */
+export function buildDetails(raw: RawConversation | null | undefined): PrDetails {
+  const author = raw?.author?.login?.toLowerCase();
+  const byName = new Map<string, PrReviewer>();
+
+  for (const review of raw?.latestReviews?.nodes ?? []) {
+    const login = review?.author?.login;
+    if (!login || login.toLowerCase() === author || !SHOWN_REVIEWS.has(review.state ?? "")) continue;
+    byName.set(login.toLowerCase(), {
+      name: login,
+      avatarUrl: review.author?.avatarUrl ?? null,
+      isTeam: false,
+      state: review.state as ReviewSummaryState,
+    });
+  }
+  for (const request of raw?.reviewRequests?.nodes ?? []) {
+    const reviewer = request?.requestedReviewer;
+    const isTeam = reviewer?.__typename === "Team";
+    const name = isTeam ? reviewer?.name : reviewer?.login;
+    if (!name) continue;
+    byName.set(`${isTeam ? "team:" : ""}${name.toLowerCase()}`, {
+      name,
+      avatarUrl: reviewer?.avatarUrl ?? null,
+      isTeam,
+      state: "REQUESTED",
+    });
+  }
+
+  const reviewers = [...byName.values()].sort(
+    (a, b) => Number(a.isTeam) - Number(b.isTeam) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
+  const assignees: Person[] = (raw?.assignees?.nodes ?? []).flatMap((node) =>
+    node?.login ? [{ login: node.login, avatarUrl: node.avatarUrl ?? null, isBot: false }] : [],
+  );
+  const labels: PrLabel[] = (raw?.labels?.nodes ?? []).flatMap((node) =>
+    node?.name ? [{ name: node.name, color: node.color ?? "888888", description: node.description || null }] : [],
+  );
+  return { reviewers, assignees, labels };
 }

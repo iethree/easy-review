@@ -1766,3 +1766,54 @@ body {
   margin-bottom: 0;
 }
 
+
+/* The Description tab: the description and conversation, and beside them GitHub's sidebar. */
+.er-desc {
+  container-type: inline-size;
+}
+
+.er-desc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.er-desc-main {
+  min-width: 0;
+}
+
+/* Narrow: the card goes first, its sections side by side. */
+.er-desc-aside {
+  order: -1;
+}
+
+.er-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.er-details-section {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+@container (min-width: 720px) {
+  .er-desc-grid {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
+
+  .er-desc-aside {
+    order: 0;
+    align-self: start;
+  }
+
+  .er-details {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .er-details-section {
+    flex: none;
+  }
+}
