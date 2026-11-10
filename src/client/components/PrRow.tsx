@@ -1,13 +1,21 @@
-import { ActionIcon, Avatar, Badge, Group, ThemeIcon, Tooltip } from "@mantine/core";
+import { ActionIcon, Avatar, Badge, Group, HoverCard, Stack, Text, ThemeIcon, Tooltip } from "@mantine/core";
 import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
-import { memo } from "react";
-import { isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { createContext, type ReactNode, memo, useContext } from "react";
+import { isActive, prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { AiVerdict } from "../../shared/findings.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
+import { reviewStanding } from "../reviewStanding.ts";
 import { relativeTime } from "../time.ts";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
+import { ReviewerIcon } from "./ReviewerIcon.tsx";
 import { VERDICT_LOOK } from "./Verdict.tsx";
+
+/**
+ * Every pull request's reviews, for the card that lists them. Read from
+ * context, not props, so a poll re-renders only an open card, not every row.
+ */
+export const RowReviewsContext = createContext<Map<string, AiReviewSummary[]>>(new Map());
 
 interface Props {
   pr: PullRequest;
@@ -141,7 +149,7 @@ export const PrRow = memo(function PrRow({
       </div>
 
       <Group gap={4} wrap="nowrap">
-        <ReviewCount job={aiJob} count={aiCount} headSha={pr.headSha} verdict={aiVerdict} />
+        <ReviewCount pr={pr} job={aiJob} count={aiCount} verdict={aiVerdict} />
         {/* No approve button here: approving is done from the preview, with the pull request in view. */}
         {onUnhide && (
           <Tooltip label="Unhide (⇧H)">
@@ -165,40 +173,35 @@ export const PrRow = memo(function PrRow({
 });
 
 /**
- * How many Claude reviews the pull request has, coloured by how they stand.
- * Always takes its place, so rows line up whether or not they have any.
- */
-/**
  * The row's Claude reviews: how many, coloured by how the latest is doing.
  * Once they're done, of this commit, and say what they'd do, the verdict's
- * icon in place of the count.
+ * icon in place of the count. Hovering lists each review and how it stands.
+ * Always takes its place, so rows line up whether or not they have any.
  */
 function ReviewCount({
+  pr,
   job,
   count,
-  headSha,
   verdict,
 }: {
+  pr: PullRequest;
   job: AiReviewSummary | undefined;
   count: number;
-  headSha: string;
   verdict: AiVerdict | null;
 }) {
   if (!job || count === 0) return <span className="er-review-count" />;
+  const headSha = pr.headSha;
   const running = isActive(job.status);
   const stale = job.status === "done" && headSha !== "" && job.headSha !== headSha;
   const reviews = `${count} Claude review${count === 1 ? "" : "s"}`;
   if (verdict && job.status === "done" && !stale) {
     const look = VERDICT_LOOK[verdict];
-    const label = `${reviews} — ${look.label.toLowerCase()}`;
     return (
-      <span className="er-review-count">
-        <Tooltip label={label} openDelay={250}>
-          <ThemeIcon size={18} radius="xl" variant="light" color={look.color} aria-label={label}>
-            <look.Icon size={14} />
-          </ThemeIcon>
-        </Tooltip>
-      </span>
+      <ReviewsCard pr={pr} label={look.label}>
+        <ThemeIcon size={18} radius="xl" variant="light" color={look.color} aria-label={`${reviews} — ${look.label.toLowerCase()}`}>
+          <look.Icon size={14} />
+        </ThemeIcon>
+      </ReviewsCard>
     );
   }
   const [color, state] = running
@@ -210,14 +213,70 @@ function ReviewCount({
         : job.status === "cancelled"
           ? ["gray", "cancelled"]
           : ["teal", "ready"];
-  const label = `${reviews} — ${state}`;
+  return (
+    <ReviewsCard pr={pr} label={running ? "Reviewing" : "Claude reviews"}>
+      <Badge size="sm" circle variant="light" color={color} className="er-breathe" data-running={running} aria-label={`${reviews} — ${state}`}>
+        {count}
+      </Badge>
+    </ReviewsCard>
+  );
+}
+
+/** Hovering a row's reviews: each reviewer, and its verdict or where it is — like the checks' card. */
+function ReviewsCard({ pr, label, children }: { pr: PullRequest; label: string; children: ReactNode }) {
   return (
     <span className="er-review-count">
-      <Tooltip label={label} openDelay={250}>
-        <Badge size="sm" circle variant="light" color={color} className="er-breathe" data-running={running} aria-label={label}>
-          {count}
-        </Badge>
-      </Tooltip>
+      <HoverCard width={280} shadow="md" openDelay={180} closeDelay={80} position="bottom-end" withinPortal>
+        <HoverCard.Target>
+          <span style={{ display: "inline-flex", cursor: "default" }}>{children}</span>
+        </HoverCard.Target>
+        <HoverCard.Dropdown>
+          <ReviewsList pr={pr} label={label} />
+        </HoverCard.Dropdown>
+      </HoverCard>
     </span>
+  );
+}
+
+function ReviewsList({ pr, label }: { pr: PullRequest; label: string }) {
+  const reviews = useContext(RowReviewsContext).get(prKey(pr)) ?? [];
+  return (
+    <Stack gap={6}>
+      <Group justify="space-between" wrap="nowrap">
+        <Text size="sm" fw={600}>
+          {label}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {reviews.length} review{reviews.length === 1 ? "" : "s"}
+        </Text>
+      </Group>
+      {reviews.map((r) => {
+        const standing = reviewStanding(r, pr.headSha);
+        const look = standing.kind === "verdict" ? VERDICT_LOOK[standing.verdict] : null;
+        const words = standing.kind === "verdict" ? VERDICT_LOOK[standing.verdict] : standing;
+        const color = `var(--mantine-color-${words.color}-6)`;
+        return (
+          <Group key={r.id} gap={6} wrap="nowrap" justify="space-between">
+            <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+              <ReviewerIcon id={r.reviewerId} fallback="var(--mantine-color-gray-6)" />
+              <Text size="xs" truncate>
+                {r.reviewerName}
+              </Text>
+            </Group>
+            <Group gap={4} wrap="nowrap" style={{ flex: "none", opacity: standing.stale ? 0.55 : 1 }}>
+              {look && <look.Icon size={13} color={color} />}
+              <Text size="xs" c={color} fw={500}>
+                {words.label}
+              </Text>
+            </Group>
+          </Group>
+        );
+      })}
+      {reviews.some((r) => reviewStanding(r, pr.headSha).stale) && (
+        <Text size="10px" c="dimmed" fs="italic">
+          Faded: of an older commit.
+        </Text>
+      )}
+    </Stack>
   );
 }

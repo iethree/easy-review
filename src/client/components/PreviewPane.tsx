@@ -42,6 +42,7 @@ import { FindBar } from "./FindBar.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { PrDescription } from "./PrDescription.tsx";
 import { ReviewActions } from "./ReviewActions.tsx";
+import { TabVerdict } from "./Verdict.tsx";
 
 interface Props {
   pr: PullRequest | null;
@@ -179,7 +180,12 @@ export function PreviewPane(props: Props) {
           </Tabs.Tab>
           )}
           {reviews.map((r) => (
-            <Tabs.Tab key={r.id} value={reviewTab(r.reviewerId)} leftSection={<StatusIcon job={r} />}>
+            <Tabs.Tab
+              key={r.id}
+              value={reviewTab(r.reviewerId)}
+              leftSection={<StatusIcon job={r} />}
+              rightSection={<TabVerdict job={r} headSha={pr.headSha} />}
+            >
               {r.reviewerName}
             </Tabs.Tab>
           ))}

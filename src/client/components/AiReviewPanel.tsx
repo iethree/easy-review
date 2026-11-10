@@ -76,7 +76,7 @@ export function duration(fromIso: string | null, toIso: string | null): string {
 }
 
 /** Re-renders once a second while running, for the elapsed-time counter. */
-function useTick(active: boolean) {
+export function useTick(active: boolean) {
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!active) return;

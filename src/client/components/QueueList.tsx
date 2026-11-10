@@ -4,9 +4,11 @@ import { useState } from "react";
 import { verdictFor, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import { rowKey } from "../reviewRows.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
-import { PrRow } from "./PrRow.tsx";
+import { PrRow, RowReviewsContext } from "./PrRow.tsx";
 import { QuickReviewMenu } from "./QuickReviewMenu.tsx";
 import { LoadingScene, MINE_MESSAGES, QUEUE_MESSAGES } from "./Loading.tsx";
+
+const NO_REVIEWS = new Map<string, AiReviewSummary[]>();
 
 interface Props {
   rows: PullRequest[];
@@ -122,7 +124,7 @@ export function QueueList({
   const showRepo = rows.some((pr) => pr.repo !== rows[0]?.repo);
 
   return (
-    <>
+    <RowReviewsContext.Provider value={ai?.reviewsByPr ?? NO_REVIEWS}>
       <div
         // Right-click a row for its reviewers. One handler for the list, so
         // the rows (memoised) don't each need one.
@@ -189,6 +191,6 @@ export function QueueList({
           </Text>
         )}
       </Group>
-    </>
+    </RowReviewsContext.Provider>
   );
 }
