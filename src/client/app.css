@@ -1817,3 +1817,28 @@ body {
     flex: none;
   }
 }
+
+/* Images in Markdown keep their proportions however narrow the pane. */
+.er-markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.er-zoomable {
+  cursor: zoom-in;
+}
+
+.er-lightbox-body {
+  display: flex;
+  justify-content: center;
+}
+
+.er-lightbox-image {
+  display: block;
+  max-width: min(92vw, 100%);
+  max-height: calc(100vh - 140px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  cursor: zoom-out;
+}
