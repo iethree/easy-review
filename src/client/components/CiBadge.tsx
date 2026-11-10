@@ -1,21 +1,24 @@
-import { Anchor, Group, HoverCard, Loader, Stack, Text, ThemeIcon } from "@mantine/core";
+import { Anchor, Group, HoverCard, Loader, Stack, Text } from "@mantine/core";
 import {
-  IconAlertTriangle,
-  IconCircleCheck,
-  IconCircleX,
-  IconClock,
-  IconPointFilled,
+  type Icon,
+  IconCircleDashed,
+  IconProgress,
+  IconProgressAlert,
+  IconProgressCheck,
+  IconProgressX,
 } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CheckContext, CheckState, PullRequest } from "../../shared/types.ts";
 
-const VISUALS: Record<CheckState, { color: string; Icon: typeof IconCircleCheck; label: string }> = {
-  SUCCESS: { color: "teal", Icon: IconCircleCheck, label: "All checks passed" },
-  FAILURE: { color: "red", Icon: IconCircleX, label: "Checks failed" },
-  ERROR: { color: "orange", Icon: IconAlertTriangle, label: "Checks errored" },
-  PENDING: { color: "yellow", Icon: IconClock, label: "Checks running" },
-  EXPECTED: { color: "yellow", Icon: IconClock, label: "Checks expected" },
-  NONE: { color: "gray", Icon: IconPointFilled, label: "No checks" },
+// The "progress" icons, bare: so checks never look like a review's verdict,
+// which is a filled circle with a check, a cross or a speech bubble.
+const VISUALS: Record<CheckState, { color: string; Icon: Icon; label: string }> = {
+  SUCCESS: { color: "teal", Icon: IconProgressCheck, label: "All checks passed" },
+  FAILURE: { color: "red", Icon: IconProgressX, label: "Checks failed" },
+  ERROR: { color: "orange", Icon: IconProgressAlert, label: "Checks errored" },
+  PENDING: { color: "yellow", Icon: IconProgress, label: "Checks running" },
+  EXPECTED: { color: "yellow", Icon: IconProgress, label: "Checks expected" },
+  NONE: { color: "gray", Icon: IconCircleDashed, label: "No checks" },
 };
 
 /**
@@ -74,15 +77,16 @@ export function CiBadge({ pr }: { pr: PullRequest }) {
   const visual = VISUALS[ci.state] ?? VISUALS.NONE;
   const { Icon } = visual;
 
-  // Lead with whatever needs attention; a green run just shows its size.
-  const summary =
+  // Just a number by the icon, which says what it counts: whatever needs
+  // attention first, and a green run its size. In words for screen readers.
+  const [count, words] =
     ci.total === 0
-      ? "—"
+      ? [null, "No checks"]
       : ci.failed > 0
-        ? `${ci.failed} failing`
+        ? [ci.failed, `${ci.failed} failing`]
         : ci.pending > 0
-          ? `${ci.pending} running`
-          : `${ci.passed} ok`;
+          ? [ci.pending, `${ci.pending} running`]
+          : [ci.passed, `${ci.passed} passed`];
 
   return (
     <HoverCard
@@ -95,13 +99,13 @@ export function CiBadge({ pr }: { pr: PullRequest }) {
       withinPortal
     >
       <HoverCard.Target>
-        <Group gap={5} wrap="nowrap" style={{ cursor: "default" }}>
-          <ThemeIcon size={17} radius="xl" variant="light" color={visual.color}>
-            <Icon size={12} stroke={2.4} />
-          </ThemeIcon>
-          <Text size="xs" c={ci.failed > 0 ? "red.6" : "dimmed"} fw={ci.failed > 0 ? 600 : 400}>
-            {summary}
-          </Text>
+        <Group gap={3} wrap="nowrap" style={{ cursor: "default" }} aria-label={`Checks: ${words}`} role="img">
+          <Icon size={16} stroke={2} color={`var(--mantine-color-${visual.color}-6)`} />
+          {count !== null && (
+            <Text size="xs" c={ci.failed > 0 ? "red.6" : "dimmed"} fw={ci.failed > 0 ? 600 : 400}>
+              {count}
+            </Text>
+          )}
         </Group>
       </HoverCard.Target>
 
