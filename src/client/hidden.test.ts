@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isHidden, neighbourAfterRemoving, parseHidden, splitHidden } from "./hidden.ts";
+import { isHidden, neighbourAfterRemoving, parseHidden, splitHidden, unhideReRequested } from "./hidden.ts";
 
 const pr = (number: number, repo = "metabase/metabase") => {
   const [owner = "", name = ""] = repo.split("/");
@@ -48,4 +48,22 @@ test("after hiding, the selection moves to the next row, or the one before", () 
   expect(neighbourAfterRemoving(list, "id-3")).toBe("id-2");
   expect(neighbourAfterRemoving([pr(1)], "id-1")).toBeNull();
   expect(neighbourAfterRemoving(list, "id-9")).toBeNull();
+});
+
+test("a hidden pull request comes back when your review is asked for again", () => {
+  const hidden = { "metabase/metabase#1": "2026-11-10T10:00:00Z", "metabase/metabase#2": "2026-11-10T10:00:00Z" };
+  const next = unhideReRequested(hidden, [
+    { ...pr(1), reviewRequestedAt: "2026-11-10T11:00:00Z" },
+    { ...pr(2), reviewRequestedAt: "2026-11-10T09:00:00Z" },
+  ]);
+  expect(next).toEqual({ "metabase/metabase#2": "2026-11-10T10:00:00Z" });
+  expect(hidden).toHaveProperty("metabase/metabase#1");
+});
+
+test("a request from before the hide, or none, leaves hidden alone", () => {
+  const hidden = { "metabase/metabase#1": "2026-11-10T10:00:00Z" };
+  expect(unhideReRequested(hidden, [{ ...pr(1), reviewRequestedAt: "2026-11-10T09:59:59Z" }])).toBe(hidden);
+  expect(unhideReRequested(hidden, [{ ...pr(1), reviewRequestedAt: null }, pr(1)])).toBe(hidden);
+  expect(unhideReRequested(hidden, [{ ...pr(1), reviewRequestedAt: "garbage" }])).toBe(hidden);
+  expect(unhideReRequested(hidden, [{ ...pr(3), reviewRequestedAt: "2026-11-10T11:00:00Z" }])).toBe(hidden);
 });

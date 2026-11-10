@@ -59,6 +59,12 @@ export interface PullRequest {
   reviewDecision: ReviewDecision;
   ci: CiStatus;
   /**
+   * When your review was last asked for: of you, or of a team when the queue
+   * includes team requests. Only on the queue's own rows; null when GitHub
+   * has no record of the request.
+   */
+  reviewRequestedAt?: string | null;
+  /**
    * Set on a row that isn't a pull request: Claude's reviews of a diff or a
    * whole repository, listed with the pull requests. `key` is what the reviews
    * are of (see reviewKey); `number` is 0, and there is nothing to approve.

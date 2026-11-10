@@ -44,3 +44,26 @@ export function neighbourAfterRemoving<T extends { id: string }>(list: T[], id: 
   if (index < 0) return null;
   return list[index + 1]?.id ?? list[index - 1]?.id ?? null;
 }
+
+/**
+ * Brings back the hidden pull requests whose review was asked for again
+ * after you hid them: the author wants you to look again, so the queue
+ * should show it. Returns `hidden` itself when nothing changes.
+ */
+export function unhideReRequested(
+  hidden: HiddenMap,
+  prs: readonly { owner: string; name: string; number: number; reviewRequestedAt?: string | null }[],
+): HiddenMap {
+  let next: HiddenMap | null = null;
+  for (const pr of prs) {
+    const key = prKey(pr);
+    const hiddenAt = hidden[key];
+    if (hiddenAt === undefined || !pr.reviewRequestedAt) continue;
+    const requested = Date.parse(pr.reviewRequestedAt);
+    const hid = Date.parse(hiddenAt);
+    if (Number.isNaN(requested) || Number.isNaN(hid) || requested <= hid) continue;
+    next ??= { ...hidden };
+    delete next[key];
+  }
+  return next ?? hidden;
+}

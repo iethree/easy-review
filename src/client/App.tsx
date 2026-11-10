@@ -102,13 +102,13 @@ function filterAndSort(
 export function App() {
   const [tab, setTab] = useState<Tab>("queue");
   const { settings, update, reset } = useSettings();
-  const { data, loading, error, refresh } = useReviews(settings);
+  const { data, kept, loading, error, refresh } = useReviews(settings);
   // The history hook only fetches once its tab has been opened.
   const history = useReviewed(tab === "reviewed");
   const mine = useMine(tab === "mine");
   const { toggleColorScheme } = useMantineColorScheme();
   const narrow = useMediaQuery("(max-width: 900px)");
-  const { hidden, setHiddenFor } = useHidden();
+  const { hidden, setHiddenFor, unhideAskedAgain } = useHidden();
 
   const [query, setQuery] = useState("");
   const [mineQuery, setMineQuery] = useState("");
@@ -157,6 +157,10 @@ export function App() {
   useEffect(() => {
     if (data) setSessionReviews((prev) => clearReRequested(prev, data));
   }, [data]);
+  // A pull request you hid whose review was asked for again since: back in Review.
+  useEffect(() => {
+    if (data) unhideAskedAgain(data.pullRequests);
+  }, [data, unhideAskedAgain]);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
@@ -206,7 +210,9 @@ export function App() {
   // asked Claude to review by number, minus what you've hidden — and then the
   // diffs and repositories you asked it to review: a list of reviews, not
   // only of review requests.
-  const requested = useMemo(() => data?.pullRequests ?? [], [data]);
+  // A background fetch leaves rows that left GitHub's queue in place until you
+  // refresh (`kept`), so the one you're reading doesn't vanish.
+  const requested = useMemo(() => [...(data?.pullRequests ?? []), ...kept], [data, kept]);
   const requestedKeys = useMemo(() => new Set(requested.map(prKey)), [requested]);
   const askedPulls = useAskedPulls(ai.jobs, requestedKeys);
   const allPrs = useMemo(() => [...requested, ...askedPulls], [requested, askedPulls]);

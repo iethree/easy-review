@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { prKey } from "../../shared/aiReview.ts";
-import { parseHidden, type HiddenMap } from "../hidden.ts";
+import { parseHidden, unhideReRequested, type HiddenMap } from "../hidden.ts";
 
 const STORAGE_KEY = "easy-review.hidden.v1";
 
@@ -47,5 +47,10 @@ export function useHidden() {
     [],
   );
 
-  return { hidden, setHiddenFor };
+  /** Unhides those of `prs` whose review was asked for again after you hid them. */
+  const unhideAskedAgain = useCallback((prs: Parameters<typeof unhideReRequested>[1]) => {
+    setHidden((prev) => unhideReRequested(prev, prs));
+  }, []);
+
+  return { hidden, setHiddenFor, unhideAskedAgain };
 }
