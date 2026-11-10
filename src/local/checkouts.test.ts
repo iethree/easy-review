@@ -14,7 +14,15 @@ const DAY = 24 * 60 * 60 * 1000;
 /* -------------------------------------------------------------------------- */
 
 test("a checkout's folder name gives its pull request and commit", () => {
-  expect(parseCheckoutDir("pr-82101-1488e5ad56")).toEqual({ number: 82101, sha: "1488e5ad56" });
+  expect(parseCheckoutDir("pr-82101-1488e5ad56")).toEqual({ kind: "pr", number: 82101, sha: "1488e5ad56", baseSha: null });
+  expect(parseCheckoutDir("diff-1488e5ad56-abcdef0123")).toEqual({
+    kind: "diff",
+    number: 0,
+    sha: "abcdef0123",
+    baseSha: "1488e5ad56",
+  });
+  expect(parseCheckoutDir("repo-abcdef0123")).toEqual({ kind: "repo", number: 0, sha: "abcdef0123", baseSha: null });
+  expect(parseCheckoutDir("repo-xyz")).toBeNull();
   expect(parseCheckoutDir("pr-7-abc")).toBeNull();
   expect(parseCheckoutDir("pr-x-1488e5ad56")).toBeNull();
   expect(parseCheckoutDir(".DS_Store")).toBeNull();
@@ -64,6 +72,9 @@ const exists = (p: string) => stat(p).then(() => true, () => false);
 function savedReview(over: Partial<AiReviewJob>): AiReviewJob {
   const at = new Date().toISOString();
   return {
+    kind: "pr",
+    baseSha: null,
+    adhoc: false,
     id: crypto.randomUUID(),
     reviewerId: "general",
     reviewerName: "General",

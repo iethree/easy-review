@@ -58,6 +58,12 @@ export interface PullRequest {
   baseRef: string;
   reviewDecision: ReviewDecision;
   ci: CiStatus;
+  /**
+   * Set on a row that isn't a pull request: Claude's reviews of a diff or a
+   * whole repository, listed with the pull requests. `key` is what the reviews
+   * are of (see reviewKey); `number` is 0, and there is nothing to approve.
+   */
+  target?: { kind: "diff" | "repo"; key: string; baseSha: string | null };
 }
 
 export interface ReviewsResponse {

@@ -10,10 +10,10 @@
 
 import { mkdir, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { childEnv } from "./env.ts";
 import { localPaths } from "./paths.ts";
-import type { CloneSource } from "../shared/aiReview.ts";
+import type { CloneSource, ReviewKind } from "../shared/aiReview.ts";
 
 /** Prepended to every invocation. */
 const SAFE_CONFIG = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
@@ -244,43 +244,138 @@ export async function prepareWorktree(
     });
   }
 
+  await writeContext(path, `${refs.base}...HEAD`, refs.base, pr.description, onPhase);
+  return { path, headSha };
+}
+
+/**
+ * The diff and commits from `base` to the checkout's HEAD, and the
+ * description, in .easy-review/ for the reviewer — or, with no base (a whole
+ * repository), only the description.
+ */
+async function writeContext(
+  path: string,
+  range: string | null,
+  base: string | null,
+  description: string,
+  onPhase: (phase: string) => void,
+): Promise<void> {
+  const context = join(path, ".easy-review");
+  await mkdir(context, { recursive: true });
+  if (!range || !base) {
+    await Bun.write(join(context, "pr.md"), description);
+    return;
+  }
+
   onPhase("Writing the diff for the reviewer");
   const noDrivers = ["--no-ext-diff", "--no-textconv"];
   const [diff, commits] = await Promise.all([
     // Three dots: against the merge base, which is what GitHub shows.
-    git(["diff", ...noDrivers, `${refs.base}...HEAD`], { cwd: path, timeoutMs: 2 * 60_000 }),
-    git(["log", ...noDrivers, "--format=%h %an: %s", `${refs.base}..HEAD`], { cwd: path }),
+    git(["diff", ...noDrivers, range], { cwd: path, timeoutMs: 2 * 60_000 }),
+    git(["log", ...noDrivers, "--format=%h %an: %s", `${base}..HEAD`], { cwd: path }),
   ]);
 
   // Where the branch left its base: the "before" of everything in the diff.
-  const baseCommit = (await git(["merge-base", refs.base, "HEAD"], { cwd: path })).trim();
+  const baseCommit = (await git(["merge-base", base, "HEAD"], { cwd: path })).trim();
 
-  const context = join(path, ".easy-review");
-  await mkdir(context, { recursive: true });
   await Promise.all([
     Bun.write(join(context, "pr.diff"), diff),
     Bun.write(join(context, "commits.txt"), commits),
-    Bun.write(join(context, "pr.md"), pr.description),
+    Bun.write(join(context, "pr.md"), description),
     Bun.write(join(context, "base-commit"), `${baseCommit}\n`),
   ]);
-
-  return { path, headSha };
 }
 
-/** Removes the checkout; drops the PR's refs too when nothing else needs them. */
+/* -------------------------------------------------------------------------- */
+/* Commits that aren't a pull request                                          */
+/* -------------------------------------------------------------------------- */
+
+export interface CommitWorktreeRequest {
+  owner: string;
+  name: string;
+  kind: Exclude<ReviewKind, "pr">;
+  /** In full. */
+  headSha: string;
+  /** A diff's base, in full; null for a whole repository. */
+  baseSha: string | null;
+  description: string;
+}
+
+/** `diff-<base>-<head>` or `repo-<head>`, by the first ten characters of each. */
+export function commitCheckoutDir(kind: Exclude<ReviewKind, "pr">, headSha: string, baseSha: string | null): string {
+  return kind === "diff" ? `diff-${(baseSha ?? "").slice(0, 10)}-${headSha.slice(0, 10)}` : `repo-${headSha.slice(0, 10)}`;
+}
+
+/** Each such checkout keeps its commits under refs named for its folder, so it can drop them when it goes. */
+export function commitRefs(dirName: string) {
+  return { head: `refs/easy-review/${dirName}/head`, base: `refs/easy-review/${dirName}/base` };
+}
+
+/**
+ * The refs a checkout's folder holds its commits under: a pull request's are
+ * shared by every checkout of it, the others' are its own.
+ */
+export function checkoutRefs(worktreePath: string): { refs: string[]; number: number | null } {
+  const dir = basename(worktreePath);
+  const pr = /^pr-(\d+)-/.exec(dir);
+  if (pr?.[1]) {
+    const refs = prRefs(Number(pr[1]));
+    return { refs: [refs.head, refs.base], number: Number(pr[1]) };
+  }
+  const refs = commitRefs(dir);
+  return { refs: [refs.head, refs.base], number: null };
+}
+
+export async function prepareCommitWorktree(
+  clone: ResolvedClone,
+  req: CommitWorktreeRequest,
+  onPhase: (phase: string) => void,
+  onSpawn?: GitOptions["onSpawn"],
+): Promise<PreparedWorktree> {
+  const safe = (s: string) => s.replace(/[^\w.-]/g, "_");
+  const dir = commitCheckoutDir(req.kind, req.headSha, req.baseSha);
+  const path = join(localPaths().worktrees, safe(req.owner), safe(req.name), dir);
+  const refs = commitRefs(dir);
+  const credentials = clone.source === "managed" ? GH_CREDENTIALS : [];
+
+  // By commit: GitHub serves any commit reachable from its branches, tags and pull requests.
+  const wanted = [`+${req.headSha}:${refs.head}`, ...(req.baseSha ? [`+${req.baseSha}:${refs.base}`] : [])];
+  onPhase(req.baseSha ? `Fetching ${req.baseSha.slice(0, 7)} and ${req.headSha.slice(0, 7)}` : `Fetching ${req.headSha.slice(0, 7)}`);
+  await git(["fetch", "--no-tags", "--force", clone.remote, ...wanted], {
+    cwd: clone.path,
+    config: credentials,
+    timeoutMs: 5 * 60_000,
+    onSpawn,
+  });
+
+  const existing = await git(["rev-parse", "HEAD"], { cwd: path, timeoutMs: 10_000 }).catch(() => null);
+  if (existing?.trim() !== req.headSha) {
+    onPhase(req.kind === "repo" ? "Checking out the repository" : "Checking out the head commit");
+    await rm(path, { recursive: true, force: true });
+    await git(["worktree", "prune"], { cwd: clone.path }).catch(() => {});
+    await mkdir(join(path, ".."), { recursive: true });
+    await git(["worktree", "add", "--detach", path, req.headSha], {
+      cwd: clone.path,
+      config: credentials,
+      timeoutMs: 10 * 60_000,
+      onSpawn,
+    });
+  }
+
+  await writeContext(path, req.baseSha ? `${refs.base}...HEAD` : null, req.baseSha ? refs.base : null, req.description, onPhase);
+  return { path, headSha: req.headSha };
+}
+
+/** Removes the checkout; and its refs, when nothing else needs them. */
 export async function removeWorktree(
   clonePath: string,
   worktreePath: string,
-  number: number,
-  dropRefs: boolean,
+  dropRefs: readonly string[],
 ): Promise<void> {
   await git(["worktree", "remove", "--force", worktreePath], { cwd: clonePath }).catch(() => {});
   await rm(worktreePath, { recursive: true, force: true });
   await git(["worktree", "prune"], { cwd: clonePath }).catch(() => {});
-  if (dropRefs) {
-    const refs = prRefs(number);
-    for (const ref of [refs.head, refs.base]) {
-      await git(["update-ref", "-d", ref], { cwd: clonePath }).catch(() => {});
-    }
+  for (const ref of dropRefs) {
+    await git(["update-ref", "-d", ref], { cwd: clonePath }).catch(() => {});
   }
 }

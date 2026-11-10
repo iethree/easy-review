@@ -8,7 +8,8 @@ import { splitProse } from "../proseBlocks.ts";
 import { Markdown } from "./Markdown.tsx";
 
 interface Props {
-  pr: PullRequest;
+  /** Null for a review that isn't of a pull request in your lists: then nothing can be added. */
+  pr: PullRequest | null;
   review: { id: string; headSha: string };
   markdown: string;
   onAdded: () => void;
@@ -26,15 +27,26 @@ interface Props {
  */
 export function ProseReview({ pr, review, markdown, onAdded, onAsk, pieceKey }: Props) {
   const blocks = useMemo(() => splitProse(markdown), [markdown]);
-  const added = useAdded(pr.id);
-  const entry = peek(pr);
+  const added = useAdded(pr?.id);
+  const entry = pr ? peek(pr) : undefined;
   const diff = entry?.status === "ready" ? entry.data.diff : null;
 
   return (
     <div className="er-prose">
       {blocks.map((block, i) => {
         // biome-ignore lint/suspicious/noArrayIndexKey: blocks never reorder; their position is their identity
-        if (!block.addable) return <Markdown key={i}>{block.text}</Markdown>;
+        if (!block.addable || (!pr && !onAsk)) return <Markdown key={i}>{block.text}</Markdown>;
+        if (!pr) {
+          return (
+            // biome-ignore lint/suspicious/noArrayIndexKey: as above
+            <section key={i} className="er-addable">
+              <Markdown>{block.text}</Markdown>
+              <Group gap={4} wrap="nowrap" className="er-add-action">
+                {onAsk && <AskButton onAsk={() => onAsk(block.text)} />}
+              </Group>
+            </section>
+          );
+        }
         const key = pieceKey ? pieceKey(i) : proseKey(review.id, i);
         const done = added.has(key);
         const place = placeProse(pr, review, block.text, diff);

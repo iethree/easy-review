@@ -89,44 +89,63 @@ export const PrRow = memo(function PrRow({
           )}
         </div>
 
-        <div className="er-item-meta">
-          <div className="er-item-meta-left">
-            <Tooltip label={pr.repo} openDelay={500}>
-              <span style={{ flex: "none" }}>
-                {showRepo ? pr.name : ""}#{pr.number}
-              </span>
-            </Tooltip>
-            <span aria-hidden>·</span>
-            <Tooltip label={`Show only ${pr.author}'s pull requests`} openDelay={500}>
-              {/* biome-ignore lint/a11y: a mouse shortcut; from the keyboard, type author: in the filter */}
-              <span
-                className="er-author"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onFilterAuthor(pr.author);
-                }}
-              >
-                <Avatar src={pr.authorAvatar} size={14} radius="xl">
-                  {pr.author.slice(0, 1).toUpperCase()}
-                </Avatar>
-                <span className="er-truncate">{pr.author}</span>
-              </span>
-            </Tooltip>
-            <span aria-hidden>·</span>
-            <span style={{ flex: "none" }}>{relativeTime(pr.updatedAt)}</span>
+        {pr.target ? (
+          <div className="er-item-meta">
+            {/* Not a pull request: what Claude reviewed, and when you asked. */}
+            <div className="er-item-meta-left">
+              <Badge size="xs" variant="light" color="gray" style={{ flex: "none" }}>
+                {pr.target.kind === "diff" ? "Diff" : "Repository"}
+              </Badge>
+              <Tooltip label={pr.repo} openDelay={500}>
+                <span className="er-truncate">
+                  {showRepo ? `${pr.name} · ` : ""}
+                  {pr.baseRef}
+                </span>
+              </Tooltip>
+              <span aria-hidden>·</span>
+              <span style={{ flex: "none" }}>{relativeTime(pr.updatedAt)}</span>
+            </div>
           </div>
-          <div className="er-item-meta-right">
-            <DiffStat
-              additions={pr.additions}
-              deletions={pr.deletions}
-              files={pr.changedFiles}
-              compact
-            />
-            <span className="er-ci-slot">
-              <CiBadge pr={pr} />
-            </span>
+        ) : (
+          <div className="er-item-meta">
+            <div className="er-item-meta-left">
+              <Tooltip label={pr.repo} openDelay={500}>
+                <span style={{ flex: "none" }}>
+                  {showRepo ? pr.name : ""}#{pr.number}
+                </span>
+              </Tooltip>
+              <span aria-hidden>·</span>
+              <Tooltip label={`Show only ${pr.author}'s pull requests`} openDelay={500}>
+                {/* biome-ignore lint/a11y: a mouse shortcut; from the keyboard, type author: in the filter */}
+                <span
+                  className="er-author"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFilterAuthor(pr.author);
+                  }}
+                >
+                  <Avatar src={pr.authorAvatar} size={14} radius="xl">
+                    {pr.author.slice(0, 1).toUpperCase()}
+                  </Avatar>
+                  <span className="er-truncate">{pr.author}</span>
+                </span>
+              </Tooltip>
+              <span aria-hidden>·</span>
+              <span style={{ flex: "none" }}>{relativeTime(pr.updatedAt)}</span>
+            </div>
+            <div className="er-item-meta-right">
+              <DiffStat
+                additions={pr.additions}
+                deletions={pr.deletions}
+                files={pr.changedFiles}
+                compact
+              />
+              <span className="er-ci-slot">
+                <CiBadge pr={pr} />
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <Group gap={4} wrap="nowrap">

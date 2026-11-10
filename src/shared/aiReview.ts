@@ -86,8 +86,23 @@ export interface Reviewer {
 }
 
 /** Enough to draw a row's robot icon; polled frequently, so kept small. */
+/**
+ * What a review is of: a pull request, by number; the changes between two
+ * commits ("diff"); or a whole repository at one commit ("repo").
+ */
+export type ReviewKind = "pr" | "diff" | "repo";
+
 export interface AiReviewSummary {
   id: string;
+  /** Reviews from before there were kinds are of pull requests. */
+  kind: ReviewKind;
+  /**
+   * A diff's base commit, in full; null for the other kinds. For a diff and a
+   * repository `number` is 0, and `headSha` is the commit reviewed.
+   */
+  baseSha: string | null;
+  /** Started from New review, not from a list: shown on the page of those. */
+  adhoc: boolean;
   /** Who reviewed: the reviewer's id, and its name as it was at the time. */
   reviewerId: string;
   reviewerName: string;
@@ -142,7 +157,10 @@ export interface AiChatMessage {
 }
 
 export interface AiReviewJob extends AiReviewSummary {
+  /** A pull request's base branch; for a diff, its base as you gave it (a branch, tag or commit). */
   baseRef: string;
+  /** For a diff or a repository, the head or commit as you gave it. */
+  headRef?: string;
   /** The reviewer's instructions as they were when this review started. */
   instructions: string;
   /** The global instructions switched on then. Absent on reviews from before there were any. */
@@ -187,9 +205,13 @@ export interface Checkout {
   path: string;
   owner: string;
   name: string;
+  kind: ReviewKind;
+  /** The pull request's; 0 for a diff or a repository. */
   number: number;
   /** The start of the checked-out commit, as in the folder name. */
   sha: string;
+  /** A diff's base, likewise; null otherwise. */
+  baseSha: string | null;
   /** From the latest review that ran here; null when none is on record. */
   title: string | null;
   /** When a review last ran here — or, with none on record, when the folder last changed. */
@@ -258,6 +280,24 @@ export const DEFAULT_AI_CONFIG: AiReviewConfig = {
 
 export function prKey(pr: { owner: string; name: string; number: number }): string {
   return `${pr.owner}/${pr.name}#${pr.number}`.toLowerCase();
+}
+
+/**
+ * What a review is of, as one string: its pull request's key, or the repo
+ * and the commits. Reviews with the same key are of the same thing.
+ */
+export function reviewKey(job: Pick<AiReviewSummary, "kind" | "owner" | "name" | "number" | "baseSha" | "headSha">): string {
+  const repo = `${job.owner}/${job.name}`.toLowerCase();
+  if (job.kind === "diff") return `${repo}@${job.baseSha}..${job.headSha}`;
+  if (job.kind === "repo") return `${repo}@${job.headSha}`;
+  return prKey(job);
+}
+
+/** What a review is of, in a few words: "#123", "a1b2c3d…e4f5a6b", "the repository at a1b2c3d". */
+export function describeTarget(job: Pick<AiReviewSummary, "kind" | "number" | "baseSha" | "headSha">): string {
+  if (job.kind === "diff") return `${(job.baseSha ?? "").slice(0, 7)}…${job.headSha.slice(0, 7)}`;
+  if (job.kind === "repo") return `the repository at ${job.headSha.slice(0, 7)}`;
+  return `#${job.number}`;
 }
 
 /**

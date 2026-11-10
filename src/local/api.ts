@@ -11,6 +11,7 @@ import {
   type LocalStatus,
 } from "../shared/aiReview.ts";
 import { detectClaude, reviewSystemPrompt, type ClaudeStatus } from "./claude.ts";
+import { GitHubError } from "../server/github.ts";
 import { ChatError, type ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
 import { reportCsp, reportFile, servedPage } from "./reports.ts";
@@ -26,6 +27,11 @@ import {
 } from "./reviewers.ts";
 
 const NAME = /^[\w.-]+$/;
+/**
+ * A branch, tag or commit as git allows it, give or take: no spaces, no
+ * "..", nothing starting with "-" — it ends up in a URL and in git's argv.
+ */
+const REF = /^(?!-)(?!.*\.\.)[\w./@{}^~+-]{1,200}$/;
 /** Long enough for any question, and a quoted section of a review. */
 const MAX_CHAT_TEXT = 20_000;
 
@@ -131,15 +137,29 @@ export function createLocalApi(jobs: ReviewJobs) {
           const input = (await request.json().catch(() => null)) as {
             owner?: unknown;
             name?: unknown;
+            kind?: unknown;
             number?: unknown;
+            base?: unknown;
+            head?: unknown;
             reviewers?: unknown;
+            adhoc?: unknown;
           } | null;
           const owner = String(input?.owner ?? "");
           const name = String(input?.name ?? "");
+          const kind = input?.kind ?? "pr";
           const number = Number(input?.number);
-          if (!NAME.test(owner) || !NAME.test(name) || !Number.isInteger(number) || number <= 0) {
-            return fail("owner, name and a positive number are required", 400);
+          const base = typeof input?.base === "string" ? input.base.trim() : "";
+          const head = typeof input?.head === "string" ? input.head.trim() : "";
+          if (!NAME.test(owner) || !NAME.test(name)) return fail("owner and name are required", 400);
+          if (kind === "pr" && (!Number.isInteger(number) || number <= 0)) {
+            return fail("A pull request needs a positive number.", 400);
           }
+          if (kind === "diff" && (!REF.test(base) || !REF.test(head))) {
+            return fail("A diff needs a base and a head: each a branch, tag or commit.", 400);
+          }
+          if (kind === "repo" && head && !REF.test(head)) return fail("That isn't a branch, tag or commit.", 400);
+          if (kind !== "pr" && kind !== "diff" && kind !== "repo") return fail("kind is pr, diff or repo", 400);
+
           const all = await listReviewers();
           // No list: the first reviewer, as before there was a choice.
           const ids = Array.isArray(input?.reviewers) ? input.reviewers : all.slice(0, 1).map((r) => r.id);
@@ -150,7 +170,15 @@ export function createLocalApi(jobs: ReviewJobs) {
           if (!(await claudeStatus()).available) {
             return fail("The claude CLI isn't available to the server.", 503);
           }
-          const started = await jobs.start(owner, name, number, chosen);
+          const started =
+            kind === "pr"
+              ? await jobs.start(owner, name, number, chosen, { adhoc: input?.adhoc === true })
+              : await jobs.startCommits(
+                  owner,
+                  name,
+                  kind === "diff" ? { kind, base, head } : { kind, head },
+                  chosen,
+                );
           return json({ jobs: started.map((job) => ({ ...job, resumeCommand: resumeCommand(job) })) }, 202);
         }
 
@@ -215,6 +243,8 @@ export function createLocalApi(jobs: ReviewJobs) {
     } catch (err) {
       if (err instanceof ReviewerError) return fail(err.message, 400);
       if (err instanceof ChatError) return fail(err.message, 409);
+      // Not found, or not allowed to see it: worth saying, not a server fault.
+      if (err instanceof GitHubError && (err.status === 404 || err.status === 403)) return fail(err.message, err.status);
       return fail(err instanceof Error ? err.message : "Unexpected error", 500);
     }
 

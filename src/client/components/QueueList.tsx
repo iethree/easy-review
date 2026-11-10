@@ -1,7 +1,8 @@
 import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
 import { IconAlertCircle, IconEyeOff, IconInbox } from "@tabler/icons-react";
 import { useState } from "react";
-import { prKey, verdictFor, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
+import { verdictFor, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
+import { rowKey } from "../reviewRows.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { PrRow, RowReviewsContext } from "./PrRow.tsx";
 import { QuickReviewMenu } from "./QuickReviewMenu.tsx";
@@ -141,7 +142,7 @@ export function QueueList({
             ? "Hidden pull requests"
             : variant === "mine"
               ? "Your pull requests"
-              : "Pull requests waiting on your review"
+              : "Pull requests and other reviews waiting on you"
         }
       >
         {rows.map((pr) => (
@@ -153,9 +154,9 @@ export function QueueList({
             onSelect={onSelect}
             onFilterAuthor={onFilterAuthor}
             showRepo={showRepo}
-            aiJob={ai?.byPr.get(prKey(pr))}
-            aiCount={ai?.reviewsByPr.get(prKey(pr))?.length ?? 0}
-            aiVerdict={verdictFor(ai?.reviewsByPr.get(prKey(pr)) ?? [], pr.headSha)}
+            aiJob={ai?.byPr.get(rowKey(pr))}
+            aiCount={ai?.reviewsByPr.get(rowKey(pr))?.length ?? 0}
+            aiVerdict={verdictFor(ai?.reviewsByPr.get(rowKey(pr)) ?? [], pr.headSha)}
             onUnhide={variant === "hidden" ? onUnhide : undefined}
           />
         ))}
@@ -164,7 +165,7 @@ export function QueueList({
         <QuickReviewMenu
           at={menuAt}
           reviewers={ai.reviewers}
-          reviews={(menuAt && ai.reviewsByPr.get(prKey(menuAt.pr))) || []}
+          reviews={(menuAt && ai.reviewsByPr.get(rowKey(menuAt.pr))) || []}
           onStart={ai.start}
           onClose={() => setMenuAt(null)}
         />

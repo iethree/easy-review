@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   isActive,
   isBusy,
-  prKey,
+  reviewKey,
   type AiReviewConfig,
   type AiReviewJob,
   type AiReviewSummary,
@@ -12,6 +12,13 @@ import {
 } from "../../shared/aiReview.ts";
 
 export type AiReviewDetail = AiReviewJob & { resumeCommand: string | null };
+
+/** What New review asks the server for. */
+export type NewReviewRequest = { owner: string; name: string; reviewers: string[] } & (
+  | { kind: "pr"; number: number; adhoc: true }
+  | { kind: "diff"; base: string; head: string }
+  | { kind: "repo"; head: string }
+);
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -97,6 +104,19 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     [refresh],
   );
 
+  /** Any pull request, diff or repository (see NewReview); the reviews it started. */
+  const startTarget = useCallback(
+    async (target: NewReviewRequest) => {
+      const { jobs: started } = await call<{ jobs: AiReviewSummary[] }>("/api/local/reviews", {
+        method: "POST",
+        body: JSON.stringify(target),
+      });
+      await refresh();
+      return started;
+    },
+    [refresh],
+  );
+
   const cancel = useCallback(
     async (id: string) => {
       await call(`/api/local/reviews/${id}/cancel`, { method: "POST" });
@@ -149,6 +169,7 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
     byPr,
     reviewsByPr,
     start,
+    startTarget,
     cancel,
     remove,
     ask,
@@ -163,9 +184,15 @@ export function useLocalReviews(onFinished: (job: AiReviewSummary) => void) {
  * is, then one that failed, then the latest.
  */
 export function groupByPr(jobs: readonly AiReviewSummary[]) {
+  // A pull request's under its prKey; a diff's or a repository's under what it's of (see rowKey).
+  return groupReviews(jobs, reviewKey);
+}
+
+/** As groupByPr, for whatever the key groups by — what reviews are of, for one. */
+export function groupReviews(jobs: readonly AiReviewSummary[], keyOf: (job: AiReviewSummary) => string) {
   const latest = new Map<string, Map<string, AiReviewSummary>>();
   for (const job of jobs) {
-    const key = prKey(job);
+    const key = keyOf(job);
     const reviewers = latest.get(key) ?? new Map<string, AiReviewSummary>();
     latest.set(key, reviewers);
     const existing = reviewers.get(job.reviewerId);

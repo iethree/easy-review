@@ -22,11 +22,12 @@ import {
   IconFileText,
 } from "@tabler/icons-react";
 import { useCallback, useDeferredValue, useMemo, type RefObject } from "react";
-import { prKey, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
+import type { AiReviewSummary, Reviewer } from "../../shared/aiReview.ts";
+import { rowKey } from "../reviewRows.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { useDiff } from "../hooks/diffStore.ts";
 import { useConversation } from "../hooks/useConversation.ts";
-import { useDrafts } from "../drafts.ts";
+import { type DraftComment, useDrafts } from "../drafts.ts";
 import { isReviewed, PR_STATE, VERDICT } from "../reviewMeta.ts";
 import { relativeTime } from "../time.ts";
 import { type PreviewTab, resolveTab, reviewTab } from "../previewTabs.ts";
@@ -38,6 +39,7 @@ import type { DiffThreadItem } from "./DiffThread.tsx";
 import { DiffView } from "./DiffView.tsx";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { FindBar } from "./FindBar.tsx";
+import { Markdown } from "./Markdown.tsx";
 import { PrDescription } from "./PrDescription.tsx";
 import { ReviewActions } from "./ReviewActions.tsx";
 import { TabVerdict } from "./Verdict.tsx";
@@ -74,6 +76,7 @@ export type { PreviewTab };
 
 /** Stable empty list, so the diff's memoised file blocks stay memoised. */
 const NO_THREADS: DiffThreadItem[] = [];
+const NO_DRAFTS: DraftComment[] = [];
 const NO_REVIEWS: AiReviewSummary[] = [];
 
 /** Local Claude reviews; `available` is false when the claude CLI isn't installed. */
@@ -140,8 +143,11 @@ export function PreviewPane(props: Props) {
 
   const stale = deferred !== null && deferred.id !== pr.id;
   const { ai } = props;
-  const reviews = (ai.available && ai.reviewsByPr.get(prKey(pr))) || NO_REVIEWS;
-  const { tab, review } = resolveTab(props.tab, reviews);
+  const reviews = (ai.available && ai.reviewsByPr.get(rowKey(pr))) || NO_REVIEWS;
+  const resolved = resolveTab(props.tab, reviews);
+  const { review } = resolved;
+  // A whole repository has no diff: its description stands in.
+  const tab = pr.target && !pr.target.baseSha && resolved.tab === "diff" ? "description" : resolved.tab;
 
   return (
     // biome-ignore lint/a11y: onFocus tracks which pane has focus; it isn't an action
@@ -156,6 +162,7 @@ export function PreviewPane(props: Props) {
           <Tabs.Tab value="description" leftSection={<IconFileText size={14} />}>
             Description
           </Tabs.Tab>
+          {!(pr.target && !pr.target.baseSha) && (
           <Tabs.Tab
             value="diff"
             leftSection={<IconFileDiff size={14} />}
@@ -171,6 +178,7 @@ export function PreviewPane(props: Props) {
           >
             Diff
           </Tabs.Tab>
+          )}
           {reviews.map((r) => (
             <Tabs.Tab
               key={r.id}
@@ -214,7 +222,8 @@ export function PreviewPane(props: Props) {
                 {review ? (
                   <AiReviewPanel
                     key={review.id}
-                    pr={deferred}
+                    // A diff or a repository has no pull request for its points to go into.
+                    pr={deferred.target ? null : deferred}
                     job={review}
                     // Re-run by the same reviewer; one deleted since, or a review
                     // from before there were reviewers, asks instead.
@@ -227,6 +236,12 @@ export function PreviewPane(props: Props) {
                     onAsk={(quote) => ai.ask(review, quote)}
                     onQuestion={(text) => ai.question(review.id, text)}
                   />
+                ) : deferred.target ? (
+                  tab === "diff" && deferred.target.baseSha ? (
+                    <TargetDiff pr={deferred} />
+                  ) : (
+                    <Markdown>{deferred.body}</Markdown>
+                  )
                 ) : tab === "description" ? (
                   <PrDescription pr={deferred} viewer={props.viewer} />
                 ) : (
@@ -259,8 +274,8 @@ function Header({
   const verdict = history ? VERDICT[history.verdict] : null;
   const state = history ? PR_STATE[history.state] : null;
   const StateIcon = state?.Icon;
-  // Re-reviewing makes sense while the pull request is still open.
-  const canReview = !history || history.state === "OPEN";
+  // Re-reviewing makes sense while the pull request is still open; a diff or a repository has nothing to review on GitHub.
+  const canReview = !pr.target && (!history || history.state === "OPEN");
 
   return (
     <div className="er-pane-head">
@@ -325,7 +340,7 @@ function Header({
               <IconExternalLink size={15} />
             </ActionIcon>
           </Tooltip>
-          {hideState && (
+          {hideState && !pr.target && (
             <Tooltip label={hideState.hidden ? "Unhide (⇧H)" : "Hide (⇧H)"}>
               <ActionIcon
                 variant="subtle"
@@ -354,6 +369,22 @@ function Header({
         </Group>
       </Group>
 
+      {pr.target ? (
+        <Group gap={10} wrap="wrap" mt={6} pl={narrow ? 36 : 0} style={{ rowGap: 4 }}>
+          <Badge size="xs" variant="light" color="gray">
+            {pr.target.kind === "diff" ? "Diff" : "Repository"}
+          </Badge>
+          <Anchor href={pr.url} target="_blank" size="xs" c="dimmed">
+            <Group gap={4} wrap="nowrap">
+              {pr.repo} · {pr.baseRef}
+              <IconExternalLink size={11} />
+            </Group>
+          </Anchor>
+          <Text size="xs" c="dimmed">
+            reviewed {relativeTime(pr.updatedAt)}
+          </Text>
+        </Group>
+      ) : (
       <Group
         gap={10}
         wrap="wrap"
@@ -399,8 +430,33 @@ function Header({
         {/* History is fetched without CI rollups (they time the query out). */}
         {!history && <CiBadge pr={pr} />}
       </Group>
+      )}
     </div>
   );
+}
+
+/** A diff's changes, to read beside its reviews: no conversation, and nothing to comment with. */
+function TargetDiff({ pr }: { pr: PullRequest }) {
+  const entry = useDiff(pr);
+  if (!entry || entry.status === "loading") return <LoadingScene messages={DIFF_MESSAGES} />;
+  if (entry.status === "error") {
+    return (
+      <Center h={260}>
+        <Stack align="center" gap="xs" maw={460}>
+          <Text size="sm" c="dimmed" ta="center">
+            {entry.message}
+          </Text>
+          <Anchor href={pr.url} target="_blank" size="sm">
+            <Group gap={4}>
+              Compare on GitHub
+              <IconExternalLink size={13} />
+            </Group>
+          </Anchor>
+        </Stack>
+      </Center>
+    );
+  }
+  return <DiffView diff={entry.data.diff} expandBudget={1200} pr={null} threads={NO_THREADS} drafts={NO_DRAFTS} />;
 }
 
 function Body({ pr }: { pr: PullRequest }) {

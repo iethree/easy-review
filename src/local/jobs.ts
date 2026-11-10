@@ -21,6 +21,7 @@ import {
   isActive,
   isBusy,
   prKey,
+  reviewKey,
   type AiChatMessage,
   type AiQuestion,
   type AiReviewConfig,
@@ -28,6 +29,7 @@ import {
   type AiReviewSummary,
   type Checkout,
   type RemoveCheckoutsResult,
+  type ReviewKind,
   type Reviewer,
 } from "../shared/aiReview.ts";
 import { GitHubClient } from "../server/github.ts";
@@ -43,7 +45,7 @@ import {
   type StreamState,
 } from "./claude.ts";
 import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
-import { prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
+import { checkoutRefs, prepareCommitWorktree, prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
 import { localPaths } from "./paths.ts";
 import { seedReviewers } from "./reviewers.ts";
 import { keepReport, placesReport } from "./reports.ts";
@@ -60,7 +62,8 @@ export function summarize(job: AiReviewJob): AiReviewSummary {
     createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns, chatPhase,
   } = job;
   return {
-    id, reviewerId, reviewerName, owner, name, number, title, headSha, status, phase,
+    id, kind: job.kind ?? "pr", baseSha: job.baseSha ?? null, adhoc: job.adhoc ?? false,
+    reviewerId, reviewerName, owner, name, number, title, headSha, status, phase,
     createdAt, startedAt, finishedAt, updatedAt, error, costUsd, turns, chatPhase: chatPhase ?? null,
     // Kept when the review is finished; reviews saved before verdicts have none.
     verdict: job.verdict ?? null,
@@ -84,6 +87,33 @@ function describePr(
 ## Description, as written by the author
 
 ${pr.body.trim() || "_No description._"}
+`;
+}
+
+function describeCommits(
+  owner: string,
+  name: string,
+  kind: Exclude<ReviewKind, "pr">,
+  c: { baseRef: string; baseSha: string | null; headRef: string; headSha: string },
+): string {
+  if (kind === "repo") {
+    return `# ${owner}/${name} at ${c.headRef}
+
+- Repository: ${owner}/${name} (https://github.com/${owner}/${name})
+- Commit: ${c.headSha}${c.headRef !== c.headSha ? ` (${c.headRef})` : ""}
+
+This is a review of the whole repository as it stands at that commit. There is no pull request, and no diff.
+`;
+  }
+  const at = (ref: string, sha: string | null) => `${sha}${ref !== sha ? ` (${ref})` : ""}`;
+  return `# ${c.baseRef} → ${c.headRef}
+
+- Repository: ${owner}/${name}
+- Base: ${at(c.baseRef, c.baseSha)}
+- Head: ${at(c.headRef, c.headSha)}
+- On GitHub: https://github.com/${owner}/${name}/compare/${c.baseSha}...${c.headSha}
+
+This is a review of the changes from the base to the head. There is no pull request, so no description.
 `;
 }
 
@@ -128,6 +158,10 @@ export class ReviewJobs {
         job.reviewerName ??= "Claude";
         job.instructions ??= "";
         job.chatPhase ??= null;
+        // Saved before there was anything but pull requests to review.
+        job.kind ??= "pr";
+        job.baseSha ??= null;
+        job.adhoc ??= false;
         if (job.chatPhase) {
           job.chat = [...(job.chat ?? []), answer("The server stopped while Claude was answering.", true)];
           job.chatPhase = null;
@@ -194,22 +228,90 @@ export class ReviewJobs {
   }
 
   /**
-   * Starts a review by each reviewer — or, for a reviewer already reviewing
-   * that pull request, returns the review under way.
+   * Starts a review of a pull request by each reviewer — or, for a reviewer
+   * already reviewing it, returns the review under way. `adhoc` when it was
+   * asked for from New review rather than from a list.
    */
-  async start(owner: string, name: string, number: number, reviewers: Reviewer[]): Promise<AiReviewJob[]> {
-    const key = prKey({ owner, name, number });
-    const running = new Map<string, AiReviewJob>();
-    for (const job of this.jobs.values()) {
-      if (prKey(job) === key && isActive(job.status)) running.set(job.reviewerId, job);
-    }
-    if (reviewers.every((r) => running.has(r.id))) return reviewers.map((r) => running.get(r.id) as AiReviewJob);
+  async start(
+    owner: string,
+    name: string,
+    number: number,
+    reviewers: Reviewer[],
+    { adhoc = false }: { adhoc?: boolean } = {},
+  ): Promise<AiReviewJob[]> {
+    const pending = this.underWay(prKey({ owner, name, number }), reviewers);
+    if (pending.done) return pending.jobs;
 
+    const pr = await (await this.github()).fetchPullRequest(owner, name, number);
+    return this.enqueue(reviewers, pending.running, describePr(owner, name, number, pr), (reviewer) =>
+      this.newJob(reviewer, {
+        kind: "pr",
+        owner,
+        name,
+        number,
+        title: pr.title,
+        headSha: pr.headSha,
+        baseRef: pr.baseRef,
+        baseSha: null,
+        adhoc,
+      }),
+    );
+  }
+
+  /**
+   * Starts a review of commits that aren't a pull request: the changes from
+   * `base` to `head` ("diff"), or the whole repository at `head` ("repo"; no
+   * head means its default branch). Each is a branch, a tag or a commit,
+   * resolved to a commit here, so the review stays of what you asked for.
+   */
+  async startCommits(
+    owner: string,
+    name: string,
+    target: { kind: "diff"; base: string; head: string } | { kind: "repo"; head: string },
+    reviewers: Reviewer[],
+  ): Promise<AiReviewJob[]> {
+    const gh = await this.github();
+    const headRef = target.head.trim() || (await gh.fetchDefaultBranch(owner, name));
+    const headSha = await gh.resolveCommit(owner, name, headRef);
+    const baseRef = target.kind === "diff" ? target.base.trim() : "";
+    const baseSha = target.kind === "diff" ? await gh.resolveCommit(owner, name, baseRef) : null;
+    if (baseSha === headSha) throw new Error("The base and the head are the same commit: there is nothing to review.");
+
+    const fields = { kind: target.kind, owner, name, number: 0, headSha, baseSha, baseRef, adhoc: true };
+    const pending = this.underWay(reviewKey(fields), reviewers);
+    if (pending.done) return pending.jobs;
+
+    const title =
+      target.kind === "diff" ? `${baseRef} → ${headRef}` : `${owner}/${name} at ${headRef}`;
+    const description = describeCommits(owner, name, target.kind, { baseRef, baseSha, headRef, headSha });
+    return this.enqueue(reviewers, pending.running, description, (reviewer) => ({
+      ...this.newJob(reviewer, { ...fields, title }),
+      headRef,
+    }));
+  }
+
+  private async github(): Promise<GitHubClient> {
     const token = await this.getToken();
     if (!token) throw new Error("Not signed in to GitHub — run `gh auth login`.");
-    const pr = await new GitHubClient(token).fetchPullRequest(owner, name, number);
-    const description = describePr(owner, name, number, pr);
+    return new GitHubClient(token);
+  }
 
+  /** The reviews of this already running, by reviewer; `done` when every reviewer has one. */
+  private underWay(key: string, reviewers: Reviewer[]) {
+    const running = new Map<string, AiReviewJob>();
+    for (const job of this.jobs.values()) {
+      if (reviewKey(job) === key && isActive(job.status)) running.set(job.reviewerId, job);
+    }
+    const done = reviewers.every((r) => running.has(r.id));
+    return { running, done, jobs: done ? reviewers.map((r) => running.get(r.id) as AiReviewJob) : [] };
+  }
+
+  private async enqueue(
+    reviewers: Reviewer[],
+    running: Map<string, AiReviewJob>,
+    description: string,
+    make: (reviewer: Reviewer) => AiReviewJob,
+  ): Promise<AiReviewJob[]> {
     const started: AiReviewJob[] = [];
     for (const reviewer of reviewers) {
       const existing = running.get(reviewer.id);
@@ -217,7 +319,7 @@ export class ReviewJobs {
         started.push(existing);
         continue;
       }
-      const job = this.newJob(owner, name, number, pr, reviewer);
+      const job = make(reviewer);
       this.jobs.set(job.id, job);
       await this.save(job);
       this.descriptions.set(job.id, description);
@@ -228,11 +330,8 @@ export class ReviewJobs {
   }
 
   private newJob(
-    owner: string,
-    name: string,
-    number: number,
-    pr: { title: string; headSha: string; baseRef: string },
     reviewer: Reviewer,
+    target: Pick<AiReviewJob, "kind" | "owner" | "name" | "number" | "title" | "headSha" | "baseRef" | "baseSha" | "adhoc">,
   ): AiReviewJob {
     const now = new Date().toISOString();
     return {
@@ -242,12 +341,7 @@ export class ReviewJobs {
       instructions: reviewer.instructions,
       // Taken now, like the reviewer's: what you switch on or off later is for later reviews.
       globalInstructions: activeInstructions(this.config.globalInstructions),
-      owner,
-      name,
-      number,
-      title: pr.title,
-      headSha: pr.headSha,
-      baseRef: pr.baseRef,
+      ...target,
       status: "queued",
       phase: "Waiting for a free slot",
       createdAt: now,
@@ -290,8 +384,12 @@ export class ReviewJobs {
     if (job.clonePath && job.worktreePath) {
       // A re-review of the same commit shares the checkout; leave it for them.
       const shared = others.some((j) => j.worktreePath === job.worktreePath);
-      const samePr = others.some((j) => prKey(j) === prKey(job));
-      if (!shared) await removeWorktree(job.clonePath, job.worktreePath, job.number, !samePr);
+      if (!shared) {
+        const { refs, number } = checkoutRefs(job.worktreePath);
+        // A pull request's refs serve every checkout of it; the others' are the checkout's own.
+        const needed = number !== null && others.some((j) => j.kind === "pr" && prKey(j) === prKey(job));
+        await removeWorktree(job.clonePath, job.worktreePath, needed ? [] : refs);
+      }
     }
 
     this.jobs.delete(id);
@@ -374,7 +472,7 @@ export class ReviewJobs {
       const result = await runClaude({
         cwd,
         // The tools it reviewed with; reviews from before the setting were read-only.
-        args: buildArgs(prompt, { ...config, readOnly: job.readOnly ?? true }, sessionId),
+        args: buildArgs(prompt, { ...config, readOnly: job.readOnly ?? true }, sessionId, job.kind),
         timeoutMs: config.timeoutMinutes * 60_000,
         onSpawn: (proc) => {
           this.chats.set(job.id, proc);
@@ -486,15 +584,19 @@ export class ReviewJobs {
       if (busy) throw new Error("A review is running in this checkout");
 
       if (checkout.clonePath) {
-        // The PR's refs are shared by every checkout of it in that clone.
-        const lastOfPr = !all.some(
-          (other) =>
-            other.path !== checkout.path &&
-            !gone.has(other.path) &&
-            other.clonePath === checkout.clonePath &&
-            other.number === checkout.number,
-        );
-        await removeWorktree(checkout.clonePath, checkout.path, checkout.number, lastOfPr);
+        // A PR's refs are shared by every checkout of it in that clone; the others' are their own.
+        const { refs } = checkoutRefs(checkout.path);
+        const needed =
+          checkout.kind === "pr" &&
+          all.some(
+            (other) =>
+              other.path !== checkout.path &&
+              !gone.has(other.path) &&
+              other.clonePath === checkout.clonePath &&
+              other.kind === "pr" &&
+              other.number === checkout.number,
+          );
+        await removeWorktree(checkout.clonePath, checkout.path, needed ? [] : refs);
       } else {
         await rm(checkout.path, { recursive: true, force: true });
       }
@@ -547,18 +649,21 @@ export class ReviewJobs {
         const clone = await resolveClone(job.owner, job.name, parseCloneMap(config.clones), phase);
         this.update(job, { clonePath: clone.path, cloneSource: clone.source });
         if (this.cancelled.has(job.id)) return { clone, worktree: null };
-        const worktree = await prepareWorktree(
-          clone,
-          {
-            owner: job.owner,
-            name: job.name,
-            number: job.number,
-            baseRef: job.baseRef,
-            description: this.descriptions.get(job.id) ?? `# ${job.title}\n`,
-          },
-          phase,
-          onSpawn,
-        );
+        const description = this.descriptions.get(job.id) ?? `# ${job.title}\n`;
+        const worktree =
+          job.kind === "pr"
+            ? await prepareWorktree(
+                clone,
+                { owner: job.owner, name: job.name, number: job.number, baseRef: job.baseRef, description },
+                phase,
+                onSpawn,
+              )
+            : await prepareCommitWorktree(
+                clone,
+                { owner: job.owner, name: job.name, kind: job.kind, headSha: job.headSha, baseSha: job.baseSha, description },
+                phase,
+                onSpawn,
+              );
         return { clone, worktree };
       });
 
@@ -583,7 +688,7 @@ export class ReviewJobs {
       const early = job.questions?.length ?? 0;
       const result = await runClaude({
         cwd: worktree.path,
-        args: buildArgs(null, config),
+        args: buildArgs(null, config, undefined, job.kind),
         // Legacy jobs, from before reviewers, re-run with the old setting.
         prompt: buildPrompt(
           job,

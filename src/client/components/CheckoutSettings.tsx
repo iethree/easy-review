@@ -188,7 +188,9 @@ function CheckoutRow({
   onToggle: () => void;
   onRemove: () => void;
 }) {
-  const label = `${c.owner}/${c.name}#${c.number}`;
+  // A pull request by number; a diff or a whole repository by what it's of.
+  const what = c.kind === "diff" ? " diff" : c.kind === "repo" ? "" : `#${c.number}`;
+  const label = `${c.owner}/${c.name}${what}`;
 
   return (
     <Table.Tr style={{ opacity: busy ? 0.5 : 1 }}>
@@ -205,9 +207,11 @@ function CheckoutRow({
       <Table.Td style={{ maxWidth: 0 }}>
         <Group gap={6} wrap="nowrap">
           <Text size="sm" fw={550} style={{ flex: "none" }}>
-            {c.name}#{c.number}
+            {c.name}
+            {what}
           </Text>
           <Text size="xs" c="dimmed" ff="monospace" style={{ flex: "none" }}>
+            {c.baseSha ? `${c.baseSha.slice(0, 7)}…` : ""}
             {c.sha.slice(0, 7)}
           </Text>
           {c.inUse && (
