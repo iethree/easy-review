@@ -3,11 +3,14 @@ import { createContext, memo, useContext } from "react";
 import ReactMarkdown, { type Options } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkGemoji from "remark-gemoji";
 import remarkGfm from "remark-gfm";
+import { imageSource } from "../../shared/githubImage.ts";
 import { parseCompare, screenshotName, screenshotUrl } from "../screenshots.ts";
 import { Compare } from "./Compare.tsx";
 import { Diagram } from "./Diagram.tsx";
 import { Report } from "./Report.tsx";
+import { ZoomImage } from "./ZoomImage.tsx";
 
 /**
  * Inside a Claude review: its id, so its screenshots can be shown. There, an
@@ -33,12 +36,15 @@ interface Props {
   allowHtml?: boolean;
 }
 
+/** GitHub-flavoured, `:tada:` and all: a shortcode is its emoji, as on GitHub. */
+const REMARK: NonNullable<Options["remarkPlugins"]> = [remarkGfm, remarkGemoji];
+
 export const Markdown = memo(function Markdown({ children, allowHtml = false }: Props) {
   const reviewId = useContext(ReviewScreenshots);
   return (
     <Typography className="er-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={REMARK}
         rehypePlugins={allowHtml ? GITHUB_HTML : undefined}
         components={{
           a: ({ href, children: text }) => (
@@ -59,11 +65,15 @@ export const Markdown = memo(function Markdown({ children, allowHtml = false }: 
             }
             return <pre {...rest}>{inner}</pre>;
           },
+          // GitHub's own images come through the server, which can see a
+          // private repository's; any of them opens larger when clicked.
           img: ({ src, alt, node: _node, ...rest }) => {
-            if (reviewId === null) return <img src={src} alt={alt} {...rest} />;
-            const name = typeof src === "string" ? screenshotName(src) : null;
-            return name ? (
-              <img className="er-screenshot" src={screenshotUrl(reviewId, name)} alt={alt ?? ""} />
+            if (typeof src !== "string" || !src) return null;
+            if (reviewId === null) return <ZoomImage {...rest} src={imageSource(src)} original={src} alt={alt} />;
+            const name = screenshotName(src);
+            const shot = name ? screenshotUrl(reviewId, name) : null;
+            return shot ? (
+              <ZoomImage className="er-screenshot" src={shot} original={shot} alt={alt} />
             ) : (
               <span className="er-image-missing">[{alt || "image"}]</span>
             );

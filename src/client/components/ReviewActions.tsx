@@ -7,7 +7,6 @@ import {
   Popover,
   Stack,
   Text,
-  Textarea,
   Tooltip,
 } from "@mantine/core";
 import { IconCheck, IconMessageCircle, IconX } from "@tabler/icons-react";
@@ -16,6 +15,7 @@ import { composeApprovalBody, DEFAULT_APPROVAL_EMOJI } from "../../shared/approv
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { removeDrafts, reviewCommit, useDrafts, type DraftComment } from "../drafts.ts";
 import { EmojiPicker } from "./EmojiPicker.tsx";
+import { EmojiTextarea } from "./EmojiTextarea.tsx";
 
 interface Props {
   pr: PullRequest;
@@ -156,7 +156,7 @@ export function ReviewActions({
                   noteRef.current?.focus();
                 }}
               />
-              <Textarea
+              <EmojiTextarea
                 ref={noteRef}
                 // Focused as soon as the box opens, so Enter-then-Enter works.
                 data-autofocus
@@ -165,7 +165,7 @@ export function ReviewActions({
                 minRows={2}
                 maxRows={8}
                 value={note}
-                onChange={(e) => setNote(e.currentTarget.value)}
+                onValueChange={setNote}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
@@ -234,14 +234,14 @@ export function ReviewActions({
                 {pr.repo}#{pr.number}
               </Text>
             </Text>
-            <Textarea
+            <EmojiTextarea
               data-autofocus
               placeholder={ownPr ? "Notes for reviewers, or for yourself" : "What needs to change?"}
               autosize
               minRows={3}
               maxRows={10}
               value={comment}
-              onChange={(e) => setComment(e.currentTarget.value)}
+              onValueChange={setComment}
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && comment.trim()) {
                   e.preventDefault();

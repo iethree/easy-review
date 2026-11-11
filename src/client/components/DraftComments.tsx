@@ -1,8 +1,9 @@
-import { ActionIcon, Badge, Button, Group, Text, Textarea, Tooltip } from "@mantine/core";
+import { ActionIcon, Badge, Button, Group, Text, Tooltip } from "@mantine/core";
 import { IconPencil, IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import type { DiffSide } from "../../shared/types.ts";
 import { editDraft, removeDrafts, type DraftComment } from "../drafts.ts";
+import { EmojiTextarea } from "./EmojiTextarea.tsx";
 import { Markdown } from "./Markdown.tsx";
 
 /**
@@ -39,7 +40,7 @@ export function LineCommentForm({
       <Text size="xs" c="dimmed" mb={4} ff="monospace">
         {where.path}:{where.line} · {where.side === "LEFT" ? "old" : "new"}
       </Text>
-      <Textarea
+      <EmojiTextarea
         data-autofocus
         autoFocus
         placeholder="Leave a comment on this line"
@@ -47,7 +48,7 @@ export function LineCommentForm({
         minRows={2}
         maxRows={10}
         value={body}
-        onChange={(e) => setBody(e.currentTarget.value)}
+        onValueChange={setBody}
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault();

@@ -7,6 +7,7 @@
 
 import { POSITIVE_EMOJIS, startsWithPositiveEmoji } from "../shared/approval.ts";
 import { parseDiff } from "../shared/diff.ts";
+import { isGitHubImage, TOKEN_HOSTS } from "../shared/githubImage.ts";
 import type {
   CheckContext,
   Conversation,
@@ -35,6 +36,10 @@ const NAME_PART = /^[\w.-]+$/;
 const SHA = /^[0-9a-f]{40}$/;
 /** Generous for a human, and a bound on what one request can ask GitHub to do. */
 const MAX_REVIEW_COMMENTS = 200;
+/** Bigger than any screenshot; a bound on what one image holds in memory. */
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+/** GitHub sends an attachment on to signed storage: one or two hops. */
+const MAX_IMAGE_REDIRECTS = 5;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -80,6 +85,9 @@ export function createApi({ getToken }: ApiOptions) {
     try {
       if (path === "/api/reviews" && request.method === "GET") {
         return await handleReviews(gh, url);
+      }
+      if (path === "/api/image" && request.method === "GET") {
+        return await handleImage(token, url);
       }
       if (path === "/api/diff" && request.method === "GET") {
         return await handleDiff(gh, url);
@@ -140,6 +148,53 @@ export function createApi({ getToken }: ApiOptions) {
     const result = await gh.listReviewRequests({ includeTeamRequests, hideDrafts, limit: 100 });
     listCache.set(key, result);
     return json(result);
+  }
+
+  /**
+   * An image GitHub keeps for a pull request or a comment, fetched with your
+   * token: on a private repository, the page can't load it itself. Your token
+   * goes to GitHub alone, never on to where it redirects; only images come
+   * back, and inert, so nothing fetched this way runs as this app.
+   */
+  async function handleImage(token: string, url: URL): Promise<Response> {
+    const src = url.searchParams.get("url") ?? "";
+    if (!isGitHubImage(src)) return fail("Only images GitHub keeps are fetched this way", 400);
+
+    let next = new URL(src);
+    for (let hop = 0; hop <= MAX_IMAGE_REDIRECTS; hop++) {
+      const res = await fetch(next, {
+        redirect: "manual",
+        headers: {
+          "user-agent": "easy-review",
+          ...(TOKEN_HOSTS.has(next.hostname.toLowerCase()) ? { authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) return fail("GitHub redirected the image to nowhere", 502);
+        next = new URL(location, next);
+        if (next.protocol !== "https:") return fail("GitHub redirected the image off https", 502);
+        continue;
+      }
+      if (!res.ok) return fail(`GitHub answered ${res.status} for that image`, res.status === 404 ? 404 : 502);
+
+      const type = (res.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+      if (!type.startsWith("image/")) return fail("That isn't an image", 415);
+      if (Number(res.headers.get("content-length") ?? 0) > MAX_IMAGE_BYTES) return fail("That image is too large", 413);
+      const body = await res.arrayBuffer();
+      if (body.byteLength > MAX_IMAGE_BYTES) return fail("That image is too large", 413);
+      return new Response(body, {
+        headers: {
+          "content-type": type,
+          // An attachment never changes; the browser keeps it rather than asking again.
+          "cache-control": "private, max-age=86400",
+          "x-content-type-options": "nosniff",
+          // An SVG opened on its own would otherwise run as this app.
+          "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        },
+      });
+    }
+    return fail("The image redirected too many times", 502);
   }
 
   async function handleDiff(gh: GitHubClient, url: URL): Promise<Response> {

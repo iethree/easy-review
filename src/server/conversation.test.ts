@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildConversation, type RawConversation } from "./conversation.ts";
+import { buildConversation, buildDetails, type RawConversation } from "./conversation.ts";
 
 const alice = { __typename: "User", login: "alice", avatarUrl: "https://avatars/a" };
 const bot = { __typename: "Bot", login: "github-actions", avatarUrl: null };
@@ -124,5 +124,46 @@ test("it says when GitHub had more than was fetched", () => {
 });
 
 test("a missing pull request is an empty conversation", () => {
-  expect(buildConversation(null)).toEqual({ items: [], truncated: false });
+  expect(buildConversation(null)).toEqual({
+    items: [],
+    truncated: false,
+    details: { reviewers: [], assignees: [], labels: [] },
+  });
+});
+
+test("the sidebar: where each reviewer stands, assignees and labels", () => {
+  const bob = { __typename: "User", login: "bob", avatarUrl: "https://avatars/b" };
+  const author = { __typename: "User", login: "Carol", avatarUrl: null };
+  const details = buildDetails({
+    author: { login: "carol" },
+    latestReviews: {
+      nodes: [
+        { state: "APPROVED", author: alice },
+        { state: "CHANGES_REQUESTED", author: bob },
+        // The author answering in a review isn't reviewing; a draft isn't a review yet.
+        { state: "COMMENTED", author },
+        { state: "PENDING", author: { __typename: "User", login: "dave", avatarUrl: null } },
+      ],
+    },
+    reviewRequests: {
+      nodes: [
+        // Asked again after requesting changes: waiting on bob, as GitHub shows it.
+        { requestedReviewer: { __typename: "User", login: "Bob", avatarUrl: "https://avatars/b" } },
+        { requestedReviewer: { __typename: "Team", name: "Core", avatarUrl: null } },
+        { requestedReviewer: null },
+      ],
+    },
+    assignees: { nodes: [{ login: "alice", avatarUrl: "https://avatars/a" }, null] },
+    labels: { nodes: [{ name: "bug", color: "d73a4a", description: "" }, { name: "docs", color: "0075ca", description: "Docs" }] },
+  });
+  expect(details.reviewers).toEqual([
+    { name: "alice", avatarUrl: "https://avatars/a", isTeam: false, state: "APPROVED" },
+    { name: "Bob", avatarUrl: "https://avatars/b", isTeam: false, state: "REQUESTED" },
+    { name: "Core", avatarUrl: null, isTeam: true, state: "REQUESTED" },
+  ]);
+  expect(details.assignees).toEqual([{ login: "alice", avatarUrl: "https://avatars/a", isBot: false }]);
+  expect(details.labels).toEqual([
+    { name: "bug", color: "d73a4a", description: null },
+    { name: "docs", color: "0075ca", description: "Docs" },
+  ]);
 });

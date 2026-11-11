@@ -20,6 +20,7 @@
     "@mantine/hooks": "^9",
     "@mantine/notifications": "^9",
     "@tabler/icons-react": "^3.46.0",
+    "gemoji": "^8.1.0",
     "highlight.js": "^11.12.0",
     "lowlight": "^3.3.0",
     "react": "^19",
@@ -28,6 +29,7 @@
     "rehype-raw": "^7",
     "rehype-sanitize": "^6",
     "reladraw": "0.19.1",
+    "remark-gemoji": "^8.0.0",
     "remark-gfm": "^4",
     "remark-parse": "^11",
     "unified": "^11"

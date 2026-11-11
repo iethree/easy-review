@@ -241,3 +241,51 @@ test("a comment on several lines goes up as GitHub's start_line to line, on one 
     ],
   });
 });
+
+/** GitHub's attachment redirect to signed storage, then the image itself. */
+function stubImages(final: Response) {
+  const sent: { url: string; auth: string | null }[] = [];
+  globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+    const href = String(url);
+    sent.push({ url: href, auth: new Headers(init?.headers).get("authorization") });
+    if (href.startsWith("https://github.com/")) {
+      return new Response(null, { status: 302, headers: { location: "https://storage.example/signed.png?sig=1" } });
+    }
+    return final;
+  }) as unknown as typeof fetch;
+  return sent;
+}
+
+const image = (src: string) =>
+  new Request(`http://localhost:5175/api/image?${new URLSearchParams({ url: src })}`);
+
+test("a GitHub attachment is fetched with your token, which never goes on to where it redirects", async () => {
+  const sent = stubImages(new Response(new Uint8Array([137, 80, 78, 71]), { headers: { "content-type": "image/png" } }));
+  const res = await api().handle(image("https://github.com/user-attachments/assets/abc"));
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toBe("image/png");
+  expect(res.headers.get("content-security-policy")).toContain("sandbox");
+  expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([137, 80, 78, 71]));
+  expect(sent).toEqual([
+    { url: "https://github.com/user-attachments/assets/abc", auth: "Bearer test-token" },
+    { url: "https://storage.example/signed.png?sig=1", auth: null },
+  ]);
+});
+
+test("only GitHub's images are fetched, and only images come back", async () => {
+  const sent = stubImages(new Response("<script>alert(1)</script>", { headers: { "content-type": "text/html" } }));
+  for (const src of ["https://evil.example/x.png", "https://github.com/settings/tokens", "http://github.com/user-attachments/assets/a"]) {
+    expect((await api().handle(image(src))).status).toBe(400);
+  }
+  expect(sent).toHaveLength(0);
+  expect((await api().handle(image("https://github.com/user-attachments/assets/abc"))).status).toBe(415);
+});
+
+test("an image from another site can't be loaded through it", async () => {
+  const sent = stubImages(new Response("x", { headers: { "content-type": "image/png" } }));
+  const req = new Request(`http://localhost:5175/api/image?url=${encodeURIComponent("https://github.com/user-attachments/assets/a")}`, {
+    headers: { "sec-fetch-site": "cross-site" },
+  });
+  expect((await api().handle(req)).status).toBe(403);
+  expect(sent).toHaveLength(0);
+});

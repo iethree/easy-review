@@ -59,6 +59,12 @@ export interface PullRequest {
   reviewDecision: ReviewDecision;
   ci: CiStatus;
   /**
+   * When your review was last asked for: of you, or of a team when the queue
+   * includes team requests. Only on the queue's own rows; null when GitHub
+   * has no record of the request.
+   */
+  reviewRequestedAt?: string | null;
+  /**
    * Set on a row that isn't a pull request: Claude's reviews of a diff or a
    * whole repository, listed with the pull requests. `key` is what the reviews
    * are of (see reviewKey); `number` is 0, and there is nothing to approve.
@@ -259,9 +265,35 @@ export type TimelineItem =
       more: number;
     };
 
+/** Where a reviewer stands: asked and not yet reviewed (again), or their latest review. */
+export type ReviewerState = "REQUESTED" | ReviewSummaryState;
+
+export interface PrReviewer {
+  /** A login, or a team's name. */
+  name: string;
+  avatarUrl: string | null;
+  isTeam: boolean;
+  state: ReviewerState;
+}
+
+export interface PrLabel {
+  name: string;
+  /** Hex, without the #, as GitHub gives it. */
+  color: string;
+  description: string | null;
+}
+
+/** What GitHub's sidebar shows about a pull request. */
+export interface PrDetails {
+  reviewers: PrReviewer[];
+  assignees: Person[];
+  labels: PrLabel[];
+}
+
 export interface Conversation {
   /** Oldest first, as GitHub shows it. */
   items: TimelineItem[];
   /** True when GitHub had more than we fetched. */
   truncated: boolean;
+  details: PrDetails;
 }

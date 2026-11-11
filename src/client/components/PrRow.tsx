@@ -1,9 +1,10 @@
 import { ActionIcon, Avatar, Badge, Group, HoverCard, Stack, Text, ThemeIcon, Tooltip } from "@mantine/core";
-import { IconEye, IconGitPullRequestDraft } from "@tabler/icons-react";
+import { IconArchiveOff, IconGitPullRequestDraft } from "@tabler/icons-react";
 import { createContext, type ReactNode, memo, useContext } from "react";
 import { isActive, prKey, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { AiVerdict } from "../../shared/findings.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
+import { rowName } from "../reviewRows.ts";
 import { reviewStanding } from "../reviewStanding.ts";
 import { relativeTime } from "../time.ts";
 import { CiBadge } from "./CiBadge.tsx";
@@ -32,7 +33,7 @@ interface Props {
   aiCount?: number;
   /** The finished reviews' verdict on the current commit, the most severe of them. */
   aiVerdict?: AiVerdict | null;
-  /** In the Hidden tab: brings the PR back. */
+  /** In Archive: brings the row back to Review. */
   onUnhide?: (pr: PullRequest) => void;
 }
 
@@ -152,7 +153,7 @@ export const PrRow = memo(function PrRow({
         <ReviewCount pr={pr} job={aiJob} count={aiCount} verdict={aiVerdict} />
         {/* No approve button here: approving is done from the preview, with the pull request in view. */}
         {onUnhide && (
-          <Tooltip label="Unhide (⇧H)">
+          <Tooltip label="Back to Review (⇧H)">
             <ActionIcon
               variant="light"
               color="gray"
@@ -161,9 +162,9 @@ export const PrRow = memo(function PrRow({
                 e.stopPropagation();
                 onUnhide(pr);
               }}
-              aria-label={`Unhide ${pr.repo}#${pr.number}`}
+              aria-label={`Bring back ${rowName(pr)}`}
             >
-              <IconEye size={15} />
+              <IconArchiveOff size={15} />
             </ActionIcon>
           </Tooltip>
         )}

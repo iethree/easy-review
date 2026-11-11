@@ -107,9 +107,33 @@ const PR_CHECKS = /* GraphQL */ `
   }
 `;
 
+/**
+ * The latest requests for a review, so a pull request you hid comes back
+ * when your review is asked for again. Cheap: the queue's search costs 1
+ * point with it.
+ */
+const PR_REQUESTS = /* GraphQL */ `
+  fragment PrRequests on PullRequest {
+    timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 10) {
+      nodes {
+        ... on ReviewRequestedEvent {
+          createdAt
+          requestedReviewer {
+            __typename
+            ... on User {
+              login
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 const REVIEWS_QUERY = /* GraphQL */ `
   ${PR_CORE}
   ${PR_CHECKS}
+  ${PR_REQUESTS}
   query Reviews($q: String!, $first: Int!) {
     viewer {
       login
@@ -118,6 +142,7 @@ const REVIEWS_QUERY = /* GraphQL */ `
       nodes {
         ...PrCore
         ...PrChecks
+        ...PrRequests
       }
     }
   }
@@ -425,7 +450,12 @@ export class GitHubClient {
     const pullRequests: PullRequest[] = [];
     for (const node of data.search.nodes) {
       const pr = normalizePullRequest(node);
-      if (pr) pullRequests.push(pr);
+      if (!pr) continue;
+      const requests = node?.timelineItems?.nodes ?? [];
+      pullRequests.push({
+        ...pr,
+        reviewRequestedAt: latestRequest(requests, data.viewer.login, opts.includeTeamRequests),
+      });
     }
 
     return {
@@ -794,6 +824,36 @@ interface RawPullRequest {
         } | null)[]
       | null;
   };
+  timelineItems?: { nodes?: (RawReviewRequest | null)[] | null } | null;
+}
+
+export interface RawReviewRequest {
+  createdAt?: string;
+  requestedReviewer?: { __typename?: string; login?: string } | null;
+}
+
+/**
+ * When your review was last asked for, from a pull request's review requests:
+ * of you by name, or, when the queue includes team requests, of any team.
+ * GitHub doesn't say cheaply which teams you're in, but the search only
+ * finds pull requests waiting on you or yours.
+ */
+export function latestRequest(
+  requests: readonly (RawReviewRequest | null)[],
+  viewer: string,
+  includeTeams: boolean,
+): string | null {
+  let latest: string | null = null;
+  for (const request of requests) {
+    const reviewer = request?.requestedReviewer;
+    if (!request?.createdAt || !reviewer) continue;
+    const mine =
+      reviewer.__typename === "User"
+        ? reviewer.login?.toLowerCase() === viewer.toLowerCase()
+        : includeTeams && reviewer.__typename === "Team";
+    if (mine && (latest === null || request.createdAt > latest)) latest = request.createdAt;
+  }
+  return latest;
 }
 
 function normalizePullRequest(node: RawPullRequest | null): PullRequest | null {

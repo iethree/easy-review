@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import type { PullRequest } from "../shared/types.ts";
-import { describeRestError, mergeById, mineSearchQueries } from "./github.ts";
+import { describeRestError, latestRequest, mergeById, mineSearchQueries } from "./github.ts";
 
 test("uses the errors array, which is where the real reason lives", () => {
   // Verbatim from GitHub's reviews endpoint: `errors` holds plain strings and
@@ -72,4 +72,17 @@ test("a pull request you wrote and are assigned to is listed once, newest activi
   const pr = (id: string, updatedAt: string) => ({ id, updatedAt }) as PullRequest;
   const merged = mergeById([pr("a", "2026-10-01"), null, pr("b", "2026-10-03"), pr("a", "2026-10-01")]);
   expect(merged.map((p) => p.id)).toEqual(["b", "a"]);
+});
+
+test("your review was last asked for by name, or of a team when the queue has team requests", () => {
+  const requests = [
+    { createdAt: "2026-11-10T09:00:00Z", requestedReviewer: { __typename: "User", login: "Ryan" } },
+    { createdAt: "2026-11-10T12:00:00Z", requestedReviewer: { __typename: "User", login: "someone-else" } },
+    { createdAt: "2026-11-10T11:00:00Z", requestedReviewer: { __typename: "Team" } },
+    null,
+    { createdAt: "2026-11-10T13:00:00Z", requestedReviewer: null },
+  ];
+  expect(latestRequest(requests, "ryan", false)).toBe("2026-11-10T09:00:00Z");
+  expect(latestRequest(requests, "ryan", true)).toBe("2026-11-10T11:00:00Z");
+  expect(latestRequest([], "ryan", true)).toBeNull();
 });

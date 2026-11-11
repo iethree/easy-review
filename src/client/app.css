@@ -583,6 +583,11 @@ body {
   /* Mantine's controls shouldn't inherit the diff's monospace and 12px. */
   font-family: var(--mantine-font-family);
   white-space: normal;
+  /*
+   * Sticky makes it a stacking context of its own: without this, the lines
+   * after it would paint over its emoji suggestions.
+   */
+  z-index: 2;
 }
 
 /* An existing discussion, shown under the line it was left on. */
@@ -882,6 +887,31 @@ body {
 .er-emoji:focus-visible {
   outline: 2px solid var(--mantine-color-indigo-5);
   outline-offset: 1px;
+}
+
+/* :name suggestions under a comment box */
+.er-emoji-suggest {
+  max-width: calc(100vw - 16px);
+}
+
+.er-emoji-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.er-emoji-option[data-active="true"] {
+  background: var(--er-row-active);
+}
+
+.er-emoji-option-glyph {
+  flex: none;
+  font-size: 16px;
+  line-height: 1.3;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1766,3 +1796,79 @@ body {
   margin-bottom: 0;
 }
 
+
+/* The Description tab: the description and conversation, and beside them GitHub's sidebar. */
+.er-desc {
+  container-type: inline-size;
+}
+
+.er-desc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.er-desc-main {
+  min-width: 0;
+}
+
+/* Narrow: the card goes first, its sections side by side. */
+.er-desc-aside {
+  order: -1;
+}
+
+.er-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.er-details-section {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+@container (min-width: 720px) {
+  .er-desc-grid {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
+
+  .er-desc-aside {
+    order: 0;
+    align-self: start;
+  }
+
+  .er-details {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .er-details-section {
+    flex: none;
+  }
+}
+
+/* Images in Markdown keep their proportions however narrow the pane. */
+.er-markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.er-zoomable {
+  cursor: zoom-in;
+}
+
+.er-lightbox-body {
+  display: flex;
+  justify-content: center;
+}
+
+.er-lightbox-image {
+  display: block;
+  max-width: min(92vw, 100%);
+  max-height: calc(100vh - 140px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  cursor: zoom-out;
+}

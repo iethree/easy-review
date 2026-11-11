@@ -13,8 +13,8 @@ import { useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
   IconActivity,
+  IconArchive,
   IconGitPullRequest,
-  IconEyeOff,
   IconHistory,
   IconInbox,
   IconClipboardText,
@@ -58,7 +58,7 @@ import { isHidden, neighbourAfterRemoving, splitHidden } from "./hidden.ts";
 import { actionForKey, type Pane } from "./keymap.ts";
 import { resolveTab, reviewTab, tabOrder } from "./previewTabs.ts";
 import { isReviewed } from "./reviewMeta.ts";
-import { rowKey, targetRows } from "./reviewRows.ts";
+import { rowKey, rowName, targetRows } from "./reviewRows.ts";
 import { clearReRequested, reviewEvents, type SessionReviews } from "./sessionReviews.ts";
 
 type Tab = "queue" | "reviewed" | "hidden" | "mine";
@@ -102,13 +102,13 @@ function filterAndSort(
 export function App() {
   const [tab, setTab] = useState<Tab>("queue");
   const { settings, update, reset } = useSettings();
-  const { data, loading, error, refresh } = useReviews(settings);
+  const { data, kept, loading, error, refresh } = useReviews(settings);
   // The history hook only fetches once its tab has been opened.
   const history = useReviewed(tab === "reviewed");
   const mine = useMine(tab === "mine");
   const { toggleColorScheme } = useMantineColorScheme();
   const narrow = useMediaQuery("(max-width: 900px)");
-  const { hidden, setHiddenFor } = useHidden();
+  const { hidden, setHiddenFor, unhideAskedAgain } = useHidden();
 
   const [query, setQuery] = useState("");
   const [mineQuery, setMineQuery] = useState("");
@@ -202,17 +202,26 @@ export function App() {
   /* Lists                                                                  */
   /* ---------------------------------------------------------------------- */
 
-  // The queue is everything GitHub says needs you, and the pull requests you
-  // asked Claude to review by number, minus what you've hidden — and then the
-  // diffs and repositories you asked it to review: a list of reviews, not
-  // only of review requests.
-  const requested = useMemo(() => data?.pullRequests ?? [], [data]);
+  // The queue is everything GitHub says needs you, the pull requests you asked
+  // Claude to review by number, and then the diffs and repositories you asked
+  // it to review — a list of reviews, not only of review requests — minus what
+  // you've archived.
+  // A background fetch leaves rows that left GitHub's queue in place until you
+  // refresh (`kept`), so the one you're reading doesn't vanish.
+  const requested = useMemo(() => [...(data?.pullRequests ?? []), ...kept], [data, kept]);
   const requestedKeys = useMemo(() => new Set(requested.map(prKey)), [requested]);
   const askedPulls = useAskedPulls(ai.jobs, requestedKeys);
   const allPrs = useMemo(() => [...requested, ...askedPulls], [requested, askedPulls]);
   const targets = useMemo(() => targetRows(ai.jobs), [ai.jobs]);
-  const { shown, hidden: hiddenPrs } = useMemo(() => splitHidden(allPrs, hidden), [allPrs, hidden]);
-  const prs = useMemo(() => (targets.length > 0 ? [...shown, ...targets] : shown), [shown, targets]);
+  const { shown: prs, hidden: hiddenPrs } = useMemo(
+    () => splitHidden(targets.length > 0 ? [...allPrs, ...targets] : allPrs, hidden),
+    [allPrs, targets, hidden],
+  );
+  // Something you archived that's asked about again since — a pull request
+  // whose review was requested again, a diff Claude is reviewing again: back in Review.
+  useEffect(() => {
+    if (data || targets.length > 0) unhideAskedAgain([...(data?.pullRequests ?? []), ...targets]);
+  }, [data, targets, unhideAskedAgain]);
   const parsed = useMemo(() => parseQuery(query), [query]);
   /** Rows a Claude review has finished for, by rowKey: what `is:ai-reviewed` keeps. */
   const aiReviewed = useMemo(
@@ -324,7 +333,8 @@ export function App() {
   );
 
   /**
-   * Hide a pull request from the queue, or bring it back from Hidden. The
+   * Archive a row out of Review — a pull request, or Claude's reviews of a diff
+   * or a repository — or bring it back from Archive. The
    * selection moves to its neighbour first, so you keep your place — and the
    * notification can put everything back.
    */
@@ -339,7 +349,7 @@ export function App() {
       notifications.show({
         id,
         color: "gray",
-        title: `${willHide ? "Hidden" : "Back in Review"} · ${pr.repo}#${pr.number}`,
+        title: `${willHide ? "Archived" : "Back in Review"} · ${rowName(pr)}`,
         message: (
           <Text
             size="xs"
@@ -598,7 +608,7 @@ export function App() {
     [tab],
   );
 
-  /** Refresh whatever list is showing. Hidden pull requests come from the queue. */
+  /** Refresh whatever list is showing. Archive is made from the queue. */
   const refreshTab = useCallback(() => {
     if (tab === "reviewed") history.refresh();
     else if (tab === "mine") void mine.refresh();
@@ -796,8 +806,8 @@ export function App() {
           refreshTab();
           return;
         case "toggleHidden":
-          // Only the queue and Hidden hold hideable pull requests.
-          if (selected && !selected.target && (tab === "queue" || tab === "hidden")) toggleHidden(selected);
+          // Only Review and Archive hold rows to archive or bring back.
+          if (selected && (tab === "queue" || tab === "hidden")) toggleHidden(selected);
           return;
         case "help":
           openSettings("shortcuts");
@@ -853,7 +863,7 @@ export function App() {
 
   const mode: SplitMode = expanded ? "preview" : narrow ? "list" : "split";
 
-  // Hidden pull requests come from the queue, so its tab refreshes that.
+  // Archive is made from the queue, so its tab refreshes that.
   const listRefresh = {
     onRefresh: refreshTab,
     loading: tab === "reviewed" ? history.loading : tab === "mine" ? mine.loading : loading,
@@ -867,7 +877,7 @@ export function App() {
         placeholder=""
         inputRef={searchRef}
         refresh={listRefresh}
-        note="Hidden pull requests stay out of Review until you unhide them — ⇧H, or the eye on a row."
+        note="Archived pull requests and reviews stay out of Review until you bring them back — ⇧H, or the button on a row."
       />
     ) : tab === "reviewed" ? (
       <ListFilter
@@ -1034,9 +1044,9 @@ export function App() {
                   )}
                 </Group>
               </Tabs.Tab>
-              <Tabs.Tab value="hidden" leftSection={<IconEyeOff size={14} />}>
+              <Tabs.Tab value="hidden" leftSection={<IconArchive size={14} />}>
                 <Group gap={6} wrap="nowrap">
-                  Hidden
+                  Archive
                   {hiddenPrs.length > 0 && (
                     <Badge size="xs" variant="light" color="gray">
                       {hiddenPrs.length}
