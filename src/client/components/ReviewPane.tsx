@@ -1,10 +1,11 @@
-import { ActionIcon, Alert, Button, Code, Group, ScrollArea, Stack, Text, Textarea, Tooltip } from "@mantine/core";
+import { ActionIcon, Alert, Button, Code, Group, ScrollArea, Stack, Text, Tooltip } from "@mantine/core";
 import { IconAlertTriangle, IconCheck, IconMessageCircle, IconX } from "@tabler/icons-react";
 import { useState } from "react";
 import { composeApprovalBody, DEFAULT_APPROVAL_EMOJI } from "../../shared/approval.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { clearAssembly, setSummary, useAssembly } from "../assembly.ts";
 import { editDraft, removeDrafts, reviewCommit, useDrafts } from "../drafts.ts";
+import { EmojiTextarea } from "./EmojiTextarea.tsx";
 
 interface Props {
   pr: PullRequest | null;
@@ -70,13 +71,13 @@ export function ReviewPane({ pr, ownPr, reviewed, onSubmit, onClose }: Props) {
         <>
           <ScrollArea style={{ flex: 1 }} type="auto">
             <Stack gap="sm" p="sm">
-              <Textarea
+              <EmojiTextarea
                 label="Summary"
                 placeholder={ownPr ? "Notes for reviewers, or for yourself" : "What you think overall"}
                 autosize
                 minRows={5}
                 value={summary}
-                onChange={(e) => setSummary(pr.id, e.currentTarget.value)}
+                onValueChange={(text) => setSummary(pr.id, text)}
                 styles={{ input: { fontSize: 13 } }}
               />
 
@@ -106,13 +107,13 @@ export function ReviewPane({ pr, ownPr, reviewed, onSubmit, onClose }: Props) {
                         <IconX size={12} />
                       </ActionIcon>
                     </Group>
-                    <Textarea
+                    <EmojiTextarea
                       mt={6}
                       size="xs"
                       autosize
                       minRows={2}
                       value={draft.body}
-                      onChange={(e) => editDraft(pr.id, draft.id, e.currentTarget.value)}
+                      onValueChange={(text) => editDraft(pr.id, draft.id, text)}
                       // GitHub won't take an empty comment: emptied, it goes.
                       onBlur={(e) => {
                         if (!e.currentTarget.value.trim()) removeDrafts(pr.id, [draft.id]);

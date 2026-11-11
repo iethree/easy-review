@@ -583,6 +583,11 @@ body {
   /* Mantine's controls shouldn't inherit the diff's monospace and 12px. */
   font-family: var(--mantine-font-family);
   white-space: normal;
+  /*
+   * Sticky makes it a stacking context of its own: without this, the lines
+   * after it would paint over its emoji suggestions.
+   */
+  z-index: 2;
 }
 
 /* An existing discussion, shown under the line it was left on. */
@@ -882,6 +887,31 @@ body {
 .er-emoji:focus-visible {
   outline: 2px solid var(--mantine-color-indigo-5);
   outline-offset: 1px;
+}
+
+/* :name suggestions under a comment box */
+.er-emoji-suggest {
+  max-width: calc(100vw - 16px);
+}
+
+.er-emoji-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.er-emoji-option[data-active="true"] {
+  background: var(--er-row-active);
+}
+
+.er-emoji-option-glyph {
+  flex: none;
+  font-size: 16px;
+  line-height: 1.3;
 }
 
 /* ---------------------------------------------------------------------------

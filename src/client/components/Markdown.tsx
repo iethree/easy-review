@@ -3,6 +3,7 @@ import { createContext, memo, useContext } from "react";
 import ReactMarkdown, { type Options } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkGemoji from "remark-gemoji";
 import remarkGfm from "remark-gfm";
 import { imageSource } from "../../shared/githubImage.ts";
 import { parseCompare, screenshotName, screenshotUrl } from "../screenshots.ts";
@@ -35,12 +36,15 @@ interface Props {
   allowHtml?: boolean;
 }
 
+/** GitHub-flavoured, `:tada:` and all: a shortcode is its emoji, as on GitHub. */
+const REMARK: NonNullable<Options["remarkPlugins"]> = [remarkGfm, remarkGemoji];
+
 export const Markdown = memo(function Markdown({ children, allowHtml = false }: Props) {
   const reviewId = useContext(ReviewScreenshots);
   return (
     <Typography className="er-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={REMARK}
         rehypePlugins={allowHtml ? GITHUB_HTML : undefined}
         components={{
           a: ({ href, children: text }) => (
