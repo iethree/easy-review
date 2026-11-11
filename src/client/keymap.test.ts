@@ -65,6 +65,6 @@ test("Shift+H hides; plain h is left free; holding it hides only one", () => {
   expect(actionForKey("H", true)).toBeNull();
 });
 
-test("3 opens the Hidden tab", () => {
+test("3 opens the Archive tab", () => {
   expect(actionForKey("3")).toEqual({ type: "switchList", tab: "hidden" });
 });

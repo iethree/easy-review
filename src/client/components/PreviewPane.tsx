@@ -16,8 +16,8 @@ import {
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconExternalLink,
-  IconEye,
-  IconEyeOff,
+  IconArchive,
+  IconArchiveOff,
   IconFileDiff,
   IconFileText,
 } from "@tabler/icons-react";
@@ -340,16 +340,16 @@ function Header({
               <IconExternalLink size={15} />
             </ActionIcon>
           </Tooltip>
-          {hideState && !pr.target && (
-            <Tooltip label={hideState.hidden ? "Unhide (⇧H)" : "Hide (⇧H)"}>
+          {hideState && (
+            <Tooltip label={hideState.hidden ? "Back to Review (⇧H)" : "Archive (⇧H)"}>
               <ActionIcon
                 variant="subtle"
                 color="gray"
                 size="md"
                 onClick={hideState.toggle}
-                aria-label={hideState.hidden ? "Unhide this pull request" : "Hide this pull request"}
+                aria-label={`${hideState.hidden ? "Bring back" : "Archive"} this ${pr.target ? "review" : "pull request"}`}
               >
-                {hideState.hidden ? <IconEye size={15} /> : <IconEyeOff size={15} />}
+                {hideState.hidden ? <IconArchiveOff size={15} /> : <IconArchive size={15} />}
               </ActionIcon>
             </Tooltip>
           )}

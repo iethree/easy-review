@@ -1,12 +1,17 @@
 /**
- * Pull requests you've hidden from the queue. Pure helpers, so the rules are
- * testable apart from React and localStorage.
+ * What you've archived out of Review: pull requests, and Claude's reviews of a
+ * diff or a repository. Pure helpers, so the rules are testable apart from
+ * React and localStorage. (Archive was called Hidden; the names here, and
+ * what's stored, kept the old word.)
  */
 
-import { prKey } from "../shared/aiReview.ts";
+import type { PullRequest } from "../shared/types.ts";
+import { rowKey } from "./reviewRows.ts";
 
-/** owner/name#number (lowercase) → when you hid it, as an ISO timestamp. */
+/** A row's rowKey (a pull request's owner/name#number, lowercase) → when you archived it, as an ISO timestamp. */
 export type HiddenMap = Record<string, string>;
+
+type Row = Pick<PullRequest, "owner" | "name" | "number" | "target">;
 
 /** Reads what was stored, shrugging off anything that isn't a map of strings. */
 export function parseHidden(raw: string | null): HiddenMap {
@@ -22,19 +27,19 @@ export function parseHidden(raw: string | null): HiddenMap {
   }
 }
 
-export function isHidden(hidden: HiddenMap, pr: { owner: string; name: string; number: number }): boolean {
-  return Object.hasOwn(hidden, prKey(pr));
+export function isHidden(hidden: HiddenMap, row: Row): boolean {
+  return Object.hasOwn(hidden, rowKey(row));
 }
 
-/** The queue minus what's hidden, and the hidden ones, most recently hidden first. */
-export function splitHidden<T extends { owner: string; name: string; number: number }>(
+/** The queue minus what's archived, and the archived rows, most recently archived first. */
+export function splitHidden<T extends Row>(
   prs: T[],
   hidden: HiddenMap,
 ): { shown: T[]; hidden: T[] } {
   const shown: T[] = [];
   const tucked: T[] = [];
   for (const pr of prs) (isHidden(hidden, pr) ? tucked : shown).push(pr);
-  tucked.sort((a, b) => (hidden[prKey(b)] ?? "").localeCompare(hidden[prKey(a)] ?? ""));
+  tucked.sort((a, b) => (hidden[rowKey(b)] ?? "").localeCompare(hidden[rowKey(a)] ?? ""));
   return { shown, hidden: tucked };
 }
 
@@ -46,20 +51,23 @@ export function neighbourAfterRemoving<T extends { id: string }>(list: T[], id: 
 }
 
 /**
- * Brings back the hidden pull requests whose review was asked for again
- * after you hid them: the author wants you to look again, so the queue
- * should show it. Returns `hidden` itself when nothing changes.
+ * Brings back what you archived that's been asked about again since: a pull
+ * request whose review was requested again (the author wants you to look
+ * again), or a diff or repository Claude was set to review again. Returns
+ * `hidden` itself when nothing changes.
  */
 export function unhideReRequested(
   hidden: HiddenMap,
-  prs: readonly { owner: string; name: string; number: number; reviewRequestedAt?: string | null }[],
+  rows: readonly (Row & Partial<Pick<PullRequest, "reviewRequestedAt" | "createdAt">>)[],
 ): HiddenMap {
   let next: HiddenMap | null = null;
-  for (const pr of prs) {
-    const key = prKey(pr);
+  for (const row of rows) {
+    const key = rowKey(row);
     const hiddenAt = hidden[key];
-    if (hiddenAt === undefined || !pr.reviewRequestedAt) continue;
-    const requested = Date.parse(pr.reviewRequestedAt);
+    // A diff's or a repository's row is as old as its latest review.
+    const askedAt = row.target ? row.createdAt : row.reviewRequestedAt;
+    if (hiddenAt === undefined || !askedAt) continue;
+    const requested = Date.parse(askedAt);
     const hid = Date.parse(hiddenAt);
     if (Number.isNaN(requested) || Number.isNaN(hid) || requested <= hid) continue;
     next ??= { ...hidden };

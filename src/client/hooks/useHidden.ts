@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { prKey } from "../../shared/aiReview.ts";
+import type { PullRequest } from "../../shared/types.ts";
 import { parseHidden, unhideReRequested, type HiddenMap } from "../hidden.ts";
+import { rowKey } from "../reviewRows.ts";
 
 const STORAGE_KEY = "easy-review.hidden.v1";
 
@@ -12,7 +13,7 @@ function read(): HiddenMap {
   }
 }
 
-/** Hidden pull requests, kept in the browser: a view preference, not server state. */
+/** What you archived (see hidden.ts), kept in the browser: a view preference, not server state. */
 export function useHidden() {
   const [hidden, setHidden] = useState<HiddenMap>(read);
 
@@ -34,9 +35,9 @@ export function useHidden() {
   }, []);
 
   const setHiddenFor = useCallback(
-    (pr: { owner: string; name: string; number: number }, on: boolean) => {
+    (row: Pick<PullRequest, "owner" | "name" | "number" | "target">, on: boolean) => {
       setHidden((prev) => {
-        const key = prKey(pr);
+        const key = rowKey(row);
         if (on === Object.hasOwn(prev, key)) return prev;
         const next = { ...prev };
         if (on) next[key] = new Date().toISOString();
@@ -47,7 +48,7 @@ export function useHidden() {
     [],
   );
 
-  /** Unhides those of `prs` whose review was asked for again after you hid them. */
+  /** Brings back those of `prs` asked about again since you archived them. */
   const unhideAskedAgain = useCallback((prs: Parameters<typeof unhideReRequested>[1]) => {
     setHidden((prev) => unhideReRequested(prev, prs));
   }, []);

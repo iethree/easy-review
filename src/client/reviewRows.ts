@@ -12,6 +12,11 @@ export function rowKey(pr: Pick<PullRequest, "owner" | "name" | "number" | "targ
   return pr.target ? pr.target.key : prKey(pr);
 }
 
+/** What a row is called in a message: `owner/name#12`, or `owner/name · abc1234…def5678`. */
+export function rowName(pr: Pick<PullRequest, "repo" | "number" | "target" | "baseRef">): string {
+  return pr.target ? `${pr.repo} · ${pr.baseRef}` : `${pr.repo}#${pr.number}`;
+}
+
 /** Where it is on GitHub. */
 export function targetUrl(job: Pick<AiReviewSummary, "owner" | "name" | "kind" | "baseSha" | "headSha" | "number">): string {
   const repo = `https://github.com/${job.owner}/${job.name}`;

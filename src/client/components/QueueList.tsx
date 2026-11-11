@@ -1,5 +1,5 @@
 import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
-import { IconAlertCircle, IconEyeOff, IconInbox } from "@tabler/icons-react";
+import { IconAlertCircle, IconArchive, IconInbox } from "@tabler/icons-react";
 import { useState } from "react";
 import { verdictFor, type AiReviewSummary, type Reviewer } from "../../shared/aiReview.ts";
 import { rowKey } from "../reviewRows.ts";
@@ -25,7 +25,7 @@ interface Props {
   onClearFilter: () => void;
   onRetry: () => void;
   /**
-   * "hidden" lists the PRs you tucked away, each with an unhide button;
+   * "hidden" is Archive: what you archived, each row with a button to bring it back;
    * "mine" lists your own.
    */
   variant?: "queue" | "hidden" | "mine";
@@ -85,11 +85,11 @@ export function QueueList({
     return (
       <Center py="xl" px="md">
         <Stack align="center" gap={6}>
-          <IconEyeOff size={38} color="var(--mantine-color-gray-5)" />
-          <Text fw={600}>Nothing hidden.</Text>
+          <IconArchive size={38} color="var(--mantine-color-gray-5)" />
+          <Text fw={600}>Nothing archived.</Text>
           <Text size="sm" c="dimmed" ta="center">
-            Press ⇧H on a pull request in Review to tuck it away here. It stays hidden
-            until you unhide it.
+            Press ⇧H on a pull request or a review in Review to archive it here. It
+            stays out of Review until you bring it back.
           </Text>
         </Stack>
       </Center>
@@ -139,7 +139,7 @@ export function QueueList({
         role="listbox"
         aria-label={
           variant === "hidden"
-            ? "Hidden pull requests"
+            ? "Archived pull requests and reviews"
             : variant === "mine"
               ? "Your pull requests"
               : "Pull requests and other reviews waiting on you"
@@ -174,7 +174,7 @@ export function QueueList({
       <Group justify="space-between" px="sm" py={8}>
         <Text size="10px" c="dimmed">
           {variant === "hidden" ? (
-            <>{rows.length} hidden · ⇧H unhides the selected one</>
+            <>{rows.length} archived · ⇧H brings the selected one back</>
           ) : (
             <>
               {rows.length} of {total} · press{" "}
