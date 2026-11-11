@@ -5,6 +5,9 @@ import { inFlightReviews, statusLine } from "./inFlight.ts";
 function job(id: string, patch: Partial<AiReviewSummary>): AiReviewSummary {
   return {
     id,
+    kind: "pr",
+    baseSha: null,
+    adhoc: false,
     reviewerId: "default",
     reviewerName: "Default",
     owner: "o",
