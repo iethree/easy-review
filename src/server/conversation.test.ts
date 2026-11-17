@@ -128,6 +128,7 @@ test("a missing pull request is an empty conversation", () => {
     items: [],
     truncated: false,
     details: { reviewers: [], assignees: [], labels: [] },
+    history: { commits: [], reviews: [], earlier: 0 },
   });
 });
 
@@ -166,4 +167,43 @@ test("the sidebar: where each reviewer stands, assignees and labels", () => {
     { name: "bug", color: "d73a4a", description: null },
     { name: "docs", color: "0075ca", description: "Docs" },
   ]);
+});
+
+test("the commit history: each commit, and every submitted review with the commit it was of", () => {
+  const raw: RawConversation = {
+    reviews: {
+      totalCount: 3,
+      nodes: [
+        { id: "r1", url: "u1", body: "", state: "COMMENTED", submittedAt: "2026-09-11T10:30:00Z", commit: { oid: "a" }, author: alice },
+        { id: "r2", url: "u2", body: "", state: "APPROVED", submittedAt: "2026-09-11T13:00:00Z", commit: null, author: alice },
+        { id: "r3", url: "u3", body: "draft", state: "PENDING", submittedAt: null, commit: { oid: "b" }, author: alice },
+      ],
+    },
+    commits: {
+      totalCount: 102,
+      nodes: [
+        {
+          commit: {
+            oid: "a",
+            messageHeadline: "First",
+            committedDate: "2026-09-11T09:00:00Z",
+            url: "https://github.com/o/r/commit/a",
+            author: { name: "Alice A", user: { login: "alice", avatarUrl: "https://avatars/a" } },
+          },
+        },
+        { commit: { oid: "b", messageHeadline: "Second", committedDate: "2026-09-11T12:00:00Z", url: "", author: { name: "Bob", user: null } } },
+        null,
+      ],
+    },
+  };
+  const history = buildConversation(raw).history;
+  expect(history.commits.map((c) => [c.sha, c.headline, c.author.login])).toEqual([
+    ["a", "First", "alice"],
+    ["b", "Second", "Bob"],
+  ]);
+  expect(history.reviews.map((r) => [r.id, r.sha])).toEqual([
+    ["r1", "a"],
+    ["r2", null],
+  ]);
+  expect(history.earlier).toBe(100);
 });

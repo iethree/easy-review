@@ -1812,9 +1812,83 @@ body {
   min-width: 0;
 }
 
-/* Narrow: the card goes first, its sections side by side. */
+/* Narrow: the card goes first, its sections side by side; then the commits, which scroll. */
+.er-desc-grid {
+  grid-template-areas: "details" "commits" "main";
+}
+
+.er-desc-main {
+  grid-area: main;
+}
+
 .er-desc-aside {
-  order: -1;
+  grid-area: details;
+}
+
+.er-desc-commits {
+  grid-area: commits;
+}
+
+.er-desc-commits .er-timeline {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* The commit timeline: a line down the dots, the reviews of each under it. */
+.er-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.er-commit {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.er-commit:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 6.5px;
+  top: 16px;
+  bottom: 0;
+  border-left: 1px solid var(--mantine-color-default-border);
+}
+
+.er-commit-dot {
+  flex: none;
+  margin-top: 3px;
+  color: var(--mantine-color-dimmed);
+}
+
+.er-commit[data-head="true"] .er-commit-dot {
+  color: var(--mantine-color-blue-6);
+}
+
+.er-commit-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.er-commit-meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.er-commit-review {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 4px;
+  margin-left: -4px;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.er-commit-review:hover {
+  background: var(--mantine-color-default-hover);
 }
 
 .er-details {
@@ -1831,11 +1905,17 @@ body {
 @container (min-width: 720px) {
   .er-desc-grid {
     grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-areas: "main details" "main commits";
+    grid-template-rows: auto 1fr;
   }
 
-  .er-desc-aside {
-    order: 0;
+  .er-desc-aside,
+  .er-desc-commits {
     align-self: start;
+  }
+
+  .er-desc-commits .er-timeline {
+    max-height: none;
   }
 
   .er-details {
@@ -1845,6 +1925,15 @@ body {
 
   .er-details-section {
     flex: none;
+  }
+}
+
+/* Wide: the commits get a sidebar of their own, on the left. */
+@container (min-width: 1100px) {
+  .er-desc-grid {
+    grid-template-columns: 240px minmax(0, 1fr) 220px;
+    grid-template-areas: "commits main details";
+    grid-template-rows: auto;
   }
 }
 

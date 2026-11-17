@@ -3,7 +3,7 @@ import { IconCheck, IconClockHour4, IconMessageCircle, IconPencilMinus, IconUser
 import type { PrDetails, PrLabel, ReviewerState } from "../../shared/types.ts";
 import { readableOn } from "../labelColor.ts";
 
-const STATE: Record<ReviewerState, { label: string; color: string; Icon: typeof IconCheck }> = {
+export const REVIEWER_STATE: Record<ReviewerState, { label: string; color: string; Icon: typeof IconCheck }> = {
   REQUESTED: { label: "Awaiting review", color: "yellow", Icon: IconClockHour4 },
   APPROVED: { label: "Approved", color: "teal", Icon: IconCheck },
   CHANGES_REQUESTED: { label: "Requested changes", color: "orange", Icon: IconPencilMinus },
@@ -23,7 +23,7 @@ export function PrDetailsCard({ details }: { details: PrDetails }) {
           <None>No reviewers</None>
         ) : (
           details.reviewers.map((r) => {
-            const { label, color, Icon } = STATE[r.state];
+            const { label, color, Icon } = REVIEWER_STATE[r.state];
             return (
               <Group key={`${r.isTeam ? "team:" : ""}${r.name}`} gap={8} wrap="nowrap">
                 <Avatar src={r.avatarUrl} size={20} radius={r.isTeam ? "sm" : "xl"}>

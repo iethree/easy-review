@@ -52,7 +52,7 @@ function review(over: Partial<AiReviewJob>): AiReviewJob {
     worktreePath: null,
     sessionId: "session-1",
     model: null,
-    readOnly: true,
+    yolo: false,
     stderrTail: null,
     ...over,
   };
@@ -116,10 +116,11 @@ test("a question is answered in the review's own session, with the part of the r
   const args = JSON.parse(reply?.text ?? "[]") as string[];
   expect(args[args.indexOf("--resume") + 1]).toBe("session-1");
   expect(args[args.indexOf("-p") + 1]).toContain("> - **Race** in the loader");
-  // Read-only, as it reviewed.
+  // In safe mode, as it reviewed.
   expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
-  // Any claude it runs itself is the fenced one.
-  expect(args.at(-1)).toBe(`PATH0=${join(dir, "home", "bin")}`);
+  expect(args).toContain("--strict-mcp-config");
+  // Nothing of easy-review's goes ahead of your PATH.
+  expect(args.at(-1)).not.toBe(`PATH0=${join(dir, "home", "bin")}`);
 });
 
 test("with its checkout gone, a review's session can't be continued", async () => {

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import type { PullRequest } from "../shared/types.ts";
-import { describeRestError, latestRequest, mergeById, mineSearchQueries } from "./github.ts";
+import { describeRestError, latestRequest, mergeById, mineSearchQueries, yourReview } from "./github.ts";
 
 test("uses the errors array, which is where the real reason lives", () => {
   // Verbatim from GitHub's reviews endpoint: `errors` holds plain strings and
@@ -85,4 +85,14 @@ test("your review was last asked for by name, or of a team when the queue has te
   expect(latestRequest(requests, "ryan", false)).toBe("2026-11-10T09:00:00Z");
   expect(latestRequest(requests, "ryan", true)).toBe("2026-11-10T11:00:00Z");
   expect(latestRequest([], "ryan", true)).toBeNull();
+});
+
+test("your latest review is when and of which commit, and none while it's only pending", () => {
+  expect(yourReview({ submittedAt: "2026-11-10T09:00:00Z", commit: { oid: "abc" } })).toEqual({
+    at: "2026-11-10T09:00:00Z",
+    sha: "abc",
+  });
+  expect(yourReview({ submittedAt: null, commit: { oid: "abc" } })).toBeNull();
+  expect(yourReview({ submittedAt: "2026-11-10T09:00:00Z", commit: null })).toBeNull();
+  expect(yourReview(null)).toBeNull();
 });

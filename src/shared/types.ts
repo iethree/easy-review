@@ -65,6 +65,11 @@ export interface PullRequest {
    */
   reviewRequestedAt?: string | null;
   /**
+   * Your latest submitted review on GitHub: when, and of which commit. Only on
+   * the queue's own rows; null when you haven't reviewed it.
+   */
+  yourReview?: { at: string; sha: string } | null;
+  /**
    * Set on a row that isn't a pull request: Claude's reviews of a diff or a
    * whole repository, listed with the pull requests. `key` is what the reviews
    * are of (see reviewKey); `number` is 0, and there is nothing to approve.
@@ -290,10 +295,41 @@ export interface PrDetails {
   labels: PrLabel[];
 }
 
+export interface PrCommit {
+  sha: string;
+  /** The first line of its message. */
+  headline: string;
+  /** Its author's GitHub account, or else the name in the commit. */
+  author: Person;
+  committedAt: string;
+  url: string;
+}
+
+/** A submitted review on GitHub, and the commit it was of. */
+export interface CommitReview {
+  id: string;
+  url: string;
+  author: Person;
+  state: ReviewSummaryState;
+  at: string;
+  /** Null when GitHub no longer knows the commit. */
+  sha: string | null;
+}
+
+/** A pull request's commits and its reviews, for the commit timeline. */
+export interface CommitHistory {
+  /** Oldest first, as GitHub gives them: the latest 100. */
+  commits: PrCommit[];
+  reviews: CommitReview[];
+  /** How many older commits there are than the ones fetched. */
+  earlier: number;
+}
+
 export interface Conversation {
   /** Oldest first, as GitHub shows it. */
   items: TimelineItem[];
   /** True when GitHub had more than we fetched. */
   truncated: boolean;
   details: PrDetails;
+  history: CommitHistory;
 }

@@ -109,11 +109,18 @@ const PR_CHECKS = /* GraphQL */ `
 
 /**
  * The latest requests for a review, so a pull request you hid comes back
- * when your review is asked for again. Cheap: the queue's search costs 1
- * point with it.
+ * when your review is asked for again, and the commit your own latest review
+ * was of, to show what has changed since. Cheap: the queue's search costs 1
+ * point with them.
  */
 const PR_REQUESTS = /* GraphQL */ `
   fragment PrRequests on PullRequest {
+    viewerLatestReview {
+      submittedAt
+      commit {
+        oid
+      }
+    }
     timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 10) {
       nodes {
         ... on ReviewRequestedEvent {
@@ -455,6 +462,7 @@ export class GitHubClient {
       pullRequests.push({
         ...pr,
         reviewRequestedAt: latestRequest(requests, data.viewer.login, opts.includeTeamRequests),
+        yourReview: yourReview(node?.viewerLatestReview),
       });
     }
 
@@ -825,6 +833,22 @@ interface RawPullRequest {
       | null;
   };
   timelineItems?: { nodes?: (RawReviewRequest | null)[] | null } | null;
+  viewerLatestReview?: RawViewerReview | null;
+}
+
+export interface RawViewerReview {
+  submittedAt?: string | null;
+  commit?: { oid?: string } | null;
+}
+
+/**
+ * Your latest review, as the queue keeps it: when, and of which commit. Null
+ * when you have none, or only one still pending (not submitted yet).
+ */
+export function yourReview(review: RawViewerReview | null | undefined): PullRequest["yourReview"] {
+  const at = review?.submittedAt;
+  const sha = review?.commit?.oid;
+  return at && sha ? { at, sha } : null;
 }
 
 export interface RawReviewRequest {

@@ -76,7 +76,7 @@ export function createLocalApi(jobs: ReviewJobs) {
 
       if (parts[0] === "config" && parts[1] === "fixed" && method === "GET") {
         // What every review is told whatever the settings say, for Settings to show.
-        return json({ text: reviewSystemPrompt(jobs.getConfig().readOnly) });
+        return json({ text: reviewSystemPrompt(jobs.getConfig().yolo) });
       }
 
       if (parts[0] === "config") {
@@ -97,7 +97,11 @@ export function createLocalApi(jobs: ReviewJobs) {
           return json({ reviewers: await setReviewerOrder((await body(request)).order) });
         }
         if (id && REVIEWER_ID.test(id) && !parts[2]) {
-          if (method === "PUT") return json(await updateReviewer(id, await body(request)));
+          if (method === "PUT") {
+            const reviewer = await updateReviewer(id, await body(request));
+            jobs.setReviewerLimit(reviewer.id, reviewer.concurrency);
+            return json(reviewer);
+          }
           if (method === "DELETE") {
             await deleteReviewer(id);
             return json({ ok: true });

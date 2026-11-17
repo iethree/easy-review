@@ -8,6 +8,7 @@ import {
   Group,
   Loader,
   NavLink,
+  NumberInput,
   ScrollArea,
   Stack,
   Text,
@@ -17,7 +18,7 @@ import {
 } from "@mantine/core";
 import { IconAlertTriangle, IconCheck, IconGripVertical, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import type { Reviewer } from "../../shared/aiReview.ts";
+import { MAX_CONCURRENT, type Reviewer } from "../../shared/aiReview.ts";
 import { REVIEWER_COLORS, REVIEWER_ICONS, type ReviewerLook, type ReviewerLooks } from "../../shared/reviewerLook.ts";
 import { moveId } from "../../shared/reviewerOrder.ts";
 import type { useReviewers } from "../hooks/useReviewers.ts";
@@ -26,9 +27,9 @@ import { REVIEWER_ICON, ReviewerIcon, reviewerColor } from "./ReviewerIcon.tsx";
 type Reviewers = ReturnType<typeof useReviewers>;
 
 /** What's in the editor: an existing reviewer (by id), or a new one (null). */
-type Draft = { id: string | null; name: string; instructions: string };
+type Draft = { id: string | null; name: string; instructions: string; concurrency: number | null };
 
-const NEW: Draft = { id: null, name: "", instructions: "" };
+const NEW: Draft = { id: null, name: "", instructions: "", concurrency: null };
 
 const PLACEHOLDER = `What should this reviewer look for, and how should it report?
 
@@ -77,7 +78,10 @@ export function ReviewersSettings({
     draft !== null &&
     (draft.id === null
       ? draft.name.trim() !== "" || draft.instructions.trim() !== ""
-      : !saved || saved.name !== draft.name || saved.instructions !== draft.instructions);
+      : !saved ||
+        saved.name !== draft.name ||
+        saved.instructions !== draft.instructions ||
+        saved.concurrency !== draft.concurrency);
 
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
@@ -94,7 +98,7 @@ export function ReviewersSettings({
     setSaving(true);
     setError(null);
     try {
-      const input = { name: draft.name, instructions: draft.instructions };
+      const input = { name: draft.name, instructions: draft.instructions, concurrency: draft.concurrency };
       const result = draft.id ? await store.update(draft.id, input) : await store.create(input);
       if (!draft.id) {
         onLookChange(result.id, newLook);
@@ -229,6 +233,19 @@ export function ReviewersSettings({
                     onChange={(e) => setDraft({ ...draft, name: e.currentTarget.value })}
                     data-autofocus
                   />
+                  <NumberInput
+                    label="Reviews at once"
+                    description="How many of this reviewer's reviews may run together: 1 for a heavy one, to run them one by one. Empty: as many as the total in Claude review allows."
+                    placeholder="No limit of its own"
+                    min={1}
+                    max={MAX_CONCURRENT}
+                    allowDecimal={false}
+                    allowNegative={false}
+                    clampBehavior="strict"
+                    maw={360}
+                    value={draft.concurrency ?? ""}
+                    onChange={(v) => setDraft({ ...draft, concurrency: typeof v === "number" ? v : null })}
+                  />
                   <LookPicker
                     look={draft.id ? (looks[draft.id] ?? {}) : newLook}
                     onChange={(look) => (draft.id ? onLookChange(draft.id, look) : setNewLook(look))}
@@ -358,5 +375,5 @@ function LookPicker({ look, onChange }: { look: ReviewerLook; onChange: (look: R
 }
 
 function fromReviewer(r: Reviewer): Draft {
-  return { id: r.id, name: r.name, instructions: r.instructions };
+  return { id: r.id, name: r.name, instructions: r.instructions, concurrency: r.concurrency };
 }

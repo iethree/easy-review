@@ -42,6 +42,7 @@ test("a reviewer file is a name in a header, then the instructions", () => {
     id: "security",
     name: "Security",
     instructions: "Look for injection.",
+    concurrency: null,
   });
 });
 
@@ -50,7 +51,18 @@ test("a file without the header is named after the file", () => {
     id: "data-model",
     name: "Data model",
     instructions: "Check the migrations.",
+    concurrency: null,
   });
+});
+
+test("a reviewer can have a limit of its own on how many of its reviews run at once", () => {
+  const text = formatReviewerFile({ name: "Heavy", instructions: "Run everything.", concurrency: 1 });
+  expect(text).toBe("---\nname: Heavy\nconcurrency: 1\n---\n\nRun everything.\n");
+  expect(parseReviewerFile("heavy", text).concurrency).toBe(1);
+  // Out of range, or not a number: no limit of its own.
+  expect(parseReviewerFile("x", "---\nname: X\nconcurrency: 0\n---\nBody").concurrency).toBeNull();
+  expect(parseReviewerFile("x", "---\nname: X\nconcurrency: lots\n---\nBody").concurrency).toBeNull();
+  expect(parseReviewerFile("x", "---\nname: X\nconcurrency: 7\n---\nBody").concurrency).toBeNull();
 });
 
 test("quoted names and Windows line endings are fine", () => {
@@ -74,6 +86,7 @@ test("the first run turns the old standing instructions into a reviewer called G
     id: "general",
     name: "General",
     instructions: "My old instructions.",
+    concurrency: null,
   });
   // Only the first run: deleting General later doesn't bring it back.
   await createReviewer({ name: "Security", instructions: "Injection." });
@@ -108,6 +121,7 @@ test("a built-in never overwrites a file of the same name", async () => {
     id: "layers",
     name: "My layers",
     instructions: "My own.",
+    concurrency: null,
   });
 });
 
@@ -123,6 +137,7 @@ test("reviewers are created, listed by name, renamed in place and deleted", asyn
     id: "performance",
     name: "Speed",
     instructions: "Hot loops.",
+    concurrency: null,
   });
 
   await deleteReviewer(a.id);
@@ -133,6 +148,13 @@ test("two reviewers with the same name get different files", async () => {
   const one = await createReviewer({ name: "Nits", instructions: "a" });
   const two = await createReviewer({ name: "Nits", instructions: "b" });
   expect([one.id, two.id]).toEqual(["nits", "nits-2"]);
+});
+
+test("a reviewer's limit is a whole number in range, or none", async () => {
+  await expect(createReviewer({ name: "X", instructions: "x", concurrency: 0 })).rejects.toThrow(/at once/);
+  await expect(createReviewer({ name: "X", instructions: "x", concurrency: 2.5 })).rejects.toThrow(/at once/);
+  expect((await createReviewer({ name: "Limited", instructions: "x", concurrency: 2 })).concurrency).toBe(2);
+  expect((await createReviewer({ name: "Unlimited", instructions: "x", concurrency: "" })).concurrency).toBeNull();
 });
 
 test("a reviewer needs a name and instructions, and the last one can't be deleted", async () => {
@@ -186,7 +208,7 @@ test("the reviewer routes list, create, update and delete", async () => {
   expect(((await created.json()) as { id: string }).id).toBe("security");
 
   const updated = await call("PUT", "reviewers/security", { name: "Sec", instructions: "Auth." });
-  expect(await updated.json()).toEqual({ id: "security", name: "Sec", instructions: "Auth." });
+  expect(await updated.json()).toEqual({ id: "security", name: "Sec", instructions: "Auth.", concurrency: null });
 
   expect((await call("DELETE", "reviewers/security")).status).toBe(200);
   expect((await call("DELETE", "reviewers/layers")).status).toBe(200);

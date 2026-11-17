@@ -40,11 +40,13 @@ export interface AiReviewConfig {
    */
   clones: string;
   /**
-   * Claude only reads the code, and runs none of it. Off by default: then it
-   * can run commands and edit files in the review's worktree, to check what
-   * it suspects — running the pull request's code on this machine.
+   * Off (safe mode, the default): Claude only reads the code — Read, Grep and
+   * Glob — fenced off from the pull request's settings, hooks and MCP
+   * servers. On (YOLO mode), for code you trust: every tool, no permission
+   * checks, your MCP servers, and the repository's own settings and hooks. It
+   * runs the pull request's code on this machine, as you.
    */
-  readOnly: boolean;
+  yolo: boolean;
   /** Added to every review, whichever reviewer runs it; in order. */
   globalInstructions: InstructionSet[];
 }
@@ -68,10 +70,8 @@ export function activeInstructions(sets: readonly InstructionSet[]): { name: str
     .map((s) => ({ name: s.name.trim(), instructions: s.instructions.trim() }));
 }
 
-/** The tools a review gets: reading, and unless read-only, running and editing. */
-export function reviewTools(readOnly: boolean): string[] {
-  return readOnly ? ["Read", "Grep", "Glob"] : ["Read", "Grep", "Glob", "Bash", "Edit", "Write"];
-}
+/** The tools a review gets in safe mode. In YOLO mode it gets all of them. */
+export const SAFE_TOOLS = ["Read", "Grep", "Glob"] as const;
 
 /**
  * A named set of review instructions — "Security", "Performance" — kept as a
@@ -83,7 +83,15 @@ export interface Reviewer {
   id: string;
   name: string;
   instructions: string;
+  /**
+   * How many of this reviewer's reviews may run at once; null for as many as
+   * the total allows (AiReviewConfig.maxConcurrent).
+   */
+  concurrency: number | null;
 }
+
+/** The most reviews at once, in total or of one reviewer. */
+export const MAX_CONCURRENT = 6;
 
 /** Enough to draw a row's robot icon; polled frequently, so kept small. */
 /**
@@ -163,6 +171,8 @@ export interface AiReviewJob extends AiReviewSummary {
   headRef?: string;
   /** The reviewer's instructions as they were when this review started. */
   instructions: string;
+  /** The reviewer's own limit then (see Reviewer.concurrency). Absent on reviews from before there was one. */
+  concurrency?: number | null;
   /** The global instructions switched on then. Absent on reviews from before there were any. */
   globalInstructions?: { name: string; instructions: string }[];
   /** The finished review, as Markdown. */
@@ -174,8 +184,11 @@ export interface AiReviewJob extends AiReviewSummary {
   worktreePath: string | null;
   sessionId: string | null;
   model: string | null;
-  /** Ran read-only (see AiReviewConfig). Absent until it runs; reviews from before the setting were. */
-  readOnly?: boolean;
+  /**
+   * Ran in YOLO mode (see AiReviewConfig). Absent until it runs, and on
+   * reviews from before the setting: those are continued in safe mode.
+   */
+  yolo?: boolean;
   /** The last of whatever the process wrote to stderr, for failures. */
   stderrTail: string | null;
   /** Follow-up questions and their answers, oldest first. */
@@ -274,7 +287,7 @@ export const DEFAULT_AI_CONFIG: AiReviewConfig = {
   timeoutMinutes: 20,
   maxConcurrent: 2,
   clones: "",
-  readOnly: false,
+  yolo: false,
   globalInstructions: [GROUND_RULES],
 };
 
@@ -312,12 +325,13 @@ export function verdictFor(reviews: readonly AiReviewSummary[], headSha: string)
 }
 
 /**
- * Continue the review interactively — with the same restrictions and tools,
- * since the directory holds the pull request's code, not yours.
+ * Continue the review interactively. In safe mode, with the same fences and
+ * tools, since the directory holds someone else's code; in YOLO mode, as
+ * Claude normally runs (you are there to answer its permission prompts).
  */
-export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId" | "readOnly">): string | null {
+export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId" | "yolo">): string | null {
   if (!job.worktreePath || !job.sessionId) return null;
   const quoted = `'${job.worktreePath.replace(/'/g, `'\\''`)}'`;
-  const tools = reviewTools(job.readOnly ?? true).join(",");
-  return `cd ${quoted} && claude --resume ${job.sessionId} --setting-sources user --strict-mcp-config --tools ${tools}`;
+  const fences = job.yolo ? "" : ` --setting-sources user --strict-mcp-config --tools ${SAFE_TOOLS.join(",")}`;
+  return `cd ${quoted} && claude --resume ${job.sessionId}${fences}`;
 }

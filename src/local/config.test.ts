@@ -7,20 +7,22 @@ import { createLocalApi } from "./api.ts";
 import { normalizeConfig } from "./config.ts";
 import { ReviewJobs } from "./jobs.ts";
 
-test("reviews can run code unless read-only is set", () => {
-  expect(normalizeConfig({}).readOnly).toBe(false);
-  expect(normalizeConfig({ readOnly: true }).readOnly).toBe(true);
+test("reviews run in safe mode unless YOLO mode is switched on", () => {
+  expect(normalizeConfig({}).yolo).toBe(false);
+  expect(normalizeConfig({ yolo: true }).yolo).toBe(true);
   // Anything but a boolean is the default, not a guess.
-  expect(normalizeConfig({ readOnly: "yes" }).readOnly).toBe(false);
+  expect(normalizeConfig({ yolo: "yes" }).yolo).toBe(false);
+  // The old read-only switch, off, doesn't turn YOLO on.
+  expect(normalizeConfig({ readOnly: false }).yolo).toBe(false);
 });
 
-test("continuing a review in a terminal keeps the tools it ran with", () => {
+test("continuing a review in a terminal keeps the mode it ran in", () => {
   const job = { worktreePath: "/wt/pr-1", sessionId: "abc" };
-  expect(resumeCommand({ ...job, readOnly: false })).toEndWith("--tools Read,Grep,Glob,Bash,Edit,Write");
-  expect(resumeCommand({ ...job, readOnly: true })).toEndWith("--tools Read,Grep,Glob");
-  // Reviews from before the setting were all read-only.
-  expect(resumeCommand(job)).toEndWith("--tools Read,Grep,Glob");
-  expect(resumeCommand({ ...job, readOnly: false })).toContain("--setting-sources user --strict-mcp-config");
+  const fenced = "claude --resume abc --setting-sources user --strict-mcp-config --tools Read,Grep,Glob";
+  expect(resumeCommand({ ...job, yolo: false })).toEndWith(fenced);
+  // Reviews from before the setting continue in safe mode.
+  expect(resumeCommand(job)).toEndWith(fenced);
+  expect(resumeCommand({ ...job, yolo: true })).toEndWith("claude --resume abc");
 });
 
 test("global instructions start as the ground rules, and an emptied list stays empty", () => {

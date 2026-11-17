@@ -5,11 +5,12 @@
  *
  *   ---
  *   name: Security
+ *   concurrency: 1
  *   ---
  *
  *   Look for injection, missing permission checks, …
  *
- * The file name is the reviewer's id, and stays put when it is renamed. A
+ * `concurrency` is optional: how many of its reviews may run at once. The file name is the reviewer's id, and stays put when it is renamed. A
  * file without the header is still a reviewer, named after the file. The
  * order you put them in, in Settings, is kept beside them in `.order`: one id
  * a line.
@@ -17,7 +18,7 @@
 
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { Reviewer } from "../shared/aiReview.ts";
+import { MAX_CONCURRENT, type Reviewer } from "../shared/aiReview.ts";
 import { inReviewerOrder } from "../shared/reviewerOrder.ts";
 import { BUILT_IN_REVIEWERS } from "./builtInReviewers.ts";
 import { localPaths } from "./paths.ts";
@@ -31,18 +32,28 @@ const orderFile = () => Bun.file(join(dir(), ".order"));
 export function parseReviewerFile(id: string, text: string): Reviewer {
   const header = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
   let name = "";
+  let concurrency: number | null = null;
   if (header) {
     for (const line of (header[1] ?? "").split("\n")) {
-      const m = /^name:\s*(.*)$/.exec(line.trim());
-      if (m) name = unquote(m[1] ?? "");
+      const m = /^(name|concurrency):\s*(.*)$/.exec(line.trim());
+      if (m?.[1] === "name") name = unquote(m[2] ?? "");
+      // Anything but a whole number in range is no limit of its own, as if it weren't there.
+      else if (m?.[1] === "concurrency") concurrency = toConcurrency(unquote(m[2] ?? ""));
     }
   }
   const instructions = (header ? text.slice(header[0].length) : text).trim();
-  return { id, name: name || titleFromId(id), instructions };
+  return { id, name: name || titleFromId(id), instructions, concurrency };
 }
 
-export function formatReviewerFile(reviewer: Pick<Reviewer, "name" | "instructions">): string {
-  return `---\nname: ${reviewer.name.replace(/\n/g, " ").trim()}\n---\n\n${reviewer.instructions.trim()}\n`;
+export function formatReviewerFile(reviewer: Pick<Reviewer, "name" | "instructions"> & { concurrency?: number | null }): string {
+  const limit = reviewer.concurrency ? `concurrency: ${reviewer.concurrency}\n` : "";
+  return `---\nname: ${reviewer.name.replace(/\n/g, " ").trim()}\n${limit}---\n\n${reviewer.instructions.trim()}\n`;
+}
+
+/** A limit from a file or a form: a whole number from 1 to MAX_CONCURRENT, or null. */
+function toConcurrency(value: unknown): number | null {
+  const n = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value.trim()) ? Number(value) : Number.NaN;
+  return Number.isInteger(n) && n >= 1 && n <= MAX_CONCURRENT ? n : null;
 }
 
 function unquote(value: string): string {
@@ -100,17 +111,24 @@ export async function setReviewerOrder(ids: unknown): Promise<Reviewer[]> {
   return listReviewers();
 }
 
-function validate(input: { name?: unknown; instructions?: unknown }): { name: string; instructions: string } {
+type ReviewerInput = { name?: unknown; instructions?: unknown; concurrency?: unknown };
+
+function validate(input: ReviewerInput): { name: string; instructions: string; concurrency: number | null } {
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const instructions = typeof input.instructions === "string" ? input.instructions : "";
   if (!name) throw new ReviewerError("A reviewer needs a name.");
   if (!instructions.trim()) throw new ReviewerError("A reviewer needs instructions.");
-  return { name, instructions };
+  const none = input.concurrency === undefined || input.concurrency === null || input.concurrency === "";
+  const concurrency = none ? null : toConcurrency(input.concurrency);
+  if (!none && concurrency === null) {
+    throw new ReviewerError(`Reviews at once must be a whole number from 1 to ${MAX_CONCURRENT}, or empty.`);
+  }
+  return { name, instructions, concurrency };
 }
 
 export class ReviewerError extends Error {}
 
-export async function createReviewer(input: { name?: unknown; instructions?: unknown }): Promise<Reviewer> {
+export async function createReviewer(input: ReviewerInput): Promise<Reviewer> {
   const fields = validate(input);
   await mkdir(dir(), { recursive: true });
   const taken = new Set((await listReviewers()).map((r) => r.id));
@@ -123,7 +141,7 @@ export async function createReviewer(input: { name?: unknown; instructions?: unk
 
 export async function updateReviewer(
   id: string,
-  input: { name?: unknown; instructions?: unknown },
+  input: ReviewerInput,
 ): Promise<Reviewer> {
   if (!REVIEWER_ID.test(id) || !(await Bun.file(fileOf(id)).exists())) {
     throw new ReviewerError("No such reviewer.");

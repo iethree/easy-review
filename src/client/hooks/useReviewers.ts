@@ -28,7 +28,7 @@ export function useReviewers(enabled: boolean) {
   }, [enabled, refresh]);
 
   const create = useCallback(
-    async (input: Pick<Reviewer, "name" | "instructions">) => {
+    async (input: Pick<Reviewer, "name" | "instructions" | "concurrency">) => {
       const created = await call<Reviewer>("/api/local/reviewers", { method: "POST", body: JSON.stringify(input) });
       await refresh();
       return created;
@@ -37,7 +37,7 @@ export function useReviewers(enabled: boolean) {
   );
 
   const update = useCallback(
-    async (id: string, input: Pick<Reviewer, "name" | "instructions">) => {
+    async (id: string, input: Pick<Reviewer, "name" | "instructions" | "concurrency">) => {
       const saved = await call<Reviewer>(`/api/local/reviewers/${id}`, { method: "PUT", body: JSON.stringify(input) });
       await refresh();
       return saved;
