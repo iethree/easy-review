@@ -14,7 +14,7 @@ import {
   Textarea,
 } from "@mantine/core";
 import { IconAlertTriangle, IconShieldLock, IconUsers } from "@tabler/icons-react";
-import { EFFORTS, type AiReviewEffort, type LocalStatus } from "../../shared/aiReview.ts";
+import { EFFORTS, MAX_CONCURRENT, type AiReviewEffort, type LocalStatus } from "../../shared/aiReview.ts";
 import { useLocalConfig } from "../hooks/useLocalReviews.ts";
 
 const SAVE_LABEL = { idle: "", saving: "Saving…", saved: "Saved", error: "Couldn't save" } as const;
@@ -104,10 +104,10 @@ export function ClaudeSettings({
         />
         <NumberInput
           size="xs"
-          label="Reviews at once"
-          description="The rest wait in line."
+          label="Reviews at once, in total"
+          description="The rest wait in line. A reviewer can have a lower limit of its own, in Reviewers."
           min={1}
-          max={6}
+          max={MAX_CONCURRENT}
           value={config.maxConcurrent}
           onChange={(v) => typeof v === "number" && set({ maxConcurrent: v })}
         />

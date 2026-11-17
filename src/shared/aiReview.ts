@@ -83,7 +83,15 @@ export interface Reviewer {
   id: string;
   name: string;
   instructions: string;
+  /**
+   * How many of this reviewer's reviews may run at once; null for as many as
+   * the total allows (AiReviewConfig.maxConcurrent).
+   */
+  concurrency: number | null;
 }
+
+/** The most reviews at once, in total or of one reviewer. */
+export const MAX_CONCURRENT = 6;
 
 /** Enough to draw a row's robot icon; polled frequently, so kept small. */
 /**
@@ -163,6 +171,8 @@ export interface AiReviewJob extends AiReviewSummary {
   headRef?: string;
   /** The reviewer's instructions as they were when this review started. */
   instructions: string;
+  /** The reviewer's own limit then (see Reviewer.concurrency). Absent on reviews from before there was one. */
+  concurrency?: number | null;
   /** The global instructions switched on then. Absent on reviews from before there were any. */
   globalInstructions?: { name: string; instructions: string }[];
   /** The finished review, as Markdown. */

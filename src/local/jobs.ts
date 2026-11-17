@@ -47,6 +47,7 @@ import {
 import { loadConfig, parseCloneMap, saveConfig } from "./config.ts";
 import { checkoutRefs, prepareCommitWorktree, prepareWorktree, removeWorktree, resolveClone } from "./git.ts";
 import { localPaths } from "./paths.ts";
+import { nextReviews } from "./queue.ts";
 import { seedReviewers } from "./reviewers.ts";
 import { keepReport, placesReport } from "./reports.ts";
 import { dropScreenshots, keepScreenshots } from "./screenshots.ts";
@@ -339,6 +340,7 @@ export class ReviewJobs {
       reviewerId: reviewer.id,
       reviewerName: reviewer.name,
       instructions: reviewer.instructions,
+      concurrency: reviewer.concurrency,
       // Taken now, like the reviewer's: what you switch on or off later is for later reviews.
       globalInstructions: activeInstructions(this.config.globalInstructions),
       ...target,
@@ -613,13 +615,34 @@ export class ReviewJobs {
   /** PR descriptions are fetched once, at start; held here until the job runs. */
   private descriptions = new Map<string, string>();
 
-  private pump(): void {
-    const queued = [...this.jobs.values()]
-      .filter((j) => j.status === "queued")
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  /**
+   * A reviewer's limit changed: the reviews of it still waiting take the new
+   * one (those running carry on), and any it frees start.
+   */
+  setReviewerLimit(reviewerId: string, concurrency: number | null): void {
+    for (const job of this.jobs.values()) {
+      if (job.status === "queued" && job.reviewerId === reviewerId) job.concurrency = concurrency;
+    }
+    this.pump();
+  }
 
-    for (const job of queued) {
-      if (this.running.size >= this.config.maxConcurrent) break;
+  private pump(): void {
+    const all = [...this.jobs.values()];
+    const { start, heldByReviewer } = nextReviews(
+      all.filter((j) => j.status === "queued" && !this.running.has(j.id)),
+      all.filter((j) => this.running.has(j.id)),
+      this.config.maxConcurrent,
+    );
+    const held = new Set(heldByReviewer);
+    for (const job of all) {
+      if (job.status !== "queued" || start.includes(job)) continue;
+      const phase = held.has(job)
+        ? `Waiting: ${job.reviewerName} runs ${job.concurrency} at once`
+        : "Waiting for a free slot";
+      if (job.phase !== phase) this.update(job, { phase }, { quiet: true });
+    }
+
+    for (const job of start) {
       this.running.add(job.id);
       void this.run(job).finally(() => {
         this.running.delete(job.id);

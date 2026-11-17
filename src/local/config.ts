@@ -9,6 +9,7 @@ import { dirname } from "node:path";
 import {
   DEFAULT_AI_CONFIG,
   EFFORTS,
+  MAX_CONCURRENT,
   type AiReviewConfig,
   type AiReviewEffort,
   type InstructionSet,
@@ -54,7 +55,7 @@ export function normalizeConfig(input: unknown): AiReviewConfig {
     model: typeof raw.model === "string" ? raw.model.trim() : d.model,
     effort: EFFORTS.includes(raw.effort as AiReviewEffort) ? (raw.effort as AiReviewEffort) : d.effort,
     timeoutMinutes: clampInt(raw.timeoutMinutes, 1, 120, d.timeoutMinutes),
-    maxConcurrent: clampInt(raw.maxConcurrent, 1, 6, d.maxConcurrent),
+    maxConcurrent: clampInt(raw.maxConcurrent, 1, MAX_CONCURRENT, d.maxConcurrent),
     clones: typeof raw.clones === "string" ? raw.clones : d.clones,
     readOnly: typeof raw.readOnly === "boolean" ? raw.readOnly : d.readOnly,
     globalInstructions: normalizeSets(raw.globalInstructions),

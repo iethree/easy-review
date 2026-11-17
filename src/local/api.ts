@@ -97,7 +97,11 @@ export function createLocalApi(jobs: ReviewJobs) {
           return json({ reviewers: await setReviewerOrder((await body(request)).order) });
         }
         if (id && REVIEWER_ID.test(id) && !parts[2]) {
-          if (method === "PUT") return json(await updateReviewer(id, await body(request)));
+          if (method === "PUT") {
+            const reviewer = await updateReviewer(id, await body(request));
+            jobs.setReviewerLimit(reviewer.id, reviewer.concurrency);
+            return json(reviewer);
+          }
           if (method === "DELETE") {
             await deleteReviewer(id);
             return json({ ok: true });
