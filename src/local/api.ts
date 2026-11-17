@@ -76,7 +76,7 @@ export function createLocalApi(jobs: ReviewJobs) {
 
       if (parts[0] === "config" && parts[1] === "fixed" && method === "GET") {
         // What every review is told whatever the settings say, for Settings to show.
-        return json({ text: reviewSystemPrompt(jobs.getConfig().readOnly) });
+        return json({ text: reviewSystemPrompt(jobs.getConfig().yolo) });
       }
 
       if (parts[0] === "config") {

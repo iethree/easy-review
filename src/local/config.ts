@@ -57,7 +57,8 @@ export function normalizeConfig(input: unknown): AiReviewConfig {
     timeoutMinutes: clampInt(raw.timeoutMinutes, 1, 120, d.timeoutMinutes),
     maxConcurrent: clampInt(raw.maxConcurrent, 1, MAX_CONCURRENT, d.maxConcurrent),
     clones: typeof raw.clones === "string" ? raw.clones : d.clones,
-    readOnly: typeof raw.readOnly === "boolean" ? raw.readOnly : d.readOnly,
+    // Not taken from the old `readOnly`: everyone starts in safe mode, and turns YOLO on knowingly.
+    yolo: typeof raw.yolo === "boolean" ? raw.yolo : d.yolo,
     globalInstructions: normalizeSets(raw.globalInstructions),
   };
 }

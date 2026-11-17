@@ -31,7 +31,7 @@ const SAVE_LABEL = { idle: "", saving: "Saving…", saved: "Saved", error: "Coul
  */
 export function GlobalInstructionsSettings() {
   const { config, update, saving } = useLocalConfig(true);
-  const fixed = useFixedInstructions(config?.readOnly);
+  const fixed = useFixedInstructions(config?.yolo);
   const [showFixed, setShowFixed] = useState(false);
 
   if (!config) {

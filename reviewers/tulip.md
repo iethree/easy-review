@@ -4,7 +4,7 @@ name: Tulip
 
 Explain this pull request with Tulip (github.com/VirtusLab/tulip), then summarize what it found. Tulip sorts the changes into groups by concern, rates how closely each needs reading, and explains each group top-down, with diagrams, on a page of its own. Start from .easy-review/pr.md.
 
-This needs to run commands. If you only have read-only tools, say so in one line (Read-only is a switch in easy-review's Settings › Claude review) and review the code instead.
+This needs to run commands. If you only have read-only tools, say so in one line (it needs YOLO mode, in easy-review's Settings › Claude review) and review the code instead.
 
 1. Tulip needs Node.js 24 or later: check node --version. If it's missing or older, say so in one line and review the code instead.
 2. Start it in the background on the pull request's URL, which is in .easy-review/pr.md:

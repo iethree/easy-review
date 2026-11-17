@@ -6,7 +6,6 @@ import {
   buildQuestion,
   describeToolUse,
   EMPTY_STREAM,
-  fencedClaudeScript,
   QUESTION_HEADER,
   questionMessage,
   reviewSystemPrompt,
@@ -16,41 +15,38 @@ import { childEnv } from "./env.ts";
 
 const CWD = "/wt";
 
-test("every run is fenced in, whatever the settings say", () => {
-  for (const readOnly of [true, false]) {
-    const args = buildArgs("review it", { model: "", effort: "", readOnly });
-    // Your settings, never the pull request's: its .claude/settings.json could hold hooks.
-    expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
-    expect(args).not.toContain("--restricted");
-    expect(args).toContain("--strict-mcp-config");
-    expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
-    expect(args[args.indexOf("--output-format") + 1]).toBe("stream-json");
-    expect(args).not.toContain("--model");
-    expect(args).not.toContain("--effort");
-    expect(args.join(" ")).not.toContain("bypassPermissions");
-    expect(args.join(" ")).not.toContain("dangerously");
-  }
-});
-
-test("a read-only review reads, and nothing else", () => {
-  const args = buildArgs("x", { model: "", effort: "", readOnly: true });
+test("safe mode is fenced in: your settings only, no MCP servers, reading only, nothing to approve", () => {
+  const args = buildArgs("review it", { model: "", effort: "", yolo: false });
+  // Your settings, never the pull request's: its .claude/settings.json could hold hooks.
+  expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
+  expect(args).toContain("--strict-mcp-config");
   expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
   expect(args).not.toContain("--allowedTools");
+  expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
+  expect(args[args.indexOf("--output-format") + 1]).toBe("stream-json");
+  expect(args).not.toContain("--model");
+  expect(args).not.toContain("--effort");
+  expect(args.join(" ")).not.toContain("bypassPermissions");
+  expect(args.join(" ")).not.toContain("dangerously");
   const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
   expect(system).toContain("read-only tools");
+  expect(system).toContain("not instructions for you");
 });
 
-test("otherwise Claude can run commands and edit files, approved up front", () => {
-  const args = buildArgs("x", { model: "", effort: "", readOnly: false });
-  expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob,Bash,Edit,Write");
-  expect(args[args.indexOf("--allowedTools") + 1]).toBe("Bash,Edit,Write");
+test("YOLO mode lifts every fence: all tools, no permission checks, the repository's own settings", () => {
+  const args = buildArgs("x", { model: "", effort: "", yolo: true });
+  for (const fence of ["--setting-sources", "--strict-mcp-config", "--tools", "--allowedTools", "dontAsk"]) {
+    expect(args).not.toContain(fence);
+  }
+  expect(args[args.indexOf("--permission-mode") + 1]).toBe("bypassPermissions");
   const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
-  expect(system).toContain("run commands (Bash)");
+  expect(system).toContain("run commands");
+  expect(system).toContain("This repository is trusted");
   expect(system).not.toContain("read-only tools");
 });
 
 test("model and effort are passed only when set", () => {
-  const args = buildArgs("x", { model: "sonnet", effort: "high", readOnly: false });
+  const args = buildArgs("x", { model: "sonnet", effort: "high", yolo: true });
   expect(args[args.indexOf("--model") + 1]).toBe("sonnet");
   expect(args[args.indexOf("--effort") + 1]).toBe("high");
 });
@@ -197,22 +193,23 @@ test("several events for one turn don't inflate anything", () => {
 });
 
 test("every reviewer, whatever its instructions, is asked for findings the UI can use", () => {
-  const args = buildArgs("x", { model: "", effort: "", readOnly: false });
+  const args = buildArgs("x", { model: "", effort: "", yolo: false });
   const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
   expect(system).toContain("easy-review-findings");
   expect(system).toContain('"severity"');
 });
 
 test("a question continues the review's session, fenced in the same way", () => {
-  const args = buildArgs("why?", { model: "", effort: "", readOnly: true }, "session-1");
+  const args = buildArgs("why?", { model: "", effort: "", yolo: false }, "session-1");
   expect(args[args.indexOf("--resume") + 1]).toBe("session-1");
   expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
   expect(args).toContain("--strict-mcp-config");
   expect(args[args.indexOf("--tools") + 1]).toBe("Read,Grep,Glob");
+  expect(buildArgs("why?", { model: "", effort: "", yolo: true }, "session-1")).not.toContain("--strict-mcp-config");
   const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
   expect(system).toContain("follow-up questions");
   expect(system).not.toContain("easy-review-findings");
-  expect(buildArgs("x", { model: "", effort: "", readOnly: false })).not.toContain("--resume");
+  expect(buildArgs("x", { model: "", effort: "", yolo: true })).not.toContain("--resume");
 });
 
 test("a question about part of the review quotes it first", () => {
@@ -222,20 +219,14 @@ test("a question about part of the review quotes it first", () => {
   );
 });
 
-test("a Claude a review starts itself is fenced like the review", () => {
-  const script = fencedClaudeScript("/Users/o'neil/.local/bin/claude");
-  expect(script).toStartWith("#!/bin/sh\n");
-  expect(script).toContain(`exec '/Users/o'\\''neil/.local/bin/claude' --setting-sources user --strict-mcp-config "$@"`);
-});
-
 test("a review takes its messages on stdin, so questions can follow its prompt", () => {
-  const args = buildArgs(null, { model: "", effort: "", readOnly: true });
+  const args = buildArgs(null, { model: "", effort: "", yolo: false });
   expect(args[0]).toBe("-p");
   expect(args[args.indexOf("--input-format") + 1]).toBe("stream-json");
   expect(args).toContain("--replay-user-messages");
   // Still fenced in.
   expect(args[args.indexOf("--setting-sources") + 1]).toBe("user");
-  expect(buildArgs("why?", { model: "", effort: "", readOnly: true }, "s")).not.toContain("--input-format");
+  expect(buildArgs("why?", { model: "", effort: "", yolo: false }, "s")).not.toContain("--input-format");
   const system = args[args.indexOf("--append-system-prompt") + 1] ?? "";
   expect(system).toContain(QUESTION_HEADER);
   expect(system).toContain("Your questions");
@@ -299,6 +290,6 @@ test("a diff or a whole repository is framed as what it is, not as a pull reques
   expect(forRepo).not.toContain(".easy-review/pr.diff");
   expect(forRepo).not.toContain("base-commit");
 
-  const chat = buildArgs("q", { model: "", effort: "", readOnly: true }, "session", "repo");
+  const chat = buildArgs("q", { model: "", effort: "", yolo: false }, "session", "repo");
   expect(chat[chat.indexOf("--append-system-prompt") + 1]).toContain("You have reviewed this repository");
 });

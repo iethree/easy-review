@@ -473,8 +473,8 @@ export class ReviewJobs {
       let seen = 0;
       const result = await runClaude({
         cwd,
-        // The tools it reviewed with; reviews from before the setting were read-only.
-        args: buildArgs(prompt, { ...config, readOnly: job.readOnly ?? true }, sessionId, job.kind),
+        // The mode it reviewed in; reviews from before the setting continue in safe mode.
+        args: buildArgs(prompt, { ...config, yolo: job.yolo ?? false }, sessionId, job.kind),
         timeoutMs: config.timeoutMinutes * 60_000,
         onSpawn: (proc) => {
           this.chats.set(job.id, proc);
@@ -701,8 +701,8 @@ export class ReviewJobs {
         worktreePath: worktree.path,
         headSha: worktree.headSha,
         clonePath: clone.path,
-        // How it ran, for continuing it in a terminal with the same tools.
-        readOnly: config.readOnly,
+        // How it ran, for its questions and for continuing it in a terminal.
+        yolo: config.yolo,
       });
 
       let seen = 0;

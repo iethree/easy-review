@@ -297,17 +297,17 @@ export function useLocalConfig(enabled: boolean) {
   return { config, update, saving };
 }
 
-/** What every review is told whatever the settings say; it changes only with read-only. */
-export function useFixedInstructions(readOnly: boolean | undefined) {
+/** What every review is told whatever the settings say; it changes only with the mode. */
+export function useFixedInstructions(yolo: boolean | undefined) {
   const [text, setText] = useState<string | null>(null);
   useEffect(() => {
-    if (readOnly === undefined) return;
+    if (yolo === undefined) return;
     lastSave
       .catch(() => {})
       .then(() => call<{ text: string }>("/api/local/config/fixed"))
       .then((r) => setText(r.text))
       .catch(() => setText(null));
-  }, [readOnly]);
+  }, [yolo]);
   return text;
 }
 
