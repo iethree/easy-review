@@ -65,6 +65,11 @@ export interface PullRequest {
    */
   reviewRequestedAt?: string | null;
   /**
+   * Your latest submitted review on GitHub: when, and of which commit. Only on
+   * the queue's own rows; null when you haven't reviewed it.
+   */
+  yourReview?: { at: string; sha: string } | null;
+  /**
    * Set on a row that isn't a pull request: Claude's reviews of a diff or a
    * whole repository, listed with the pull requests. `key` is what the reviews
    * are of (see reviewKey); `number` is 0, and there is nothing to approve.

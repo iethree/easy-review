@@ -6,6 +6,7 @@ import type { AiVerdict } from "../../shared/findings.ts";
 import type { PullRequest, ReviewEvent } from "../../shared/types.ts";
 import { rowName } from "../reviewRows.ts";
 import { reviewStanding } from "../reviewStanding.ts";
+import { updatedSinceYourReview } from "../sinceReview.ts";
 import { relativeTime } from "../time.ts";
 import { CiBadge } from "./CiBadge.tsx";
 import { DiffStat } from "./DiffStat.tsx";
@@ -87,6 +88,13 @@ export const PrRow = memo(function PrRow({
             >
               {REVIEWED_LABEL[reviewed]}
             </Badge>
+          )}
+          {updatedSinceYourReview(pr, reviewed !== undefined) && pr.yourReview && (
+            <Tooltip label={`New commits since your review ${relativeTime(pr.yourReview.at)}`} openDelay={300}>
+              <Badge size="xs" color="blue" variant="light" style={{ flex: "none" }}>
+                Updated
+              </Badge>
+            </Tooltip>
           )}
         </div>
 
