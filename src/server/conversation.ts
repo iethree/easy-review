@@ -8,6 +8,9 @@ import type {
   Conversation,
   ConversationComment,
   Person,
+  CommitHistory,
+  CommitReview,
+  PrCommit,
   PrDetails,
   PrLabel,
   PrReviewer,
@@ -49,7 +52,19 @@ export const CONVERSATION_QUERY = /* GraphQL */ `
         }
         reviews(first: 100) {
           totalCount
-          nodes { id url body state submittedAt ${AUTHOR} }
+          nodes { id url body state submittedAt commit { oid } ${AUTHOR} }
+        }
+        commits(last: 100) {
+          totalCount
+          nodes {
+            commit {
+              oid
+              messageHeadline
+              committedDate
+              url
+              author { name user { login avatarUrl(size: 48) } }
+            }
+          }
         }
         reviewThreads(first: 100) {
           totalCount
@@ -94,7 +109,16 @@ interface RawReview {
   body?: string;
   state?: string;
   submittedAt?: string | null;
+  commit?: { oid?: string } | null;
   author?: RawAuthor | null;
+}
+
+interface RawCommit {
+  oid?: string;
+  messageHeadline?: string;
+  committedDate?: string;
+  url?: string;
+  author?: { name?: string | null; user?: { login?: string; avatarUrl?: string | null } | null } | null;
 }
 
 interface RawThread {
@@ -129,6 +153,7 @@ export interface RawConversation {
   comments?: Page<RawComment> | null;
   reviews?: Page<RawReview> | null;
   reviewThreads?: Page<RawThread> | null;
+  commits?: Page<{ commit?: RawCommit | null }> | null;
 }
 
 function person(author: RawAuthor | null | undefined): Person {
@@ -213,7 +238,49 @@ export function buildConversation(raw: RawConversation | null | undefined): Conv
     items,
     truncated: more(raw?.comments) || more(raw?.reviews) || more(raw?.reviewThreads),
     details: buildDetails(raw),
+    history: buildHistory(raw),
   };
+}
+
+/**
+ * The commits, and every submitted review with the commit it was of: what the
+ * commit timeline is drawn from. Unlike the conversation, it keeps the
+ * reviews that are only an envelope around inline comments.
+ */
+export function buildHistory(raw: RawConversation | null | undefined): CommitHistory {
+  const commits: PrCommit[] = (raw?.commits?.nodes ?? []).flatMap((node) => {
+    const c = node?.commit;
+    if (!c?.oid) return [];
+    const user = c.author?.user;
+    return [
+      {
+        sha: c.oid,
+        headline: c.messageHeadline ?? "",
+        author: {
+          login: user?.login ?? c.author?.name ?? "unknown",
+          avatarUrl: user?.avatarUrl ?? null,
+          isBot: false,
+        },
+        committedAt: c.committedDate ?? "",
+        url: c.url ?? "",
+      },
+    ];
+  });
+  const reviews: CommitReview[] = (raw?.reviews?.nodes ?? []).flatMap((review) =>
+    review?.id && review.submittedAt && SHOWN_REVIEWS.has(review.state ?? "")
+      ? [
+          {
+            id: review.id,
+            url: review.url ?? "",
+            author: person(review.author),
+            state: review.state as ReviewSummaryState,
+            at: review.submittedAt,
+            sha: review.commit?.oid ?? null,
+          },
+        ]
+      : [],
+  );
+  return { commits, reviews, earlier: Math.max(0, (raw?.commits?.totalCount ?? commits.length) - commits.length) };
 }
 
 /**

@@ -243,7 +243,12 @@ export function PreviewPane(props: Props) {
                     <Markdown>{deferred.body}</Markdown>
                   )
                 ) : tab === "description" ? (
-                  <PrDescription pr={deferred} viewer={props.viewer} />
+                  <PrDescription
+                    pr={deferred}
+                    viewer={props.viewer}
+                    claude={reviews}
+                    onOpenReview={(job) => props.onTabChange(reviewTab(job.reviewerId))}
+                  />
                 ) : (
                   <Body pr={deferred} />
                 )}
