@@ -356,7 +356,11 @@ const STATUS_PASSED = new Set(["SUCCESS"]);
 const STATUS_FAILED = new Set(["FAILURE", "ERROR"]);
 const STATUS_PENDING = new Set(["PENDING", "EXPECTED"]);
 
-function buildCiStatus(rollup: RawRollup | null): CiStatus {
+/** Failures that are the code's fault, not CI's: shown red rather than orange. */
+const RUN_BROKEN = new Set(["FAILURE", "TIMED_OUT"]);
+const STATUS_BROKEN = new Set(["FAILURE"]);
+
+export function buildCiStatus(rollup: RawRollup | null): CiStatus {
   if (!rollup) {
     return {
       state: "NONE",
@@ -379,7 +383,19 @@ function buildCiStatus(rollup: RawRollup | null): CiStatus {
   const skipped = tally(runCounts, CHECK_RUN_SKIPPED);
 
   const total = rollup.contexts?.totalCount ?? 0;
-  const state: CheckState = total === 0 ? "NONE" : statusContextState(rollup.state ?? null);
+  const broken = tally(runCounts, RUN_BROKEN) + tally(statusCounts, STATUS_BROKEN);
+
+  // Not GitHub's own `rollup.state`: that calls a pull request failed when a
+  // run was cancelled, and most cancelled runs were only superseded by a newer
+  // run of the same workflow. Taken from the counts, the icon agrees with them.
+  let state: CheckState;
+  if (total === 0) state = "NONE";
+  else if (broken > 0) state = "FAILURE";
+  else if (failed > 0) state = "ERROR";
+  else if (pending > 0) state = "PENDING";
+  else if (passed + skipped > 0) state = "SUCCESS";
+  // No counts we recognise (a state GitHub added later): trust its verdict.
+  else state = statusContextState(rollup.state ?? null);
 
   return {
     state,
