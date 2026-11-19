@@ -11,6 +11,7 @@ import {
   type LocalStatus,
 } from "../shared/aiReview.ts";
 import { detectClaude, reviewSystemPrompt, type ClaudeStatus } from "./claude.ts";
+import { ClaudeLogin } from "./claudeLogin.ts";
 import { GitHubError } from "../server/github.ts";
 import { ChatError, type ReviewJobs } from "./jobs.ts";
 import { localPaths } from "./paths.ts";
@@ -49,7 +50,7 @@ async function body(request: Request): Promise<{ name?: unknown; instructions?: 
   return parsed && typeof parsed === "object" ? parsed : {};
 }
 
-export function createLocalApi(jobs: ReviewJobs) {
+export function createLocalApi(jobs: ReviewJobs, login = new ClaudeLogin()) {
   // `claude --version` costs a process spawn; re-check at most once a minute.
   let claude: { value: ClaudeStatus; at: number } | null = null;
   async function claudeStatus(): Promise<ClaudeStatus> {
@@ -72,6 +73,18 @@ export function createLocalApi(jobs: ReviewJobs) {
           ...jobs.counts(),
         };
         return json(body);
+      }
+
+      if (parts[0] === "claude" && parts[1] === "login") {
+        if (!parts[2] && method === "GET") return json(login.status());
+        if (!parts[2] && method === "POST") return json(login.start());
+        if (parts[2] === "code" && !parts[3] && method === "POST") {
+          const input = (await request.json().catch(() => null)) as { code?: unknown } | null;
+          const code = typeof input?.code === "string" ? input.code.trim() : "";
+          if (!code || code.length > 2000 || /\s/.test(code)) return fail("Paste the code the sign-in page shows.", 400);
+          return json(login.sendCode(code));
+        }
+        if (parts[2] === "cancel" && !parts[3] && method === "POST") return json(login.cancel());
       }
 
       if (parts[0] === "config" && parts[1] === "fixed" && method === "GET") {

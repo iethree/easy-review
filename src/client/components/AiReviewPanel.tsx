@@ -25,11 +25,12 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
-import { describeTarget, isActive, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { describeTarget, isActive, needsClaudeSignIn, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { useReviewDetail } from "../hooks/useLocalReviews.ts";
 import { relativeTime } from "../time.ts";
 import { splitReview } from "../../shared/findings.ts";
+import { ClaudeSignIn } from "./ClaudeSignIn.tsx";
 import { Findings } from "./Findings.tsx";
 import { ReviewScreenshots } from "./Markdown.tsx";
 import { ProseReview } from "./ProseReview.tsx";
@@ -212,6 +213,11 @@ export function AiReviewPanel({ pr, job, onStart, onCancel, onRemove, onFindingA
         {job.status === "failed" && (
           <Alert color="red" variant="light" icon={<IconAlertTriangle size={16} />} title="The review failed">
             <Text size="sm">{job.error}</Text>
+            {(needsClaudeSignIn(job.error) || needsClaudeSignIn(detail?.stderrTail)) && (
+              <Stack mt="xs">
+                <ClaudeSignIn onSignedIn={onStart} />
+              </Stack>
+            )}
             {detail?.stderrTail && (
               <Code block mt="xs" fz={11}>
                 {detail.stderrTail}

@@ -335,3 +335,22 @@ export function resumeCommand(job: Pick<AiReviewJob, "worktreePath" | "sessionId
   const fences = job.yolo ? "" : ` --setting-sources user --strict-mcp-config --tools ${SAFE_TOOLS.join(",")}`;
   return `cd ${quoted} && claude --resume ${job.sessionId}${fences}`;
 }
+
+/**
+ * Whether Claude stopped because its sign-in expired or is missing — then
+ * signing in again (`claude auth login`) is the fix, and the page offers it.
+ */
+export function needsClaudeSignIn(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return /Failed to authenticate|claude auth login|Not logged in|Please run \/login|OAuth token has expired|authentication_error/i.test(
+    text,
+  );
+}
+
+/** Where `claude auth login`, run by the server for you, has got to. */
+export type ClaudeLoginState =
+  | { state: "idle" }
+  /** Waiting for you to finish in the browser. `url` is the sign-in page, once Claude prints it. */
+  | { state: "waiting"; url: string | null; browserOpened: boolean }
+  | { state: "done"; at: string }
+  | { state: "failed"; error: string };

@@ -9,6 +9,7 @@
 
 import index from "./client/index.html";
 import { createLocalApi } from "./local/api.ts";
+import { ClaudeLogin } from "./local/claudeLogin.ts";
 import { ReviewJobs } from "./local/jobs.ts";
 import { createApi } from "./server/api.ts";
 import { describeSignIn, ignoredTokenVars, resolveLocalToken } from "./server/localToken.ts";
@@ -26,7 +27,10 @@ export async function startServer({ development }: { development: boolean }): Pr
     return jobs;
   })();
   const jobs = await store.__easyReviewJobs;
-  const local = createLocalApi(jobs);
+  // Likewise a sign-in under way: its `claude auth login` is waiting on the browser.
+  const loginStore = globalThis as { __easyReviewLogin?: ClaudeLogin };
+  loginStore.__easyReviewLogin ??= new ClaudeLogin();
+  const local = createLocalApi(jobs, loginStore.__easyReviewLogin);
 
   // The token is resolved per request (and cached) so that signing in with
   // `gh auth login` while the server is running just starts working.
