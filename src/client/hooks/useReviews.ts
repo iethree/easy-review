@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PullRequest, ReviewsResponse, Settings } from "../../shared/types.ts";
-import { lingering } from "../queuePoll.ts";
+import { dueOnReturn, lingering } from "../queuePoll.ts";
 import { reset as resetDiffs } from "./diffStore.ts";
 
 interface State {
@@ -13,8 +13,6 @@ interface State {
 
 /** How often the queue is fetched again in the background, while the app is in view. */
 const POLL_MS = 2 * 60 * 1000;
-/** Coming back to the app fetches the queue if it's older than this. */
-const STALE_MS = 60 * 1000;
 
 const NO_ROWS: PullRequest[] = [];
 
@@ -24,7 +22,8 @@ export function useReviews(settings: Settings) {
   const requestId = useRef(0);
   /** A fetch you asked for (or the first one) is on its way: a poll waits for it. */
   const loadingRef = useRef(false);
-  const fetchedAt = useRef(0);
+  /** When the latest fetch started: coming back to the app waits a minute from it. */
+  const startedAt = useRef(0);
 
   const { includeTeamRequests, hideDrafts } = settings;
 
@@ -46,12 +45,12 @@ export function useReviews(settings: Settings) {
   const load = useCallback(
     async (fresh: boolean) => {
       const id = ++requestId.current;
+      startedAt.current = Date.now();
       loadingRef.current = true;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
         const json = await fetchQueue(fresh);
         if (id !== requestId.current) return;
-        fetchedAt.current = Date.now();
         setState({ data: json, kept: NO_ROWS, loading: false, error: null });
         if (fresh) resetDiffs();
       } catch (err) {
@@ -77,10 +76,10 @@ export function useReviews(settings: Settings) {
   const poll = useCallback(async () => {
     if (loadingRef.current) return;
     const id = ++requestId.current;
+    startedAt.current = Date.now();
     try {
       const json = await fetchQueue(true);
       if (id !== requestId.current) return;
-      fetchedAt.current = Date.now();
       setState((s) => {
         if (!s.data) return { data: json, kept: NO_ROWS, loading: false, error: null };
         const kept = lingering([...s.data.pullRequests, ...s.kept], json.pullRequests);
@@ -99,13 +98,17 @@ export function useReviews(settings: Settings) {
     const id = setInterval(() => {
       if (document.visibilityState === "visible") void poll();
     }, POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && Date.now() - fetchedAt.current > STALE_MS) void poll();
+    // Back to the app: its tab shown again, or its window focused — switching
+    // from another app to a window that stayed visible only fires the second.
+    const onReturn = () => {
+      if (document.visibilityState === "visible" && dueOnReturn(Date.now(), startedAt.current)) void poll();
     };
-    document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
     return () => {
       clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
     };
   }, [poll]);
 
