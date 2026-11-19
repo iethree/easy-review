@@ -1,6 +1,6 @@
 import { Badge, Button, Group, Text } from "@mantine/core";
-import { IconChevronDown, IconChevronRight, IconPlus } from "@tabler/icons-react";
-import { Fragment, memo, useMemo, useState } from "react";
+import { IconChevronDown, IconChevronRight, IconChevronsDown, IconChevronsUp, IconPlus } from "@tabler/icons-react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DiffFile,
   DiffLine,
@@ -12,7 +12,9 @@ import { anchorForLine, anchorThreads, threadKey } from "../comments.ts";
 import { addDraft, draftsOnLines, type DraftComment } from "../drafts.ts";
 import { tokenizeFile, type Token } from "../highlight.ts";
 import { DiffThread, type DiffThreadItem } from "./DiffThread.tsx";
+import { fileTree } from "../fileTree.ts";
 import { DraftCard, LineCommentForm } from "./DraftComments.tsx";
+import { FileTree } from "./FileTree.tsx";
 
 /** Rendering every line of a huge file locks the main thread; cap and offer more. */
 const PER_FILE_LINE_CAP = 600;
@@ -39,20 +41,23 @@ const KIND_LABEL = {
 
 const FileBlock = memo(function FileBlock({
   file,
-  defaultOpen,
+  index,
+  open,
+  onToggle,
   pr,
   threads,
   drafts,
 }: {
   file: DiffFile;
-  defaultOpen: boolean;
+  index: number;
+  open: boolean;
+  onToggle: (index: number) => void;
   /** Null when commenting isn't possible — a pull request that can't be reviewed. */
   pr: PullRequest | null;
   threads: Map<string, DiffThreadItem[]>;
   /** Your pending comments, by line. */
   drafts: Map<string, DraftComment[]>;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   const [showAll, setShowAll] = useState(false);
   /** Which line has a comment box open. The box owns the text it holds, so
    *  typing re-renders the box alone rather than every line of the file. */
@@ -68,17 +73,18 @@ const FileBlock = memo(function FileBlock({
   let rendered = 0;
 
   return (
-    <div className="er-diff-file">
+    <div className="er-diff-file" data-file-index={index}>
       {/* biome-ignore lint/a11y/useSemanticElements: a header row with its own keyboard handling; a <button> can't hold its layout */}
       <div
         className="er-diff-filehead"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => onToggle(index)}
         role="button"
         tabIndex={0}
+        aria-expanded={open}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            setOpen((o) => !o);
+            onToggle(index);
           }
         }}
       >
@@ -277,6 +283,40 @@ export const DiffView = memo(function DiffView({
   // One lookup shared by every file, rebuilt only when the threads change —
   // a stable reference keeps the memoised file blocks from re-rendering.
   const byLine = useMemo(() => anchorThreads(threads), [threads]);
+
+  // Which files are open, here rather than in each file so that Expand all
+  // and Collapse all, and the tree, can open them. A new diff starts over.
+  const [opened, setOpened] = useState({ diff, flags: openFlags });
+  const open = opened.diff === diff ? opened.flags : openFlags;
+  if (opened.diff !== diff) setOpened({ diff, flags: openFlags });
+  const toggle = useCallback(
+    (index: number) =>
+      setOpened((prev) => ({ ...prev, flags: prev.flags.map((flag, i) => (i === index ? !flag : flag)) })),
+    [],
+  );
+  const setAll = (value: boolean) => setOpened((prev) => ({ ...prev, flags: prev.flags.map(() => value) }));
+  const allOpen = open.every(Boolean);
+  const allClosed = !open.some(Boolean);
+
+  const tree = useMemo(() => fileTree(diff.files), [diff]);
+  const root = useRef<HTMLDivElement>(null);
+  const active = useActiveFile(root, diff);
+  const [chosen, setChosen] = useState<number | null>(null);
+
+  // From the tree: open the file, then bring its header to the top.
+  const goTo = useCallback((index: number) => {
+    setChosen(index);
+    setOpened((prev) => ({ ...prev, flags: prev.flags.map((flag, i) => (i === index ? true : flag)) }));
+    requestAnimationFrame(() => {
+      root.current?.querySelector(`[data-file-index="${index}"]`)?.scrollIntoView({ block: "start" });
+    });
+  }, []);
+  // Scrolling decides which file is current; a click on the tree, until then.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a change of `active` is the trigger
+  useEffect(() => setChosen(null), [active]);
+
+  const additions = useMemo(() => diff.files.reduce((n, f) => n + f.additions, 0), [diff]);
+  const deletions = useMemo(() => diff.files.reduce((n, f) => n + f.deletions, 0), [diff]);
   const pendingByLine = useMemo(
     () => draftsOnLines(drafts, pr?.headSha ?? null),
     [drafts, pr?.headSha],
@@ -291,23 +331,127 @@ export const DiffView = memo(function DiffView({
   }
 
   return (
-    <div className="er-diff">
-      {diff.files.map((file, i) => (
-        <FileBlock
-          // biome-ignore lint/suspicious/noArrayIndexKey: a path can appear twice (renames); the index tells them apart
-          key={`${file.path}:${i}`}
-          file={file}
-          defaultOpen={openFlags[i] ?? false}
-          pr={pr}
-          threads={byLine}
-          drafts={pendingByLine}
-        />
-      ))}
-      {diff.truncated && (
-        <Text size="xs" c="orange.6" mt="sm" ta="center">
-          Diff was very large and has been truncated — open it on GitHub to see everything.
-        </Text>
-      )}
+    <div className="er-diff-layout" ref={root}>
+      <div className="er-diff-columns">
+      <div className="er-diff-main">
+        <div className="er-diff-toolbar">
+          <Text span size="xs" c="dimmed">
+            {diff.files.length} file{diff.files.length === 1 ? "" : "s"}
+          </Text>
+          <Text span ff="monospace" fz={11} c="teal.6" fw={600}>
+            +{additions.toLocaleString()}
+          </Text>
+          <Text span ff="monospace" fz={11} c="red.6" fw={600}>
+            −{deletions.toLocaleString()}
+          </Text>
+          <Group gap={4} ml="auto" wrap="nowrap">
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              leftSection={<IconChevronsDown size={13} />}
+              disabled={allOpen}
+              onClick={() => setAll(true)}
+            >
+              Expand all
+            </Button>
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              leftSection={<IconChevronsUp size={13} />}
+              disabled={allClosed}
+              onClick={() => setAll(false)}
+            >
+              Collapse all
+            </Button>
+          </Group>
+        </div>
+        <div className="er-diff">
+          {diff.files.map((file, i) => (
+            <FileBlock
+              // biome-ignore lint/suspicious/noArrayIndexKey: a path can appear twice (renames); the index tells them apart
+              key={`${file.path}:${i}`}
+              file={file}
+              index={i}
+              open={open[i] ?? false}
+              onToggle={toggle}
+              pr={pr}
+              threads={byLine}
+              drafts={pendingByLine}
+            />
+          ))}
+          {diff.truncated && (
+            <Text size="xs" c="orange.6" mt="sm" ta="center">
+              Diff was very large and has been truncated — open it on GitHub to see everything.
+            </Text>
+          )}
+        </div>
+      </div>
+      <aside className="er-diff-aside">
+        <FileTree tree={tree} active={chosen ?? active} onSelect={goTo} />
+      </aside>
+      </div>
     </div>
   );
 });
+
+/** The nearest ancestor that scrolls: where the diff is read. */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+  }
+  return null;
+}
+
+/**
+ * The file being read: the last one whose header has reached the top of the
+ * scrolling pane (under the toolbar). Files are in order down the page, so
+ * it's a binary search, once a frame at most.
+ */
+function useActiveFile(root: React.RefObject<HTMLDivElement | null>, diff: ParsedDiff): number | null {
+  const [active, setActive] = useState<number | null>(diff.files.length > 0 ? 0 : null);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new diff means new files to measure
+  useEffect(() => {
+    const el = root.current;
+    const scroller = scrollParent(el);
+    if (!el || !scroller) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const files = el.querySelectorAll<HTMLElement>("[data-file-index]");
+      const toolbar = el.querySelector<HTMLElement>(".er-diff-toolbar");
+      const line = scroller.getBoundingClientRect().top + (toolbar?.offsetHeight ?? 0) + 8;
+      let lo = 0;
+      let hi = files.length - 1;
+      let found = 0;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if ((files[mid]?.getBoundingClientRect().top ?? 0) <= line) {
+          found = mid;
+          lo = mid + 1;
+        } else hi = mid - 1;
+      }
+      setActive(files.length > 0 ? found : null);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    measure();
+    // The tree beside the diff is as tall as the pane, and scrolls itself.
+    const fit = () => el.style.setProperty("--er-diff-viewport", `${scroller.clientHeight}px`);
+    const resize = new ResizeObserver(fit);
+    resize.observe(scroller);
+    fit();
+    return () => {
+      resize.disconnect();
+      scroller.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [root, diff]);
+
+  return active;
+}

@@ -348,9 +348,104 @@ body {
   margin-top: var(--mantine-spacing-md);
 }
 
-.er-diff-filehead {
+/* The diff, with the changed files' tree beside it when its pane is wide
+   enough: measured on the pane, which the list and focus mode resize, not
+   the window. */
+.er-diff-layout {
+  --er-diff-toolbar-h: 34px;
+  container-type: inline-size;
+}
+
+.er-diff-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.er-diff-aside {
+  display: none;
+}
+
+@container (min-width: 1000px) {
+  .er-diff-columns {
+    grid-template-columns: minmax(0, 1fr) 250px;
+  }
+  .er-diff-aside {
+    display: block;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: calc(var(--er-diff-viewport, 80vh) - 8px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Expand all and Collapse all, kept in reach; the files' headers stick under it. */
+.er-diff-toolbar {
   position: sticky;
   top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--er-diff-toolbar-h);
+  padding: 0 2px;
+  background: var(--er-surface);
+}
+
+.er-diff-file {
+  scroll-margin-top: var(--er-diff-toolbar-h);
+}
+
+.er-tree {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.er-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--mantine-radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.er-tree-row:hover {
+  background: var(--er-row-hover, var(--mantine-color-default-hover));
+}
+
+.er-tree-row[aria-current="true"] {
+  background: var(--mantine-primary-color-light);
+  color: var(--mantine-primary-color-light-color);
+  font-weight: 600;
+}
+
+.er-tree-icon {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+}
+
+.er-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-diff-filehead {
+  position: sticky;
+  top: var(--er-diff-toolbar-h, 0);
   z-index: 2;
   display: flex;
   align-items: center;
