@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import type { PullRequest } from "../shared/types.ts";
-import { buildCiStatus, describeRestError, latestRequest, mergeById, mineSearchQueries, yourReview } from "./github.ts";
+import { buildCiStatus, changesStillYours, describeRestError, GitHubClient, latestRequest, mergeById, mineSearchQueries, yourReview } from "./github.ts";
 
 test("uses the errors array, which is where the real reason lives", () => {
   // Verbatim from GitHub's reviews endpoint: `errors` holds plain strings and
@@ -122,4 +122,24 @@ test("the overall check state follows the counts", () => {
   expect(buildCiStatus(rollup("PENDING", {}, { EXPECTED: 1 })).state).toBe("PENDING");
   expect(buildCiStatus(rollup("SUCCESS", { SKIPPED: 4 })).state).toBe("SUCCESS");
   expect(buildCiStatus(null).state).toBe("NONE");
+});
+
+test("only your own standing request for changes keeps a pull request in the queue", () => {
+  const nodes = [
+    { id: "mine", viewerLatestReview: { state: "CHANGES_REQUESTED" } },
+    // Someone else asked for changes; you approved.
+    { id: "theirs", viewerLatestReview: { state: "APPROVED" } },
+    { id: "dismissed", viewerLatestReview: { state: "DISMISSED" } },
+    { id: "none", viewerLatestReview: null },
+    null,
+  ];
+  expect(changesStillYours(nodes).map((n) => n.id)).toEqual(["mine"]);
+});
+
+test("the search for standing requests for changes", () => {
+  const gh = new GitHubClient("token");
+  expect(gh.buildChangesQuery({ hideDrafts: false })).toBe(
+    "is:open is:pr archived:false reviewed-by:@me review:changes_requested sort:updated-desc",
+  );
+  expect(gh.buildChangesQuery({ hideDrafts: true })).toContain("-is:draft");
 });

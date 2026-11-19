@@ -70,6 +70,13 @@ export interface PullRequest {
    */
   yourReview?: { at: string; sha: string } | null;
   /**
+   * In the queue because you asked for changes and that still stands, though
+   * nobody has asked for your review again: GitHub drops you from the
+   * requested reviewers when you ask for changes, while your request still
+   * blocks merging.
+   */
+  yourChangesStand?: boolean;
+  /**
    * Set on a row that isn't a pull request: Claude's reviews of a diff or a
    * whole repository, listed with the pull requests. `key` is what the reviews
    * are of (see reviewKey); `number` is 0, and there is nothing to approve.
