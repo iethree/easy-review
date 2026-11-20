@@ -1,7 +1,8 @@
 # Every push to main is a release: the next version (scripts/version.ts), a
-# tag for it, and a GitHub release with the macOS app for Apple silicon and
-# Intel. The zips and latest-mac.yml are what an installed app checks for
-# updates against; the .dmg files are for people.
+# tag for it, and a GitHub release with the app for macOS and Linux, each for
+# arm64 and x64. The macOS zips and latest-mac.yml are what an installed app
+# checks for updates against; the .dmg, .AppImage and .deb files are for
+# people. The Mac runner packages the Linux app too (see scripts/desktop.ts).
 
 name: Release
 
@@ -21,7 +22,7 @@ permissions:
 jobs:
   release:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -50,7 +51,7 @@ jobs:
         run: echo "version=$(bun scripts/version.ts)" >> "$GITHUB_OUTPUT"
 
       - name: Build the app
-        run: bun scripts/desktop.ts --build --arch all --version "${{ steps.version.outputs.version }}"
+        run: bun scripts/desktop.ts --build --platform all --arch all --version "${{ steps.version.outputs.version }}"
 
       - name: Publish the release
         env:
@@ -64,4 +65,6 @@ jobs:
             dist/desktop/*.dmg \
             dist/desktop/*.zip \
             dist/desktop/*.blockmap \
-            dist/desktop/latest-mac.yml
+            dist/desktop/latest-mac.yml \
+            dist/desktop/*.AppImage \
+            dist/desktop/*.deb

@@ -1,5 +1,5 @@
 /**
- * easy-review as a macOS app: Electron's main process.
+ * easy-review as a desktop app, for macOS and Linux: Electron's main process.
  *
  * It starts the server (see server.ts), serves it to the window through the
  * easy-review:// scheme (see proxy.ts), and supplies what a web page can't:
@@ -227,7 +227,18 @@ function buildMenu() {
             ],
           } satisfies MenuItemConstructorOptions,
         ]
-      : []),
+      : [
+          // Elsewhere, there's no app menu: what it holds goes in File and Help.
+          {
+            label: "File",
+            submenu: [
+              { label: "Settings…", accelerator: "Ctrl+,", click: command("settings") },
+              { label: "Reviewers…", accelerator: "Ctrl+Shift+,", click: command("reviewers") },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          } satisfies MenuItemConstructorOptions,
+        ]),
     // Without an Edit menu, macOS gives text fields no copy and paste.
     { role: "editMenu" },
     {
@@ -247,7 +258,15 @@ function buildMenu() {
     { role: "windowMenu" },
     {
       role: "help",
-      submenu: [{ label: "Keyboard Shortcuts", accelerator: "CmdOrCtrl+/", click: command("help") }],
+      submenu: [
+        { label: "Keyboard Shortcuts", accelerator: "CmdOrCtrl+/", click: command("help") },
+        ...(isMac
+          ? []
+          : ([
+              { type: "separator" },
+              { label: "Check for Updates…", click: () => void checkForUpdates({ manual: true }) },
+            ] satisfies MenuItemConstructorOptions[])),
+      ],
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
