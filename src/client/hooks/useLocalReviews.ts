@@ -20,7 +20,7 @@ export type NewReviewRequest = { owner: string; name: string; reviewers: string[
   | { kind: "repo"; head: string }
 );
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
+export async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: init?.body ? { "content-type": "application/json" } : undefined,

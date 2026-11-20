@@ -13,3 +13,16 @@ export function lingering(before: readonly PullRequest[], fetched: readonly Pull
   const now = new Set(fetched.map((pr) => pr.id));
   return before.filter((pr) => !now.has(pr.id));
 }
+
+/** Coming back to the app fetches the queue again, at most this often. */
+export const RETURN_MS = 60 * 1000;
+
+/**
+ * Whether coming back to the app (its window focused, or its tab shown) should
+ * fetch the queue: not within a minute of the last fetch, counted from when it
+ * started — focus and visibility often arrive together, and a fetch takes
+ * seconds.
+ */
+export function dueOnReturn(now: number, lastStarted: number): boolean {
+  return now - lastStarted >= RETURN_MS;
+}

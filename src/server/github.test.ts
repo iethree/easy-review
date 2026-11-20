@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import type { PullRequest } from "../shared/types.ts";
-import { describeRestError, latestRequest, mergeById, mineSearchQueries, yourReview } from "./github.ts";
+import { buildCiStatus, changesStillYours, describeRestError, GitHubClient, latestRequest, mergeById, mineSearchQueries, yourReview } from "./github.ts";
 
 test("uses the errors array, which is where the real reason lives", () => {
   // Verbatim from GitHub's reviews endpoint: `errors` holds plain strings and
@@ -95,4 +95,51 @@ test("your latest review is when and of which commit, and none while it's only p
   expect(yourReview({ submittedAt: null, commit: { oid: "abc" } })).toBeNull();
   expect(yourReview({ submittedAt: "2026-11-10T09:00:00Z", commit: null })).toBeNull();
   expect(yourReview(null)).toBeNull();
+});
+
+function rollup(state: string, runs: Record<string, number>, statuses: Record<string, number> = {}) {
+  const counts = (o: Record<string, number>) => Object.entries(o).map(([s, count]) => ({ state: s, count }));
+  const total = [...Object.values(runs), ...Object.values(statuses)].reduce((a, b) => a + b, 0);
+  return {
+    state,
+    contexts: { totalCount: total, checkRunCountsByState: counts(runs), statusContextCountsByState: counts(statuses) },
+  };
+}
+
+test("cancelled and skipped runs don't make the checks look failed", () => {
+  // metabase#87565: GitHub's rollup says FAILURE because of 11 superseded runs.
+  const ci = buildCiStatus(rollup("FAILURE", { SUCCESS: 134, SKIPPED: 113, CANCELLED: 11, FAILURE: 0 }));
+  expect(ci.state).toBe("SUCCESS");
+  expect([ci.passed, ci.failed, ci.skipped]).toEqual([134, 0, 124]);
+});
+
+test("the overall check state follows the counts", () => {
+  expect(buildCiStatus(rollup("FAILURE", { SUCCESS: 3, CANCELLED: 2, FAILURE: 1 })).state).toBe("FAILURE");
+  expect(buildCiStatus(rollup("FAILURE", { SUCCESS: 3, TIMED_OUT: 1 })).state).toBe("FAILURE");
+  expect(buildCiStatus(rollup("FAILURE", { SUCCESS: 3, STARTUP_FAILURE: 1 })).state).toBe("ERROR");
+  expect(buildCiStatus(rollup("PENDING", { SUCCESS: 3, IN_PROGRESS: 1 })).state).toBe("PENDING");
+  expect(buildCiStatus(rollup("FAILURE", { SUCCESS: 3 }, { FAILURE: 1 })).state).toBe("FAILURE");
+  expect(buildCiStatus(rollup("PENDING", {}, { EXPECTED: 1 })).state).toBe("PENDING");
+  expect(buildCiStatus(rollup("SUCCESS", { SKIPPED: 4 })).state).toBe("SUCCESS");
+  expect(buildCiStatus(null).state).toBe("NONE");
+});
+
+test("only your own standing request for changes keeps a pull request in the queue", () => {
+  const nodes = [
+    { id: "mine", viewerLatestReview: { state: "CHANGES_REQUESTED" } },
+    // Someone else asked for changes; you approved.
+    { id: "theirs", viewerLatestReview: { state: "APPROVED" } },
+    { id: "dismissed", viewerLatestReview: { state: "DISMISSED" } },
+    { id: "none", viewerLatestReview: null },
+    null,
+  ];
+  expect(changesStillYours(nodes).map((n) => n.id)).toEqual(["mine"]);
+});
+
+test("the search for standing requests for changes", () => {
+  const gh = new GitHubClient("token");
+  expect(gh.buildChangesQuery({ hideDrafts: false })).toBe(
+    "is:open is:pr archived:false reviewed-by:@me review:changes_requested sort:updated-desc",
+  );
+  expect(gh.buildChangesQuery({ hideDrafts: true })).toContain("-is:draft");
 });

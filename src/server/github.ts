@@ -116,6 +116,7 @@ const PR_CHECKS = /* GraphQL */ `
 const PR_REQUESTS = /* GraphQL */ `
   fragment PrRequests on PullRequest {
     viewerLatestReview {
+      state
       submittedAt
       commit {
         oid
@@ -141,11 +142,18 @@ const REVIEWS_QUERY = /* GraphQL */ `
   ${PR_CORE}
   ${PR_CHECKS}
   ${PR_REQUESTS}
-  query Reviews($q: String!, $first: Int!) {
+  query Reviews($q: String!, $changes: String!, $first: Int!) {
     viewer {
       login
     }
     search(query: $q, type: ISSUE, first: $first) {
+      nodes {
+        ...PrCore
+        ...PrChecks
+        ...PrRequests
+      }
+    }
+    changes: search(query: $changes, type: ISSUE, first: 50) {
       nodes {
         ...PrCore
         ...PrChecks
@@ -356,7 +364,11 @@ const STATUS_PASSED = new Set(["SUCCESS"]);
 const STATUS_FAILED = new Set(["FAILURE", "ERROR"]);
 const STATUS_PENDING = new Set(["PENDING", "EXPECTED"]);
 
-function buildCiStatus(rollup: RawRollup | null): CiStatus {
+/** Failures that are the code's fault, not CI's: shown red rather than orange. */
+const RUN_BROKEN = new Set(["FAILURE", "TIMED_OUT"]);
+const STATUS_BROKEN = new Set(["FAILURE"]);
+
+export function buildCiStatus(rollup: RawRollup | null): CiStatus {
   if (!rollup) {
     return {
       state: "NONE",
@@ -379,7 +391,19 @@ function buildCiStatus(rollup: RawRollup | null): CiStatus {
   const skipped = tally(runCounts, CHECK_RUN_SKIPPED);
 
   const total = rollup.contexts?.totalCount ?? 0;
-  const state: CheckState = total === 0 ? "NONE" : statusContextState(rollup.state ?? null);
+  const broken = tally(runCounts, RUN_BROKEN) + tally(statusCounts, STATUS_BROKEN);
+
+  // Not GitHub's own `rollup.state`: that calls a pull request failed when a
+  // run was cancelled, and most cancelled runs were only superseded by a newer
+  // run of the same workflow. Taken from the counts, the icon agrees with them.
+  let state: CheckState;
+  if (total === 0) state = "NONE";
+  else if (broken > 0) state = "FAILURE";
+  else if (failed > 0) state = "ERROR";
+  else if (pending > 0) state = "PENDING";
+  else if (passed + skipped > 0) state = "SUCCESS";
+  // No counts we recognise (a state GitHub added later): trust its verdict.
+  else state = statusContextState(rollup.state ?? null);
 
   return {
     state,
@@ -447,12 +471,29 @@ export class GitHubClient {
     return parts.join(" ");
   }
 
+  /**
+   * Open pull requests where changes are requested and you've reviewed. Only
+   * the ones where it's your own latest review that asks for changes go in
+   * the queue (see changesStillYours): someone else's can be what this matches.
+   */
+  buildChangesQuery(opts: Pick<ReviewQueryOptions, "hideDrafts">): string {
+    const parts = ["is:open", "is:pr", "archived:false", "reviewed-by:@me", "review:changes_requested"];
+    if (opts.hideDrafts) parts.push("-is:draft");
+    parts.push("sort:updated-desc");
+    return parts.join(" ");
+  }
+
   async listReviewRequests(opts: ReviewQueryOptions): Promise<ReviewsResponse> {
     const q = this.buildSearchQuery(opts);
     const data = await this.graphql<{
       viewer: { login: string };
       search: { nodes: (RawPullRequest | null)[] };
-    }>(REVIEWS_QUERY, { q, first: Math.min(Math.max(opts.limit, 1), 100) });
+      changes?: { nodes: (RawPullRequest | null)[] } | null;
+    }>(REVIEWS_QUERY, {
+      q,
+      changes: this.buildChangesQuery(opts),
+      first: Math.min(Math.max(opts.limit, 1), 100),
+    });
 
     const pullRequests: PullRequest[] = [];
     for (const node of data.search.nodes) {
@@ -463,6 +504,20 @@ export class GitHubClient {
         ...pr,
         reviewRequestedAt: latestRequest(requests, data.viewer.login, opts.includeTeamRequests),
         yourReview: yourReview(node?.viewerLatestReview),
+      });
+    }
+    // Asked for again, it's an ordinary request above; otherwise it's here.
+    const requested = new Set(pullRequests.map((pr) => pr.id));
+    for (const node of changesStillYours(data.changes?.nodes ?? [])) {
+      const pr = normalizePullRequest(node);
+      if (!pr || requested.has(pr.id)) continue;
+      requested.add(pr.id);
+      pullRequests.push({
+        ...pr,
+        // Not asked for: an archived one stays archived until someone asks.
+        reviewRequestedAt: null,
+        yourReview: yourReview(node?.viewerLatestReview),
+        yourChangesStand: true,
       });
     }
 
@@ -837,6 +892,7 @@ interface RawPullRequest {
 }
 
 export interface RawViewerReview {
+  state?: string | null;
   submittedAt?: string | null;
   commit?: { oid?: string } | null;
 }
@@ -849,6 +905,15 @@ export function yourReview(review: RawViewerReview | null | undefined): PullRequ
   const at = review?.submittedAt;
   const sha = review?.commit?.oid;
   return at && sha ? { at, sha } : null;
+}
+
+/**
+ * The pull requests where your own latest review asks for changes. Not
+ * those where you approved since, or your request was dismissed, though
+ * someone else's request keeps the pull request's changes requested.
+ */
+export function changesStillYours<T extends Pick<RawPullRequest, "viewerLatestReview">>(nodes: (T | null)[]): T[] {
+  return nodes.filter((node): node is T => node?.viewerLatestReview?.state === "CHANGES_REQUESTED");
 }
 
 export interface RawReviewRequest {

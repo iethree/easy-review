@@ -1,10 +1,11 @@
 import { ActionIcon, Alert, Button, Group, Loader, ScrollArea, Stack, Text, Textarea, Tooltip } from "@mantine/core";
 import { IconAlertTriangle, IconPlayerStop, IconSend, IconX } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { describeTarget, type AiReviewSummary } from "../../shared/aiReview.ts";
+import { describeTarget, needsClaudeSignIn, type AiReviewSummary } from "../../shared/aiReview.ts";
 import type { PullRequest } from "../../shared/types.ts";
 import { answerKey } from "../assembly.ts";
 import { useReviewDetail } from "../hooks/useLocalReviews.ts";
+import { ClaudeSignIn } from "./ClaudeSignIn.tsx";
 import { Markdown, ReviewScreenshots } from "./Markdown.tsx";
 import { ProseReview } from "./ProseReview.tsx";
 
@@ -111,9 +112,13 @@ export function ChatPane({ pr, job, request, onAsk, onStop, onClose }: Props) {
                 </div>
               ) : message.error ? (
                 // biome-ignore lint/suspicious/noArrayIndexKey: as above
-                <Text key={i} size="xs" c="red">
-                  {message.text}
-                </Text>
+                <Stack key={i} gap={6}>
+                  <Text size="xs" c="red">
+                    {message.text}
+                  </Text>
+                  {/* Only the latest: an old failure has been asked past already. */}
+                  {i === chat.length - 1 && needsClaudeSignIn(message.text) && <ClaudeSignIn />}
+                </Stack>
               ) : (
                 // biome-ignore lint/suspicious/noArrayIndexKey: as above
                 <div key={i}>
