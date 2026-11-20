@@ -1,7 +1,7 @@
 /**
  * Updates, as you see them: a quiet check at launch that speaks up only when
- * there's a newer release, and "Check for Updates…" in the app menu, which
- * always answers. Nothing is downloaded until you say so. See updates.ts for
+ * there's a newer release, and "Check for Updates…" in the app menu (on
+ * Linux, the Help menu), which always answers. Nothing is downloaded until you say so. See updates.ts for
  * how a release is found and installed.
  */
 
@@ -45,12 +45,28 @@ export async function checkForUpdates({ manual }: { manual: boolean }): Promise<
 async function check(manual: boolean) {
   const current = app.getVersion();
   const release = await fetchLatest();
-  const file = zipFor(release, process.arch);
+  // Only the macOS app replaces itself. On Linux, the AppImage or .deb you
+  // installed is yours to replace, so it gets a link to the release instead.
+  const installs = process.platform === "darwin";
+  const file = installs ? zipFor(release, process.arch) : undefined;
 
-  if (!isNewer(release.version, current) || !file) {
+  if (!isNewer(release.version, current) || (installs && !file)) {
     if (manual) {
       await message({ type: "info", message: "easy-review is up to date", detail: `You have version ${current}.` });
     }
+    return;
+  }
+
+  if (!file) {
+    const { response } = await message({
+      type: "info",
+      message: `easy-review ${release.version} is available`,
+      detail: `You have version ${current}. Download the new version from its release page.`,
+      buttons: ["Open Release Page", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) void shell.openExternal(`${RELEASES}/tag/v${release.version}`);
     return;
   }
 

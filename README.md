@@ -22,23 +22,35 @@ bun run dev      # http://localhost:5175
 
 Before you push: `bun run lint`, `bun run typecheck` and `bun test`. CI runs all three on every push to `main` and every pull request (`.github/workflows/checks.yml`).
 
-## The macOS app
+## The desktop app (macOS and Linux)
 
 ```bash
-bun run desktop          # run it from source
-bun run desktop:build    # package it → dist/desktop/easy-review-<version>-<arch>.dmg and .zip
+bun run desktop                          # run it from source
+bun run desktop:build                    # package it for this machine → dist/desktop/
+bun run desktop:build --platform linux   # … for Linux (mac, linux or all; a Mac can package both)
+bun run desktop:build --arch x64         # … for x64 (arm64, x64 or all)
 ```
+
+On macOS that makes a `.dmg` and a `.zip`; on Linux, an `.AppImage` and a `.deb`.
 
 The app is an Electron window around the same server: it runs the compiled server binary and shows it in a native title bar, with menus, and with links that open in your browser. When a Claude review finishes while the app is in the background, macOS tells you; click the notification to open the review. Opened from Finder, it reads your login shell's PATH, so `gh` and `claude` are found where your terminal finds them.
 
 A local build is signed ad hoc, which is enough on the Mac that built it. To sign with a Developer ID, set `CSC_NAME` to a keychain identity, or `CSC_LINK` and `CSC_KEY_PASSWORD` to a .p12 certificate.
 
+### Linux
+
+Install the `.deb` on Debian or Ubuntu (`sudo apt install ./easy-review-<version>-amd64.deb`), or make the `.AppImage` executable and run it on any distribution. Electron's sandbox needs unprivileged user namespaces. Ubuntu 24.04 and later allow them only for programs with an AppArmor profile, which the `.deb` installs. If an AppImage stops with an error about `chrome-sandbox`, run it with `--no-sandbox`.
+
+Running from source on Linux, the same error can come from `node_modules/electron/dist/chrome-sandbox`. Fix it with `sudo chown root` and `sudo chmod 4755` on that file, or run `bun run desktop --no-sandbox`.
+
+On Linux, Settings and Reviewers are in the **File** menu. The app doesn't install its own updates there: when a newer release is out, it offers to open its release page.
+
 ### Releases
 
-Every push to `main` publishes a GitHub release (`.github/workflows/release.yml`) with a `.dmg` for Apple silicon and one for Intel. Versions count up by patch within the series in `package.json`: `0.1.0`, `0.1.1`, … — change it to `0.2.0` to start the next series.
+Every push to `main` publishes a GitHub release (`.github/workflows/release.yml`) with the macOS app (a `.dmg` for Apple silicon and one for Intel) and the Linux app (an `.AppImage` and a `.deb` for each of x64 and arm64). Versions count up by patch within the series in `package.json`: `0.1.0`, `0.1.1`, … — change it to `0.2.0` to start the next series.
 
 Release builds are signed ad hoc, not notarized, so macOS won't open a downloaded copy the first time. Open it from **System Settings → Privacy & Security → Open Anyway**.
 
 ### Updates
 
-The app looks for a newer release when it starts, and asks before installing it; **easy-review → Check for Updates…** looks on demand. An update replaces the app where it is, so it has to be somewhere you can write to — your Applications folder, not the disk image.
+The macOS app looks for a newer release when it starts, and asks before installing it; **easy-review → Check for Updates…** looks on demand. An update replaces the app where it is, so it has to be somewhere you can write to — your Applications folder, not the disk image.

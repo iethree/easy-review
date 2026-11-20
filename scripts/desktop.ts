@@ -1,11 +1,17 @@
 /**
- * easy-review as a macOS app.
+ * easy-review as a desktop app, for macOS and Linux.
  *
- *   bun run desktop                         run it from source
- *   bun run desktop:build                   package it  → dist/desktop/*.dmg, *.zip
- *   bun run desktop:build --arch x64        … for Intel Macs (default: this machine's)
- *   bun run desktop:build --arch all        … for both, as CI does
- *   bun run desktop:build --version 1.2.3   … stamped with this version (default: package.json's)
+ *   bun run desktop                          run it from source
+ *   bun run desktop:build                    package it for this machine's system and processor
+ *                                              macOS → dist/desktop/*.dmg, *.zip
+ *                                              Linux → dist/desktop/*.AppImage, *.deb
+ *   bun run desktop:build --arch x64         … for x64 (Intel) instead (arm64, x64 or all)
+ *   bun run desktop:build --platform linux   … for Linux instead (mac, linux or all)
+ *   bun run desktop:build --platform all --arch all   … everything, as CI does
+ *   bun run desktop:build --version 1.2.3    … stamped with this version (default: package.json's)
+ *
+ * A Mac can package for both systems: electron-builder downloads the tools it
+ * needs to make an AppImage and a .deb. Linux can package only for Linux.
  *
  * The app is a thin Electron shell around the same server as everywhere else
  * (see desktop/main.ts). Packaging builds two things: the server, compiled to
@@ -32,6 +38,22 @@ const archOption = option("--arch") ?? process.arch;
 const arches: Arch[] = archOption === "all" ? ["arm64", "x64"] : [archOption as Arch];
 if (!arches.every((a) => a === "arm64" || a === "x64")) {
   console.error(`  ✗ --arch must be arm64, x64 or all, not ${archOption}`);
+  process.exit(2);
+}
+
+/** electron-builder's names, which are also what ${os} stands for in its config. */
+type Platform = "mac" | "linux";
+/** Bun's name for each, for its --target. */
+const BUN_OS: Record<Platform, string> = { mac: "darwin", linux: "linux" };
+const here: Platform | undefined = process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : undefined;
+const platformOption = option("--platform") ?? here;
+const platforms: Platform[] = platformOption === "all" ? ["mac", "linux"] : [platformOption as Platform];
+if (packaging && !platforms.every((p) => p === "mac" || p === "linux")) {
+  console.error(`  ✗ --platform must be mac, linux or all, not ${platformOption ?? process.platform}`);
+  process.exit(2);
+}
+if (packaging && platforms.includes("mac") && process.platform !== "darwin") {
+  console.error("  ✗ Only a Mac can package the macOS app. Use --platform linux.");
   process.exit(2);
 }
 
@@ -63,7 +85,16 @@ await step("shell", async () => {
   await Bun.write(
     `${APP}/package.json`,
     JSON.stringify(
-      { name: "easy-review", productName: "easy-review", version, description: pkg.description, main: "main.cjs" },
+      {
+        name: "easy-review",
+        productName: "easy-review",
+        version,
+        description: pkg.description,
+        main: "main.cjs",
+        // On Linux, how the desktop matches the running window to the
+        // launcher's easy-review.desktop, for its icon and name.
+        desktopName: "easy-review.desktop",
+      },
       null,
       2,
     ),
@@ -86,11 +117,15 @@ if (!packaging) {
   process.exit(await proc.exited);
 }
 
-for (const arch of arches) {
-  await step(`server (darwin-${arch})`, async () => {
-    await rm(`${OUT}/server-${arch}`, { recursive: true, force: true });
-    await $`bun build --compile --minify --target bun-darwin-${arch} ./main.ts --outfile ${OUT}/server-${arch}/easy-review`.quiet();
-  });
+for (const platform of platforms) {
+  for (const arch of arches) {
+    const os = BUN_OS[platform];
+    await step(`server (${os}-${arch})`, async () => {
+      const dir = `${OUT}/server-${platform}-${arch}`;
+      await rm(dir, { recursive: true, force: true });
+      await $`bun build --compile --minify --target bun-${os}-${arch} ./main.ts --outfile ${dir}/easy-review`.quiet();
+    });
+  }
 }
 
 const config = {
@@ -111,8 +146,8 @@ const config = {
     enableNodeCliInspectArguments: false,
     onlyLoadAppFromAsar: true,
   },
-  // electron-builder fills in ${arch} for each architecture it packages.
-  extraResources: [{ from: `${OUT}/server-\${arch}`, to: "server" }],
+  // electron-builder fills in ${os} and ${arch} for each app it packages.
+  extraResources: [{ from: `${OUT}/server-\${os}-\${arch}`, to: "server" }],
   // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder's own placeholders
   artifactName: "${productName}-${version}-${arch}.${ext}",
   mac: {
@@ -127,17 +162,49 @@ const config = {
     ...(process.env.CSC_LINK || process.env.CSC_NAME ? {} : { identity: "-" }),
   },
   dmg: { title: "easy-review" },
+  linux: {
+    // An AppImage runs on any distribution, as it is; a .deb installs on
+    // Debian and Ubuntu, with a launcher, and (on Ubuntu 24.04 and later) the
+    // AppArmor profile that lets Electron's sandbox start.
+    target: ["AppImage", "deb"],
+    icon: "desktop/icon.png",
+    category: "Development",
+    executableName: "easy-review",
+    maintainer: "easy-review",
+    synopsis: pkg.description,
+  },
+  deb: {
+    // electron-builder's own list, plus ALSA: Electron won't start without
+    // libasound.so.2, which a minimal Debian or Ubuntu doesn't have. Ubuntu
+    // 24.04 renamed its package libasound2t64.
+    depends: [
+      "libgtk-3-0",
+      "libnotify4",
+      "libnss3",
+      "libxss1",
+      "libxtst6",
+      "xdg-utils",
+      "libatspi2.0-0",
+      "libuuid1",
+      "libsecret-1-0",
+      "libasound2t64 | libasound2",
+    ],
+  },
 };
 await Bun.write(`${OUT}/electron-builder.json`, JSON.stringify(config, null, 2));
 
 await rm("dist/desktop", { recursive: true, force: true });
-await step(`app ${version} (${arches.join(", ")})`, async () => {
+await step(`app ${version} (${platforms.join(", ")}; ${arches.join(", ")})`, async () => {
   // electron-builder is Node software; run it under Node. One run for every
   // architecture, so its latest-mac.yml lists them all. Publishing is CI's
   // job (.github/workflows/release.yml), never electron-builder's.
-  const archFlags = arches.map((a) => `--${a}`);
-  await $`node node_modules/electron-builder/cli.js --mac ${archFlags} --publish never --config ${OUT}/electron-builder.json`.quiet();
+  const flags = [...platforms.map((p) => `--${p}`), ...arches.map((a) => `--${a}`)];
+  await $`node node_modules/electron-builder/cli.js ${flags} --publish never --config ${OUT}/electron-builder.json`.quiet();
 });
 
-const here = arches.includes(process.arch as Arch) ? (process.arch as Arch) : arches[0];
-console.log(`\n  Open it:  open "dist/desktop/mac${here === "arm64" ? "-arm64" : ""}/easy-review.app"\n`);
+const arch = arches.includes(process.arch as Arch) ? (process.arch as Arch) : arches[0];
+if (here === "mac" && platforms.includes("mac")) {
+  console.log(`\n  Open it:  open "dist/desktop/mac${arch === "arm64" ? "-arm64" : ""}/easy-review.app"\n`);
+} else if (here === "linux" && platforms.includes("linux")) {
+  console.log(`\n  Run it:  dist/desktop/linux${arch === "arm64" ? "-arm64" : ""}-unpacked/easy-review\n`);
+}
