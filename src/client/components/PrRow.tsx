@@ -89,18 +89,6 @@ export const PrRow = memo(function PrRow({
               {REVIEWED_LABEL[reviewed]}
             </Badge>
           )}
-          {pr.yourChangesStand && !reviewed && (
-            <Tooltip
-              label="You asked for changes and nobody has asked for your review again. Your request still blocks merging."
-              openDelay={300}
-              multiline
-              w={260}
-            >
-              <Badge size="xs" color="orange" variant="light" style={{ flex: "none" }}>
-                Changes requested
-              </Badge>
-            </Tooltip>
-          )}
           {updatedSinceYourReview(pr, reviewed !== undefined) && pr.yourReview && (
             <Tooltip label={`New commits since your review ${relativeTime(pr.yourReview.at)}`} openDelay={300}>
               <Badge size="xs" color="blue" variant="light" style={{ flex: "none" }}>
